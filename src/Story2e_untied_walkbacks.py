@@ -832,8 +832,4 @@ def experiment(state, outdir='./'):
         train_recurrent_GSN(iter, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)        
         
         
-        
 
-    if __name__ == '__main__':
-        import ipdb; ipdb.set_trace() 
-        return 

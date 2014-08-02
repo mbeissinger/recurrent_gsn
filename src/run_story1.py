@@ -19,7 +19,7 @@ def main():
     parser.add_argument('--hidden_size', type=int, default=1500)
     parser.add_argument('--act', type=str, default='tanh')
     parser.add_argument('--dataset', type=str, default='MNIST')
-    parser.add_argument('--data_path', type=str, default='.')
+    parser.add_argument('--data_path', type=str, default='../data/')
     parser.add_argument('--classes', type=int, default=10)
     parser.add_argument('--regularize_weight', type=float, default=0)
     parser.add_argument('--max_iterations', type=int, default=3)
@@ -33,7 +33,7 @@ def main():
     
     args = parser.parse_args()
        
-    Story1_old.experiment(args,'model_1/old/')
+    Story1_old.experiment(args,'../outputs/model_1/old/')
     
 if __name__ == '__main__':
     main()
