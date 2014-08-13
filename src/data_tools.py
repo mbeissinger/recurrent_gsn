@@ -11,6 +11,15 @@ from theano.tensor.shared_randomstreams import RandomStreams
 from random import choice
 import os, sys, cPickle
 import gzip
+import errno
+
+def mkdir_p(path):
+    try:
+        os.makedirs(path)
+    except OSError as exc: # Python >2.5
+        if exc.errno == errno.EEXIST and os.path.isdir(path):
+            pass
+        else: raise
 
 def get_google_data(dataset, rand, n_lines=1000000,most_common_flag = False):
 #     train_set_x, train_set_y = datasets[0]

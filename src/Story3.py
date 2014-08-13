@@ -120,6 +120,7 @@ def fix_input_size(xs, hiddens=None):
 
 
 def experiment(state, outdir='./'):
+    data.mkdir_p(outdir)
     logfile = outdir+"log.txt"
     with open(logfile,'w') as f:
         f.write("MODEL 3\n\n")

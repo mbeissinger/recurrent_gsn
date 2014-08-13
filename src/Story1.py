@@ -1,4 +1,5 @@
 import numpy, os, sys, cPickle
+import numpy.random as rng
 import theano
 import theano.tensor as T
 import theano.sandbox.rng_mrg as RNG_MRG
@@ -75,12 +76,46 @@ def salt_and_pepper(IN, p = 0.2, MRG=None):
     c = T.eq(a,0) * b
     return IN * a + c
 
+def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset=1):
+    #shuffle the datasets
+    train_indices = range(len(train_Y.get_value(borrow=True)))
+    rng.shuffle(train_indices)
+    valid_indices = range(len(valid_Y.get_value(borrow=True)))
+    rng.shuffle(valid_indices)
+    test_indices = range(len(test_Y.get_value(borrow=True)))
+    rng.shuffle(test_indices)
+    
+    train_X.set_value(train_X.get_value(borrow=True)[train_indices])
+    train_Y.set_value(train_Y.get_value(borrow=True)[train_indices])
+    
+    valid_X.set_value(valid_X.get_value(borrow=True)[valid_indices])
+    valid_Y.set_value(valid_Y.get_value(borrow=True)[valid_indices])
+    
+    test_X.set_value(test_X.get_value(borrow=True)[test_indices])
+    test_Y.set_value(test_Y.get_value(borrow=True)[test_indices])
+    
+    # Find the order of MNIST data going from 0-9 repeating
+    train_ordered_indices = data.create_series(train_Y.get_value(borrow=True), 10)
+    valid_ordered_indices = data.create_series(valid_Y.get_value(borrow=True), 10)
+    test_ordered_indices = data.create_series(test_Y.get_value(borrow=True), 10)
+    
+    # Put the data sets in order
+    train_X.set_value(train_X.get_value(borrow=True)[train_ordered_indices])
+    train_Y.set_value(train_Y.get_value(borrow=True)[train_ordered_indices])
+    
+    valid_X.set_value(valid_X.get_value(borrow=True)[valid_ordered_indices])
+    valid_Y.set_value(valid_Y.get_value(borrow=True)[valid_ordered_indices])
+    
+    test_X.set_value(test_X.get_value(borrow=True)[test_ordered_indices])
+    test_Y.set_value(test_Y.get_value(borrow=True)[test_ordered_indices])
 
 
-def experiment(state, outdir='./'):
-    logfile = outdir+"log.txt"
-    with open(logfile,'w') as f:
-        f.write("MODEL 1\n\n")
+
+def experiment(state, outdir_base='./'):
+    rng.seed(1) #seed the numpy random generator  
+    data.mkdir_p(outdir_base)
+    outdir = outdir_base + 'dataset_1/'
+    data.mkdir_p(outdir)
     print
     print "----------MODEL 1--------------"
     print
@@ -107,7 +142,7 @@ def experiment(state, outdir='./'):
         # Save the current configuration
         # Useful for logs/experiments
         print 'Saving config'
-        with open(outdir+'config', 'w') as f:
+        with open(outdir_base+'config', 'w') as f:
             f.write(str(state))
 
 
@@ -130,23 +165,16 @@ def experiment(state, outdir='./'):
     print 'train set size:',len(train_Y)
     print 'valid set size:',len(valid_Y)
     print 'test set size:',len(test_Y)
-    # Find the order of MNIST data going from 0-9 repeating
-    train_ordered_indices = data.create_series(train_Y, state.classes)
-    valid_ordered_indices = data.create_series(valid_Y, state.classes)
-    test_ordered_indices = data.create_series(test_Y, state.classes)
     
-    # Put the data sets in order
-    train_X, train_Y = data.sequence_data(train_X, train_Y, train_ordered_indices)
-    valid_X, valid_Y = data.sequence_data(valid_X, valid_Y, valid_ordered_indices)
-    test_X,  test_Y  = data.sequence_data(test_X, test_Y, test_ordered_indices)
+    train_X = theano.shared(train_X)
+    train_Y = theano.shared(train_Y)
+    valid_X = theano.shared(valid_X)
+    valid_Y = theano.shared(valid_Y) 
+    test_X = theano.shared(test_X)
+    test_Y = theano.shared(test_Y) 
+   
+    sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset=1)
     
-    train_X   = theano.shared(train_X)
-    valid_X   = theano.shared(valid_X)
-    test_X    = theano.shared(test_X)
-    train_Y   = theano.shared(train_Y)
-    valid_Y   = theano.shared(valid_Y)
-    test_Y    = theano.shared(test_Y)
-
     print 'train set size:',len(train_Y.eval())
     print 'valid set size:',len(valid_Y.eval())
     print 'test set size:',len(test_Y.eval())
@@ -656,7 +684,7 @@ def experiment(state, outdir='./'):
     ################
     # GSN TRAINING #
     ################
-    def train_GSN(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y):
+    def train_GSN(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset=1):
         print '----------------------------------------'
         print 'TRAINING GSN FOR ITERATION',iteration
         with open(logfile,'a') as f:
@@ -699,6 +727,9 @@ def experiment(state, outdir='./'):
             print counter,'\t',
             with open(logfile,'a') as f:
                 f.write("{0!s}\t".format(counter))
+                
+            #shuffle the data
+            sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset)
                 
             #train
             pre_train_cost = []
@@ -871,7 +902,7 @@ def experiment(state, outdir='./'):
             
             
             
-    def train_recurrent(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y):
+    def train_recurrent(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset=1):
         print '-------------------------------------------'
         print 'TRAINING RECURRENT REGRESSION FOR ITERATION',iteration
         with open(logfile,'a') as f:
@@ -907,12 +938,13 @@ def experiment(state, outdir='./'):
             print counter,'\t',
             with open(logfile,'a') as f:
                 f.write("{0!s}\t".format(counter))
+                
+            #shuffle the data
+            sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset)
     
             #train
             train_cost = []
             for i in range(len(train_X.get_value(borrow=True)) / batch_size):
-#                 x = train_X.get_value()[i : i+1]
-#                 x1 = train_X.get_value()[i+1 : i+2]
                 x = train_X.get_value()[i * batch_size : (i+1) * batch_size]
                 x1 = train_X.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
                 x,x1 = fix_input_size(x,x1)
@@ -994,9 +1026,31 @@ def experiment(state, outdir='./'):
     #####################
     # STORY 1 ALGORITHM #
     #####################
-    for iter in range(state.max_iterations):
+    logfile = outdir+"log.txt"
+    with open(logfile,'w') as f:
+        f.write("MODEL 1, dataset 1\n\n")
+    dataset = 1
+    for _ in range(state.max_iterations):
         train_GSN(iter, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
         train_recurrent(iter, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+        
+        
+        
+        
+    outdir = outdir_base+'dataset_2/'
+    data.mkdir_p(outdir)
+    logfile = outdir+"log.txt"
+    with open(logfile,'w') as f:
+        f.write("MODEL 1, dataset 2\n\n")
+    dataset = 2
+        
+        
+    outdir = outdir_base+'dataset_3/'
+    data.mkdir_p(outdir)
+    logfile = outdir+"log.txt"
+    with open(logfile,'w') as f:
+        f.write("MODEL 1, dataset 3\n\n")
+    dataset = 3
         
         
         

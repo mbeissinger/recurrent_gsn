@@ -78,6 +78,7 @@ def salt_and_pepper(IN, p = 0.2, MRG=None):
 
 
 def experiment(state, outdir='./'):
+    data.mkdir_p(outdir)
     logfile = outdir+"log.txt"
     with open(logfile,'w') as f:
         f.write("MODEL 1\n\n")

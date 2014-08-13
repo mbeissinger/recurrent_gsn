@@ -33,7 +33,7 @@ def main():
     
     args = parser.parse_args()
        
-    Story1_old.experiment(args,'../outputs/model_1/old/')
+    Story1.experiment(args,'../outputs/model_1/')
     
 if __name__ == '__main__':
     main()

@@ -112,6 +112,7 @@ def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y):
 
 
 def experiment(state, outdir='./'):
+    data.mkdir_p(outdir)
     logfile = outdir+"log.txt"
     with open(logfile,'w') as f:
         f.write("MODEL 2\n\n")
