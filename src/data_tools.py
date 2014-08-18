@@ -422,10 +422,41 @@ def create_series(labels, classes):
         else:
             return indices[0:end_idx[0]]
     
-def sequence_data(X,Y,indices):
-    sequenced_X = X[indices]
-    sequenced_Y = Y[indices]
-    return sequenced_X, sequenced_Y
+
+def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset=1, rng=None):
+    if rng is None:
+        rng = np.random.seed(1)
+    #shuffle the datasets
+    train_indices = range(len(train_Y.get_value(borrow=True)))
+    rng.shuffle(train_indices)
+    valid_indices = range(len(valid_Y.get_value(borrow=True)))
+    rng.shuffle(valid_indices)
+    test_indices = range(len(test_Y.get_value(borrow=True)))
+    rng.shuffle(test_indices)
+    
+    train_X.set_value(train_X.get_value(borrow=True)[train_indices])
+    train_Y.set_value(train_Y.get_value(borrow=True)[train_indices])
+    
+    valid_X.set_value(valid_X.get_value(borrow=True)[valid_indices])
+    valid_Y.set_value(valid_Y.get_value(borrow=True)[valid_indices])
+    
+    test_X.set_value(test_X.get_value(borrow=True)[test_indices])
+    test_Y.set_value(test_Y.get_value(borrow=True)[test_indices])
+    
+    # Find the order of MNIST data going from 0-9 repeating
+    train_ordered_indices = create_series(train_Y.get_value(borrow=True), 10)
+    valid_ordered_indices = create_series(valid_Y.get_value(borrow=True), 10)
+    test_ordered_indices = create_series(test_Y.get_value(borrow=True), 10)
+    
+    # Put the data sets in order
+    train_X.set_value(train_X.get_value(borrow=True)[train_ordered_indices])
+    train_Y.set_value(train_Y.get_value(borrow=True)[train_ordered_indices])
+    
+    valid_X.set_value(valid_X.get_value(borrow=True)[valid_ordered_indices])
+    valid_Y.set_value(valid_Y.get_value(borrow=True)[valid_ordered_indices])
+    
+    test_X.set_value(test_X.get_value(borrow=True)[test_ordered_indices])
+    test_Y.set_value(test_Y.get_value(borrow=True)[test_ordered_indices])
     
     
     

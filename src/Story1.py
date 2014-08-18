@@ -9,107 +9,7 @@ from image_tiler import *
 import time
 import argparse
 import data_tools as data
-
-cast32      = lambda x : numpy.cast['float32'](x)
-trunc       = lambda x : str(x)[:8]
-logit       = lambda p : numpy.log(p / (1 - p) )
-binarize    = lambda x : cast32(x >= 0.5)
-sigmoid     = lambda x : cast32(1. / (1 + numpy.exp(-x)))
-
-def get_shared_weights(n_in, n_out, interval=None, name="W"):
-    #val = numpy.random.normal(0, sigma_sqr, size=(n_in, n_out))
-    if interval is None:
-        interval = numpy.sqrt(6. / (n_in + n_out))
-                              
-    val = numpy.random.uniform(-interval, interval, size=(n_in, n_out))
-    val = cast32(val)
-    val = theano.shared(value = val, name = name)
-    return val
-
-def get_shared_bias(n, name="b", offset = 0):
-    val = numpy.zeros(n) - offset
-    val = cast32(val)
-    val = theano.shared(value = val, name = name)
-    return val
-
-def get_shared_recurrent_weights(network_size, name="V"):
-    val = numpy.identity(network_size)
-    val = cast32(val)
-    val = theano.shared(value = val, name = name)
-    return val
-
-
-def dropout(IN, p = 0.5, MRG=None):
-    if MRG is None:
-        MRG = RNG_MRG.MRG_RandomStreams(1)
-    noise   =   MRG.binomial(p = p, n = 1, size = IN.shape, dtype='float32')
-    OUT     =   (IN * noise) / cast32(p)
-    return OUT
-
-def add_gaussian_noise(IN, std = 1, MRG=None):
-    if MRG is None:
-        MRG = RNG_MRG.MRG_RandomStreams(1)
-    print 'GAUSSIAN NOISE : ', std
-    noise   =   MRG.normal(avg  = 0, std  = std, size = IN.shape, dtype='float32')
-    OUT     =   IN + noise
-    return OUT
-
-def corrupt_input(IN, p = 0.5, MRG=None):
-    if MRG is None:
-        MRG = RNG_MRG.MRG_RandomStreams(1)
-    # salt and pepper? masking?
-    noise   =   MRG.binomial(p = p, n = 1, size = IN.shape, dtype='float32')
-    IN      =   IN * noise
-    return IN
-
-def salt_and_pepper(IN, p = 0.2, MRG=None):
-    if MRG is None:
-        MRG = RNG_MRG.MRG_RandomStreams(1)
-    # salt and pepper noise
-    print 'DAE uses salt and pepper noise'
-    a = MRG.binomial(size=IN.shape, n=1,
-                          p = 1 - p,
-                          dtype='float32')
-    b = MRG.binomial(size=IN.shape, n=1,
-                          p = 0.5,
-                          dtype='float32')
-    c = T.eq(a,0) * b
-    return IN * a + c
-
-def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset=1):
-    #shuffle the datasets
-    train_indices = range(len(train_Y.get_value(borrow=True)))
-    rng.shuffle(train_indices)
-    valid_indices = range(len(valid_Y.get_value(borrow=True)))
-    rng.shuffle(valid_indices)
-    test_indices = range(len(test_Y.get_value(borrow=True)))
-    rng.shuffle(test_indices)
-    
-    train_X.set_value(train_X.get_value(borrow=True)[train_indices])
-    train_Y.set_value(train_Y.get_value(borrow=True)[train_indices])
-    
-    valid_X.set_value(valid_X.get_value(borrow=True)[valid_indices])
-    valid_Y.set_value(valid_Y.get_value(borrow=True)[valid_indices])
-    
-    test_X.set_value(test_X.get_value(borrow=True)[test_indices])
-    test_Y.set_value(test_Y.get_value(borrow=True)[test_indices])
-    
-    # Find the order of MNIST data going from 0-9 repeating
-    train_ordered_indices = data.create_series(train_Y.get_value(borrow=True), 10)
-    valid_ordered_indices = data.create_series(valid_Y.get_value(borrow=True), 10)
-    test_ordered_indices = data.create_series(test_Y.get_value(borrow=True), 10)
-    
-    # Put the data sets in order
-    train_X.set_value(train_X.get_value(borrow=True)[train_ordered_indices])
-    train_Y.set_value(train_Y.get_value(borrow=True)[train_ordered_indices])
-    
-    valid_X.set_value(valid_X.get_value(borrow=True)[valid_ordered_indices])
-    valid_Y.set_value(valid_Y.get_value(borrow=True)[valid_ordered_indices])
-    
-    test_X.set_value(test_X.get_value(borrow=True)[test_ordered_indices])
-    test_Y.set_value(test_Y.get_value(borrow=True)[test_ordered_indices])
-
-
+from utils import *
 
 def experiment(state, outdir_base='./'):
     rng.seed(1) #seed the numpy random generator  
@@ -173,7 +73,7 @@ def experiment(state, outdir_base='./'):
     test_X = theano.shared(test_X)
     test_Y = theano.shared(test_Y) 
    
-    sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset=1)
+    data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset=1)
     
     print 'train set size:',len(train_Y.eval())
     print 'valid set size:',len(valid_Y.eval())
@@ -729,7 +629,7 @@ def experiment(state, outdir_base='./'):
                 f.write("{0!s}\t".format(counter))
                 
             #shuffle the data
-            sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset)
+            data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset)
                 
             #train
             pre_train_cost = []
@@ -940,7 +840,7 @@ def experiment(state, outdir_base='./'):
                 f.write("{0!s}\t".format(counter))
                 
             #shuffle the data
-            sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset)
+            data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset)
     
             #train
             train_cost = []
