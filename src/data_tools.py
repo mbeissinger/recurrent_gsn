@@ -3,13 +3,12 @@ Created on Nov 2, 2013
 
 @author: markus
 '''
-import nltk
 import numpy as np
 import theano
 import theano.tensor as T
 from theano.tensor.shared_randomstreams import RandomStreams
 from random import choice
-import os, sys, cPickle
+import os, cPickle
 import gzip
 import errno
 from utils import cast32

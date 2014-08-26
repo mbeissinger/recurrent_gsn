@@ -87,7 +87,6 @@ def experiment(state, outdir_base='./'):
     # Theano variables and RNG
     X       = T.fmatrix()
     X1      = T.fmatrix()
-    index   = T.lscalar()
     MRG = RNG_MRG.MRG_RandomStreams(1)
     
     # Network and training specifications
@@ -95,7 +94,7 @@ def experiment(state, outdir_base='./'):
     walkbacks       =   state.walkbacks # number of walkbacks 
     layer_sizes     =   [N_input] + [state.hidden_size] * layers # layer sizes, from h0 to hK (h0 is the visible layer)
     learning_rate   =   theano.shared(cast32(state.learning_rate))  # learning rate
-    recurrent_learning_rate   =   theano.shared(cast32(state.learning_rate))  # learning rate
+    recurrent_learning_rate = theano.shared(cast32(state.learning_rate))  # learning rate
     annealing       =   cast32(state.annealing) # exponential annealing coefficient
     momentum        =   theano.shared(cast32(state.momentum)) # momentum term 
 
@@ -105,7 +104,7 @@ def experiment(state, outdir_base='./'):
     bias_list       =   [get_shared_bias(layer_sizes[i], name='b_'+str(i)) for i in range(layers + 1)] # initialize each layer to 0's.
     # parameters for recurrent part
     recurrent_weights_list    =   [get_shared_recurrent_weights(state.hidden_size, name="V_"+str(i+1)) for i in range(layers)] # initialize to identity matrix the size of hidden layer.
-    recurrent_bias_list            =   [get_shared_bias(state.hidden_size, name='vb_'+str(i+1)) for i in range(layers)] # initialize to 0's.
+    recurrent_bias_list       =   [get_shared_bias(state.hidden_size, name='vb_'+str(i+1)) for i in range(layers)] # initialize to 0's.
 
     if state.test_model:
         # Load the parameters of the last epoch
@@ -132,43 +131,48 @@ def experiment(state, outdir_base='./'):
  
     ''' F PROP '''
     if state.act == 'sigmoid':
-        print 'Using sigmoid activation'
+        print 'Using sigmoid activation for hiddens'
         hidden_activation = T.nnet.sigmoid
     elif state.act == 'rectifier':
-        print 'Using rectifier activation'
+        print 'Using rectifier activation for hiddens'
         hidden_activation = lambda x : T.maximum(cast32(0), x)
     elif state.act == 'tanh':
+        print 'Using hyperbolic tangent activation for hiddens'
         hidden_activation = lambda x : T.tanh(x)
-        
+    
+    print 'Using sigmoid activation for visible layer'
     visible_activation = T.nnet.sigmoid 
   
         
-    def update_layers(hiddens, p_X_chain, p_X1_chain, X1_chain_flag = False, recurrent_step_flag = False, noisy = True):
+    def update_layers(hiddens, p_X_chain, noisy = True):
         print 'odd layer updates'
-        update_odd_layers(hiddens, recurrent_step_flag, p_X1_chain, noisy)
+        update_odd_layers(hiddens, noisy)
         print 'even layer updates'
-        update_even_layers(hiddens, p_X_chain, p_X1_chain, X1_chain_flag, noisy)
+        update_even_layers(hiddens, p_X_chain, noisy)
+        print 'done full update.'
+        print
+        
+    def update_layers_reverse(hiddens, p_X_chain, noisy = True):
+        print 'even layer updates'
+        update_even_layers(hiddens, p_X_chain, noisy)
+        print 'odd layer updates'
+        update_odd_layers(hiddens, noisy)
         print 'done full update.'
         print
         
     # Odd layer update function
     # just a loop over the odd layers
-    def update_odd_layers(hiddens, recurrent_step_flag, p_X1_chain, noisy):
+    def update_odd_layers(hiddens, noisy):
         for i in range(1, len(hiddens), 2):
             print 'updating layer',i
-            # Before any further updates, if this should be the recurrent step, perform the multiplication
-            if recurrent_step_flag:
-                print "PERFORMING RECURRENT STEP"
-                simple_update_layer(hiddens, None, None, i, None, recurrent_step_flag=True, add_noise = noisy)
-            else:
-                simple_update_layer(hiddens, None, None, i, None, add_noise = noisy)
+            simple_update_layer(hiddens, None, None, i, None, add_noise = noisy)
     
     # Even layer update
     # p_X_chain is given to append the p(X|...) at each full update (one update = odd update + even update)
-    def update_even_layers(hiddens, p_X_chain, p_X1_chain, X1_chain_flag, noisy):
+    def update_even_layers(hiddens, p_X_chain, noisy):
         for i in range(0, len(hiddens), 2):
             print 'updating layer',i
-            simple_update_layer(hiddens, p_X_chain, p_X1_chain, i, X1_chain_flag, add_noise = noisy)
+            simple_update_layer(hiddens, p_X_chain, i, add_noise = noisy)
     
     # The layer update function
     # hiddens   :   list containing the symbolic theano variables [visible, hidden1, hidden2, ...]
@@ -177,83 +181,71 @@ def experiment(state, outdir_base='./'):
     #               update_layer will append to this list
     # add_noise     : pre and post activation gaussian noise
     
-    def simple_update_layer(hiddens, p_X_chain, p_X1_chain, i, X1_chain_flag, recurrent_step_flag=False, add_noise=True):   
-        # Finally, if this is the recurrent step, perform the multiplication
-        if recurrent_step_flag:
-            #odd layer predictions
+    def simple_update_layer(hiddens, p_X_chain, i, add_noise=True):   
+        # Finally, if this is the recurrent step, perform the multiplication            
+        # Compute the dot product, whatever layer
+        # If the visible layer X
+        if i == 0:
+            print 'using '+str(weights_list[i])+'.T'
+            hiddens[i]  =   T.dot(hiddens[i+1], weights_list[i].T) + bias_list[i]           
+        # If the top layer
+        elif i == len(hiddens)-1:
+            print 'using',weights_list[i-1]
+            hiddens[i]  =   T.dot(hiddens[i-1], weights_list[i-1]) + bias_list[i]
+        # Otherwise in-between layers
+        else:
+            print "using {0!s} and {1!s}.T".format(weights_list[i-1], weights_list[i])
+            # next layer        :   hiddens[i+1], assigned weights : W_i
+            # previous layer    :   hiddens[i-1], assigned weights : W_(i-1)
+            hiddens[i]  =   T.dot(hiddens[i+1], weights_list[i].T) + T.dot(hiddens[i-1], weights_list[i-1]) + bias_list[i]
+    
+        # Add pre-activation noise if NOT input layer
+        if i==1 and state.noiseless_h1:
+            print '>>NO noise in first hidden layer'
+            add_noise   =   False
+    
+        # pre activation noise            
+        if i != 0 and add_noise:
+            print 'Adding pre-activation gaussian noise for layer', i
+            hiddens[i]  =   add_gaussian_noise(hiddens[i], state.hidden_add_noise_sigma)
+       
+        # ACTIVATION!
+        if i == 0:
+            print 'Sigmoid units activation for visible layer X'
+            hiddens[i]  =   visible_activation(hiddens[i])
+        else:
+            print 'Hidden units {} activation for layer'.format(state.act), i
+            hiddens[i]  =   hidden_activation(hiddens[i])
+    
+        # post activation noise            
+        if i != 0 and add_noise:
+            print 'Adding post-activation gaussian noise for layer', i
+            hiddens[i]  =   add_gaussian_noise(hiddens[i], state.hidden_add_noise_sigma)
+    
+        # build the reconstruction chain if updating the visible layer X
+        if i == 0:
+            # if input layer -> append p(X|...)
+            p_X_chain.append(hiddens[i])
+            
+            # sample from p(X|...) - SAMPLING NEEDS TO BE CORRECT FOR INPUT TYPES I.E. FOR BINARY MNIST SAMPLING IS BINOMIAL. real-valued inputs should be gaussian
+            if state.input_sampling:
+                print 'Sampling from input'
+                sampled     =   MRG.binomial(p = hiddens[i], size=hiddens[i].shape, dtype='float32')
+            else:
+                print '>>NO input sampling'
+                sampled     =   hiddens[i]
+            # add noise
+            sampled     =   salt_and_pepper(sampled, state.input_salt_and_pepper)
+            
+            # set input layer
+            hiddens[i]  =   sampled
+                
+    def perform_recurrent_step(hiddens):
+        #odd layer predictions
+        for i in range(len(hiddens)):
             if (i % 2) != 0: #if odd layer
                 print 'using',recurrent_weights_list[i-1],'and',recurrent_bias_list[i-1]
-                hiddens[i] = hidden_activation(T.dot(hiddens[i],recurrent_weights_list[i-1]) + recurrent_bias_list[i-1])
-#             #even updates from the odd layer predictions
-#             for layer in range(len(hiddens)):
-#                 if layer != 0 and (layer % 2) == 0: #if even layer
-#                     print "using {0!s} and {1!s}.T".format(weights_list[layer-1], weights_list[layer])
-#                     hiddens[layer] = hidden_activation(T.dot(hiddens[layer+1], weights_list[layer].T) + T.dot(hiddens[layer-1], weights_list[layer-1]) + bias_list[layer])
-#             # make the initial prediction of the visible layer from h1 and append it to p_X1_chain
-#             hiddens[0] = visible_activation(T.dot(hiddens[1], weights_list[0].T) + bias_list[0])
-#             #add noise
-#             hiddens[0] = salt_and_pepper(hiddens[0], state.input_salt_and_pepper)
-#             #p_X1_chain.append(hiddens[0])
-        else:                    
-            # Compute the dot product, whatever layer
-            # If the visible layer X
-            if i == 0:
-                print 'using '+str(weights_list[i])+'.T'
-                hiddens[i]  =   T.dot(hiddens[i+1], weights_list[i].T) + bias_list[i]           
-            # If the top layer
-            elif i == len(hiddens)-1:
-                print 'using',weights_list[i-1]
-                hiddens[i]  =   T.dot(hiddens[i-1], weights_list[i-1]) + bias_list[i]
-            # Otherwise in-between layers
-            else:
-                print "using {0!s} and {1!s}.T".format(weights_list[i-1], weights_list[i])
-                # next layer        :   hiddens[i+1], assigned weights : W_i
-                # previous layer    :   hiddens[i-1], assigned weights : W_(i-1)
-                hiddens[i]  =   T.dot(hiddens[i+1], weights_list[i].T) + T.dot(hiddens[i-1], weights_list[i-1]) + bias_list[i]
-        
-            # Add pre-activation noise if NOT input layer
-            if i==1 and state.noiseless_h1:
-                print '>>NO noise in first hidden layer'
-                add_noise   =   False
-        
-            # pre activation noise            
-            if i != 0 and add_noise:
-                print 'Adding pre-activation gaussian noise for layer', i
-                hiddens[i]  =   add_gaussian_noise(hiddens[i], state.hidden_add_noise_sigma)
-           
-            # ACTIVATION!
-            if i == 0:
-                print 'Sigmoid units activation for visible layer X'
-                hiddens[i]  =   visible_activation(hiddens[i])
-            else:
-                print 'Hidden units {} activation for layer'.format(state.act), i
-                hiddens[i]  =   hidden_activation(hiddens[i])
-        
-            # post activation noise            
-            if i != 0 and add_noise:
-                print 'Adding post-activation gaussian noise for layer', i
-                hiddens[i]  =   add_gaussian_noise(hiddens[i], state.hidden_add_noise_sigma)
-        
-            # build the reconstruction chain if updating the visible layer X
-            if i == 0:
-                # if input layer -> append p(X|...)
-                if not X1_chain_flag: # if it pre-recurrent
-                    p_X_chain.append(hiddens[i])
-                else:
-                    p_X1_chain.append(hiddens[i]) # after it has predicted the next network
-                
-                # sample from p(X|...) - SAMPLING NEEDS TO BE CORRECT FOR INPUT TYPES I.E. FOR BINARY MNIST SAMPLING IS BINOMIAL. real-valued inputs should be gaussian
-                if state.input_sampling:
-                    print 'Sampling from input'
-                    sampled     =   MRG.binomial(p = hiddens[i], size=hiddens[i].shape, dtype='float32')
-                else:
-                    print '>>NO input sampling'
-                    sampled     =   hiddens[i]
-                # add noise
-                sampled     =   salt_and_pepper(sampled, state.input_salt_and_pepper)
-                
-                # set input layer
-                hiddens[i]  =   sampled
+                hiddens[i] = T.dot(hiddens[i],recurrent_weights_list[i-1]) + recurrent_bias_list[i-1]
             
         
    
@@ -276,7 +268,8 @@ def experiment(state, outdir_base='./'):
     print "Building the graph :", walkbacks,"updates"
     for i in range(walkbacks):
         print "Walkback {!s}/{!s}".format(i+1,walkbacks)
-        update_layers(hiddens, p_X_chain, None)    
+        update_layers(hiddens, p_X_chain, None)   
+     
     for i in range(walkbacks):
         print "Recurrent Walkback {!s}/{!s}".format(i+1,walkbacks)
         if i == 0:
