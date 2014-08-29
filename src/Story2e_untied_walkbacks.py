@@ -12,24 +12,18 @@ import data_tools as data
 from utils import *
 
 
-def experiment(state, outdir='./'):
+def experiment(state, outdir_base='./'):
+    rng.seed(1) #seed the numpy random generator  
+    data.mkdir_p(outdir_base)
+    outdir = outdir_base + 'dataset_1/'
     data.mkdir_p(outdir)
-    logfile = outdir+"log.txt"
-    with open(logfile,'w') as f:
-        f.write("MODEL 2\n\n")
     print
     print "----------MODEL 2--------------"
     print
-    if state.test_model and 'config' in os.listdir('.'):
-        print 'Loading local config file'
-        config_file =   open('config', 'r')
-        config      =   config_file.readlines()
-        try:
-            config_vals =   config[0].split('(')[1:][0].split(')')[:-1][0].split(', ')
-        except:
-            config_vals =   config[0][3:-1].replace(': ','=').replace("'","").split(', ')
-            config_vals =   filter(lambda x:not 'jobman' in x and not '/' in x and not ':' in x and not 'experiment' in x, config_vals)
-        
+    #load parameters from config file if this is a test
+    config_filename = outdir+'config'
+    if state.test_model and 'config' in os.listdir(outdir):
+        config_vals = load_from_config(config_filename)
         for CV in config_vals:
             print CV
             if CV.startswith('test'):
@@ -43,7 +37,7 @@ def experiment(state, outdir='./'):
         # Save the current configuration
         # Useful for logs/experiments
         print 'Saving config'
-        with open(outdir+'config', 'w') as f:
+        with open(config_filename, 'w') as f:
             f.write(str(state))
 
 

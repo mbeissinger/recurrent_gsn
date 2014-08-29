@@ -96,3 +96,16 @@ def fix_input_size(xs, hiddens=None):
     if hiddens is not None:
         hiddens = [xs[0] if i==0 else hiddens[i][:min_size] for i in range(len(hiddens))]
     return xs, hiddens
+
+def load_from_config(config_filename):
+    print 'Loading local config file'
+    config_file =   open(config_filename, 'r')
+    config      =   config_file.readlines()
+    try:
+        config_vals =   config[0].split('(')[1:][0].split(')')[:-1][0].split(', ')
+    except:
+        config_vals =   config[0][3:-1].replace(': ','=').replace("'","").split(', ')
+        config_vals =   filter(lambda x:not 'jobman' in x and not '/' in x and not ':' in x and not 'experiment' in x, config_vals)
+    
+    return config_vals
+    

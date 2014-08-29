@@ -14,21 +14,27 @@ from utils import *
 def experiment(state, outdir_base='./'):
     rng.seed(1) #seed the numpy random generator  
     data.mkdir_p(outdir_base)
-    outdir = outdir_base + 'dataset_1/'
+    outdir = outdir_base + state.dataset
     data.mkdir_p(outdir)
+    logfile = outdir+"log.txt"
+    with open(logfile,'w') as f:
+        f.write("MODEL 1, {0!s}\n\n".format(state.dataset))
+    train_convergence_pre = outdir+"train_convergence_pre.csv"
+    train_convergence_post = outdir+"train_convergence_post.csv"
+    valid_convergence_pre = outdir+"valid_convergence_pre.csv"
+    valid_convergence_post = outdir+"valid_convergence_post.csv"
+    test_convergence_pre = outdir+"test_convergence_pre.csv"
+    test_convergence_post = outdir+"test_convergence_post.csv"
+    recurrent_train_convergence = outdir+"recurrent_train_convergence.csv"
+    recurrent_valid_convergence = outdir+"recurrent_valid_convergence.csv"
+    recurrent_test_convergence = outdir+"recurrent_test_convergence.csv"
     print
-    print "----------MODEL 1--------------"
+    print "----------MODEL 1, {0!s}--------------".format(state.dataset)
     print
-    if state.test_model and 'config' in os.listdir('.'):
-        print 'Loading local config file'
-        config_file =   open('config', 'r')
-        config      =   config_file.readlines()
-        try:
-            config_vals =   config[0].split('(')[1:][0].split(')')[:-1][0].split(', ')
-        except:
-            config_vals =   config[0][3:-1].replace(': ','=').replace("'","").split(', ')
-            config_vals =   filter(lambda x:not 'jobman' in x and not '/' in x and not ':' in x and not 'experiment' in x, config_vals)
-        
+    #load parameters from config file if this is a test
+    config_filename = outdir+'config'
+    if state.test_model and 'config' in os.listdir(outdir):
+        config_vals = load_from_config(config_filename)
         for CV in config_vals:
             print CV
             if CV.startswith('test'):
@@ -42,29 +48,24 @@ def experiment(state, outdir_base='./'):
         # Save the current configuration
         # Useful for logs/experiments
         print 'Saving config'
-        with open(outdir_base+'config', 'w') as f:
+        with open(config_filename, 'w') as f:
             f.write(str(state))
 
 
     print state
-    # Load the data, train = train+valid, and shuffle train
-    # Targets are not used (will be misaligned after shuffling train
-    if state.dataset == 'MNIST':
+    artificial = False
+    if state.dataset == 'MNIST_1' or state.dataset == 'MNIST_2' or state.dataset == 'MNIST_3':
         (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = data.load_mnist(state.data_path)
         train_X = numpy.concatenate((train_X, valid_X))
         train_Y = numpy.concatenate((train_Y, valid_Y))
-    elif state.dataset == 'MNIST_binary':
-        (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = data.load_mnist_binary(state.data_path)
-        train_X = numpy.concatenate((train_X, valid_X))
-        train_Y = numpy.concatenate((train_Y, valid_Y))
+        artificial = True
+        try:
+            dataset = int(state.dataset.split('_')[1])
+        except:
+            raise AssertionError("artificial dataset number not recognized. Input was "+state.dataset)
     else:
         raise AssertionError("dataset not recognized.")
 
-    
-    print 'Sequencing MNIST data...'
-    print 'train set size:',len(train_Y)
-    print 'valid set size:',len(valid_Y)
-    print 'test set size:',len(test_Y)
     
     train_X = theano.shared(train_X)
     train_Y = theano.shared(train_Y)
@@ -73,21 +74,20 @@ def experiment(state, outdir_base='./'):
     test_X = theano.shared(test_X)
     test_Y = theano.shared(test_Y) 
    
-    data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset=1)
-    
-    print 'train set size:',len(train_Y.eval())
-    print 'valid set size:',len(valid_Y.eval())
-    print 'test set size:',len(test_Y.eval())
-    print 'Sequencing done.'
-    print
+    if artificial:
+        print 'Sequencing MNIST data...'
+        print 'train set size:',len(train_Y.eval())
+        print 'valid set size:',len(valid_Y.eval())
+        print 'test set size:',len(test_Y.eval())
+        data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset)
+        print 'train set size:',len(train_Y.eval())
+        print 'valid set size:',len(valid_Y.eval())
+        print 'test set size:',len(test_Y.eval())
+        print 'Sequencing done.'
+        print
     
     N_input =   train_X.eval().shape[1]
     root_N_input = numpy.sqrt(N_input)
-    
-    # Theano variables and RNG
-    X       = T.fmatrix()
-    X1      = T.fmatrix()
-    MRG = RNG_MRG.MRG_RandomStreams(1)
     
     # Network and training specifications
     layers          =   state.layers # number hidden layers
@@ -97,6 +97,11 @@ def experiment(state, outdir_base='./'):
     recurrent_learning_rate = theano.shared(cast32(state.learning_rate))  # learning rate
     annealing       =   cast32(state.annealing) # exponential annealing coefficient
     momentum        =   theano.shared(cast32(state.momentum)) # momentum term 
+    
+    # Theano variables and RNG
+    X       = T.fmatrix()
+    X1      = T.fmatrix()
+    MRG = RNG_MRG.MRG_RandomStreams(1)
 
     # PARAMETERS : weights list and bias list.
     # initialize a list of weights and biases based on layer_sizes
@@ -106,27 +111,27 @@ def experiment(state, outdir_base='./'):
     recurrent_weights_list    =   [get_shared_recurrent_weights(state.hidden_size, name="V_"+str(i+1)) for i in range(layers)] # initialize to identity matrix the size of hidden layer.
     recurrent_bias_list       =   [get_shared_bias(state.hidden_size, name='vb_'+str(i+1)) for i in range(layers)] # initialize to 0's.
 
-    if state.test_model:
-        # Load the parameters of the last epoch
-        # maybe if the path is given, load these specific attributes 
-        param_files     =   filter(lambda x:'params' in x, os.listdir('.'))
-        max_epoch_idx   =   numpy.argmax([int(x.split('_')[-1].split('.')[0]) for x in param_files])
-        params_to_load  =   param_files[max_epoch_idx]
-        PARAMS = cPickle.load(open(params_to_load,'r'))
-        [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[:len(weights_list)], weights_list)]
-        [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[len(weights_list):], bias_list)]
-        
-    if state.continue_training:
-        # Load the parameters of the last GSN
-        params_to_load = 'gsn_params.pkl'
-        PARAMS = cPickle.load(open(params_to_load,'r'))
-        [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[:len(weights_list)], weights_list)]
-        [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[len(weights_list):], bias_list)]
-        # Load the parameters of the last recurrent
-#         params_to_load = 'recurrent_params.pkl'
+#     if state.test_model:
+#         # Load the parameters of the last epoch
+#         # maybe if the path is given, load these specific attributes 
+#         param_files     =   filter(lambda x:'params' in x, os.listdir('.'))
+#         max_epoch_idx   =   numpy.argmax([int(x.split('_')[-1].split('.')[0]) for x in param_files])
+#         params_to_load  =   param_files[max_epoch_idx]
 #         PARAMS = cPickle.load(open(params_to_load,'r'))
 #         [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[:len(weights_list)], weights_list)]
 #         [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[len(weights_list):], bias_list)]
+#         
+#     if state.continue_training:
+#         # Load the parameters of the last GSN
+#         params_to_load = 'gsn_params.pkl'
+#         PARAMS = cPickle.load(open(params_to_load,'r'))
+#         [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[:len(weights_list)], weights_list)]
+#         [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[len(weights_list):], bias_list)]
+#         # Load the parameters of the last recurrent
+# #         params_to_load = 'recurrent_params.pkl'
+# #         PARAMS = cPickle.load(open(params_to_load,'r'))
+# #         [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[:len(weights_list)], weights_list)]
+# #         [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[len(weights_list):], bias_list)]
 
  
     ''' F PROP '''
@@ -165,7 +170,7 @@ def experiment(state, outdir_base='./'):
     def update_odd_layers(hiddens, noisy):
         for i in range(1, len(hiddens), 2):
             print 'updating layer',i
-            simple_update_layer(hiddens, None, None, i, None, add_noise = noisy)
+            simple_update_layer(hiddens, None, i, add_noise = noisy)
     
     # Even layer update
     # p_X_chain is given to append the p(X|...) at each full update (one update = odd update + even update)
@@ -182,7 +187,6 @@ def experiment(state, outdir_base='./'):
     # add_noise     : pre and post activation gaussian noise
     
     def simple_update_layer(hiddens, p_X_chain, i, add_noise=True):   
-        # Finally, if this is the recurrent step, perform the multiplication            
         # Compute the dot product, whatever layer
         # If the visible layer X
         if i == 0:
@@ -246,6 +250,21 @@ def experiment(state, outdir_base='./'):
             if (i % 2) != 0: #if odd layer
                 print 'using',recurrent_weights_list[i-1],'and',recurrent_bias_list[i-1]
                 hiddens[i] = T.dot(hiddens[i],recurrent_weights_list[i-1]) + recurrent_bias_list[i-1]
+                
+    def build_graph(hiddens, p_X_chain, p_X1_chain, noiseflag):
+        # The layer update scheme
+        print "Building the graph :", walkbacks*2,"updates"
+        for i in range(walkbacks):
+            print "Walkback {!s}/{!s}".format(i+1,walkbacks)
+            update_layers(hiddens, p_X_chain, noisy=noiseflag)
+            
+        perform_recurrent_step(hiddens) # do the regression!
+         
+        for i in range(walkbacks):
+            print "Post Regression Walkback {!s}/{!s}".format(i+1,walkbacks)
+            update_layers_reverse(hiddens, p_X1_chain, noisy=noiseflag)
+        
+        return hiddens, p_X_chain, p_X1_chain
             
         
    
@@ -257,72 +276,51 @@ def experiment(state, outdir_base='./'):
     hiddens     = [X_corrupt]
     p_X_chain   = [] 
     p_X1_chain  = []
-    print "Hidden units initialization"
+    noiseflag = True
     for w in weights_list:
         # init with zeros
-        print "Init hidden units at zero before creating the graph"
-        print
         hiddens.append(T.zeros_like(T.dot(hiddens[-1], w)))
 
-    # The layer update scheme
-    print "Building the graph :", walkbacks,"updates"
-    for i in range(walkbacks):
-        print "Walkback {!s}/{!s}".format(i+1,walkbacks)
-        update_layers(hiddens, p_X_chain, None)   
-     
-    for i in range(walkbacks):
-        print "Recurrent Walkback {!s}/{!s}".format(i+1,walkbacks)
-        if i == 0:
-            update_layers(hiddens, None, p_X1_chain, X1_chain_flag = True, recurrent_step_flag = True) 
-        else:
-            update_layers(hiddens, None, p_X1_chain, X1_chain_flag = True)    
+    hiddens, p_X_chain, p_X1_chain = build_graph(hiddens, p_X_chain, p_X1_chain, noiseflag)
         
         
-    print "Creating functions for recurrent part"
-    # The prediction of the recurrent regression
-    network = [X]
-    for w in weights_list:
-        # init with zeros
-        network.append(T.zeros_like(T.dot(network[-1], w)))
+    print "Creating functions for regression part"
+    # The prediction of the recurrent regression - no noise! noise is only used as regularization for GSN from over-fitting
+    hiddens1 = [X]
     recurrent_pX_chain  =   []
     recurrent_p_X1_chain  =   []
-    # ONE update
-    print "Performing {!s} walkbacks in network state for regression.".format(walkbacks*2)
-    noiseflag = True
-    for i in range(walkbacks):
-        print "Walkback {!s}/{!s}".format(i+1,walkbacks)
-        update_layers(network, recurrent_pX_chain, None, noisy=noiseflag)
-    for i in range(walkbacks):
-        print "Recurrent Walkback {!s}/{!s}".format(i+1,walkbacks)
-        if i == 0:
-            update_layers(network, None, recurrent_p_X1_chain, X1_chain_flag = True, recurrent_step_flag = True, noisy=noiseflag) 
-        else:
-            update_layers(network, None, recurrent_p_X1_chain, X1_chain_flag = True, noisy=noiseflag)    
+    noiseflag = False
+    for w in weights_list:
+        hiddens1.append(T.zeros_like(T.dot(hiddens1[-1], w)))
+    
+    hiddens1, recurrent_pX_chain, recurrent_p_X1_chain = build_graph(hiddens1, recurrent_pX_chain, recurrent_p_X1_chain, noiseflag)
+
+
 
 
     # COST AND GRADIENTS    
     print
     print 'Cost w.r.t p(X|...) at every step in the graph'
-    #COST        =   T.mean(T.nnet.binary_crossentropy(reconstruction, X))
     COSTS            =   [T.mean(T.nnet.binary_crossentropy(rX, X)) for rX in p_X_chain]
     show_COST_pre    =   COSTS[-1]
     COST_pre         =   numpy.sum(COSTS)
-    prediction_COSTS =   [T.mean(T.nnet.binary_crossentropy(pX, X1)) for pX in p_X1_chain]
+    prediction_COSTS =   [T.mean(T.nnet.binary_crossentropy(rX1, X1)) for rX1 in p_X1_chain]
     #COST = [T.log(T.sum(T.pow((rX - X),2))) for rX in p_X_chain] #why does it work with log and not without???
     show_COST_post   =   prediction_COSTS[-1]
     COSTS            =   COSTS + prediction_COSTS
-    COST             =   numpy.sum(prediction_COSTS)
+    COST             =   numpy.sum(COSTS)
     
     params      =   weights_list + bias_list    
     print "params:",params
     
-    #recurrent_regularization_cost = state.regularize_weight * T.sum([T.sum(recurrent_weights ** 2) for recurrent_weights in recurrent_weights_list])
+    #l2 regularization
+    recurrent_regularization_cost = T.sum([T.sum(recurrent_weights ** 2) for recurrent_weights in recurrent_weights_list])
     #recurrent_cost = T.log(T.sum(T.pow((predicted_network - encoded_network),2)) + recurrent_regularization_cost)
     recurrent_costs = [T.mean(T.nnet.binary_crossentropy(pX, X1)) for pX in recurrent_p_X1_chain]
     recurrent_cost_show = recurrent_costs[-1]
-    recurrent_cost = numpy.sum(recurrent_costs)
+    recurrent_cost = numpy.sum(recurrent_costs) + state.regularize_weight * recurrent_regularization_cost
     
-    #only using the odd layers update -> even-indexed parameters in the list
+    #only using the odd layers update -> even-indexed parameters in the list because it starts at v1
     recurrent_params = [recurrent_weights_list[i] for i in range(len(recurrent_weights_list)) if i%2 == 0] + [recurrent_bias_list[i] for i in range(len(recurrent_bias_list)) if i%2 == 0]
     print "recurrent params:", recurrent_params    
     
@@ -406,17 +404,10 @@ def experiment(state, outdir_base='./'):
 
     # The layer update scheme
     print "Creating graph for noisy reconstruction function at checkpoints during training."
-    for i in range(walkbacks):
-        print "Walkback {!s}/{!s}".format(i+1,walkbacks)
-        update_layers(hiddens_R, p_X_chain_R, None, noisy=False)
-    for i in range(walkbacks):
-        print "Recurrent Walkback {!s}/{!s}".format(i+1,walkbacks)
-        if i == 0:
-            update_layers(hiddens_R, None, p_X1_chain_R, X1_chain_flag = True, recurrent_step_flag = True) 
-        else:
-            update_layers(hiddens_R, None, p_X1_chain_R, X1_chain_flag = True)   
+    hiddens_R, p_X_chain_R, p_X1_chain_R = build_graph(hiddens_R, p_X_chain_R, p_X1_chain_R, noiseflag=False) 
 
-    f_recon = theano.function(inputs = [X], outputs = [p_X_chain_R[-1], p_X1_chain_R[-1]]) 
+    f_recon = theano.function(inputs = [X], outputs = [p_X_chain_R[-1], p_X1_chain_R[-1]])
+    f_walkbacks = theano.function(inputs = [X], outputs = p_X_chain_R + p_X1_chain_R) # function to get progression of walkbacks
 
 
     ############
@@ -448,7 +439,7 @@ def experiment(state, outdir_base='./'):
     f_sample2   =   theano.function(inputs = network_state_input, outputs = network_state_output + visible_pX_chain, on_unused_input='warn')
 
     def sample_some_numbers_single_layer():
-        x0    =   test_X.get_value()[:1]
+        x0    =   test_X.get_value()[7:8]
         samples = [x0]
         x  =   f_noise(x0)
         for i in range(399):
@@ -467,7 +458,7 @@ def experiment(state, outdir_base='./'):
 
     def sample_some_numbers(N=400):
         # The network's initial state
-        init_vis        =   test_X.get_value()[:1]
+        init_vis        =   test_X.get_value()[7:8]
 
         noisy_init_vis  =   f_noise(init_vis)
 
@@ -510,7 +501,6 @@ def experiment(state, outdir_base='./'):
     ##############
     def inpainting(digit):
         # The network's initial state
-
         # NOISE INIT
         init_vis    =   cast32(numpy.random.uniform(size=digit.shape))
 
@@ -565,19 +555,11 @@ def experiment(state, outdir_base='./'):
         finally:
             f.close() 
 
-    def fix_input_size(x, x1):
-        if (x.shape[0] > x1.shape[0]):
-            diff = x.shape[0] - x1.shape[0]
-            x = x[:-diff]
-        elif (x.shape[0] < x1.shape[0]):
-            diff = x1.shape[0] - x.shape[0]
-            x1 = x1[:-diff]
-        return x,x1
 
     ################
     # GSN TRAINING #
     ################
-    def train_GSN(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset=1):
+    def train_GSN(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y):
         print '----------------------------------------'
         print 'TRAINING GSN FOR ITERATION',iteration
         with open(logfile,'a') as f:
@@ -591,6 +573,8 @@ def experiment(state, outdir_base='./'):
         if iteration == 0:
             learning_rate.set_value(cast32(state.learning_rate))  # learning rate
         times = []
+        best_cost = float('inf')
+        patience = 0
             
         print 'learning rate:',learning_rate.get_value()
         
@@ -649,13 +633,18 @@ def experiment(state, outdir_base='./'):
             print 'Train : ',trunc(pre_train_cost),trunc(post_train_cost), '\t',
             with open(logfile,'a') as f:
                 f.write("Train : {0!s} {1!s}\t".format(trunc(pre_train_cost),trunc(post_train_cost)))
+            with open(train_convergence_pre,'a') as f:
+                f.write("{0!s},".format(pre_train_cost))
+            with open(train_convergence_post,'a') as f:
+                f.write("{0!s},".format(post_train_cost))
     
             #valid
             pre_valid_cost  =   []    
             post_valid_cost  =  []
             if iteration == 0:
                 for i in range(len(valid_X.get_value(borrow=True)) / batch_size):
-                    pre, post = f_cost(valid_X.get_value()[i * batch_size : (i+1) * batch_size], valid_X.get_value()[i * batch_size : (i+1) * batch_size])
+                    x = valid_X.get_value()[i * batch_size : (i+1) * batch_size]
+                    pre, post = f_cost(x,x)
                     pre_valid_cost.append(pre)
                     post_valid_cost.append(post)
             else:
@@ -674,13 +663,18 @@ def experiment(state, outdir_base='./'):
             print 'Valid : ', trunc(pre_valid_cost),trunc(post_valid_cost), '\t',
             with open(logfile,'a') as f:
                 f.write("Valid : {0!s} {1!s}\t".format(trunc(pre_valid_cost),trunc(post_valid_cost)))
+            with open(valid_convergence_pre,'a') as f:
+                f.write("{0!s},".format(pre_valid_cost))
+            with open(valid_convergence_post,'a') as f:
+                f.write("{0!s},".format(post_valid_cost))
     
             #test
             pre_test_cost  =   []
             post_test_cost  =   []
             if iteration == 0:
                 for i in range(len(test_X.get_value(borrow=True)) / batch_size):
-                    pre, post = f_cost(test_X.get_value()[i * batch_size : (i+1) * batch_size], test_X.get_value()[i * batch_size : (i+1) * batch_size])
+                    x = test_X.get_value()[i * batch_size : (i+1) * batch_size]
+                    pre, post = f_cost(x,x)
                     pre_test_cost.append(pre)
                     post_test_cost.append(post)
             else:
@@ -699,8 +693,22 @@ def experiment(state, outdir_base='./'):
             print 'Test  : ', trunc(pre_test_cost),trunc(post_test_cost), '\t',
             with open(logfile,'a') as f:
                 f.write("Test : {0!s} {1!s}\t".format(trunc(pre_test_cost),trunc(post_test_cost)))
+            with open(test_convergence_pre,'a') as f:
+                f.write("{0!s},".format(pre_test_cost))
+            with open(test_convergence_post,'a') as f:
+                f.write("{0!s},".format(post_test_cost))
+                
+            #check for early stopping
+            cost = pre_train_cost
+            if iteration != 0:
+                cost = cost + post_train_cost
+            if cost < best_cost*state.early_stop_threshold:
+                patience = 0
+                best_cost = cost
+            else:
+                patience += 1
     
-            if counter >= n_epoch:
+            if counter >= n_epoch or patience >= state.early_stop_length:
                 STOP = True
                 save_params('gsn', counter, params, iteration)
     
@@ -715,7 +723,10 @@ def experiment(state, outdir_base='./'):
                 f.write("MeanVisB : {0!s}\t".format(trunc(bias_list[0].get_value().mean())))
             
             with open(logfile,'a') as f:
-                f.write("W : {0!s}\n".format(str([trunc(abs(w.get_value(borrow=True)).mean()) for w in weights_list])))
+                f.write("W : {0!s}\t".format(str([trunc(abs(w.get_value(borrow=True)).mean()) for w in weights_list])))
+                
+            with open(logfile,'a') as f:
+                f.write("Time : {0!s} seconds\n".format(trunc(timing)))
     
             if (counter % state.save_frequency) == 0:
                 # Checking reconstruction
@@ -795,17 +806,19 @@ def experiment(state, outdir_base='./'):
             
             
             
-    def train_recurrent(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset=1):
+    def train_recurrent(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y):
         print '-------------------------------------------'
         print 'TRAINING RECURRENT REGRESSION FOR ITERATION',iteration
         with open(logfile,'a') as f:
-            f.write("--------------------------\nTRAINING RECURRENT REGRESSION FOR ITERATION {0!s}\n".format(iteration))
+            f.write("\n\n--------------------------\nTRAINING RECURRENT REGRESSION FOR ITERATION {0!s}\n".format(iteration))
         
         # TRAINING
         n_epoch     =   state.n_epoch
         batch_size  =   state.batch_size
         STOP        =   False
         counter     =   0
+        best_cost = float('inf')
+        patience = 0
         if iteration == 0:
             recurrent_learning_rate.set_value(cast32(state.learning_rate))  # learning rate
         times = []
@@ -848,6 +861,8 @@ def experiment(state, outdir_base='./'):
             print 'rTrain : ',trunc(train_cost), '\t',
             with open(logfile,'a') as f:
                 f.write("rTrain : {0!s}\t".format(trunc(train_cost)))
+            with open(recurrent_train_convergence,'a') as f:
+                f.write("{0!s},".format(train_cost))
     
             #valid
             valid_cost  =   []
@@ -861,6 +876,8 @@ def experiment(state, outdir_base='./'):
             print 'rValid : ', trunc(valid_cost), '\t',
             with open(logfile,'a') as f:
                 f.write("rValid : {0!s}\t".format(trunc(valid_cost)))
+            with open(recurrent_valid_convergence,'a') as f:
+                f.write("{0!s},".format(valid_cost))
     
             #test
             test_cost  =   []
@@ -874,9 +891,20 @@ def experiment(state, outdir_base='./'):
             print 'rTest  : ', trunc(test_cost), '\t',
             with open(logfile,'a') as f:
                 f.write("rTest : {0!s}\t".format(trunc(test_cost)))
+            with open(recurrent_test_convergence,'a') as f:
+                f.write("{0!s},".format(test_cost))
     
-            if counter >= n_epoch:
+            #check for early stopping
+            cost = train_cost
+            if cost < best_cost*state.early_stop_threshold:
+                patience = 0
+                best_cost = cost
+            else:
+                patience += 1
+                
+            if counter >= n_epoch or patience >= state.early_stop_length:
                 STOP = True
+                save_params('recurrent', counter, recurrent_params, iteration)
     
             timing = time.time() - t
             times.append(timing)
@@ -889,7 +917,10 @@ def experiment(state, outdir_base='./'):
                 f.write("MeanVB : {0!s}\t".format(str([trunc(vb.get_value().mean()) for vb in recurrent_bias_list])))
             
             with open(logfile,'a') as f:
-                f.write("V : {0!s}\n".format(str([trunc(abs(v.get_value(borrow=True)).mean()) for v in recurrent_weights_list])))
+                f.write("V : {0!s}\t".format(str([trunc(abs(v.get_value(borrow=True)).mean()) for v in recurrent_weights_list])))
+                
+            with open(logfile,'a') as f:
+                f.write("Time : {0!s} seconds\n".format(trunc(timing)))
     
             if (counter % state.save_frequency) == 0: 
                 # Checking reconstruction
@@ -919,31 +950,11 @@ def experiment(state, outdir_base='./'):
     #####################
     # STORY 1 ALGORITHM #
     #####################
-    logfile = outdir+"log.txt"
-    with open(logfile,'w') as f:
-        f.write("MODEL 1, dataset 1\n\n")
-    dataset = 1
+    
     for _ in range(state.max_iterations):
         train_GSN(iter, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
         train_recurrent(iter, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
         
-        
-        
-        
-    outdir = outdir_base+'dataset_2/'
-    data.mkdir_p(outdir)
-    logfile = outdir+"log.txt"
-    with open(logfile,'w') as f:
-        f.write("MODEL 1, dataset 2\n\n")
-    dataset = 2
-        
-        
-    outdir = outdir_base+'dataset_3/'
-    data.mkdir_p(outdir)
-    logfile = outdir+"log.txt"
-    with open(logfile,'w') as f:
-        f.write("MODEL 1, dataset 3\n\n")
-    dataset = 3
-        
+          
         
         
