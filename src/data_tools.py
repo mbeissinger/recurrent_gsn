@@ -6,8 +6,6 @@ Created on Nov 2, 2013
 import numpy as np
 import theano
 import theano.tensor as T
-from theano.tensor.shared_randomstreams import RandomStreams
-from random import choice
 import os, cPickle
 import gzip
 import errno
@@ -32,10 +30,10 @@ def shared_dataset(data_xy, borrow=True):
     """
     data_x, data_y = data_xy
     shared_x = theano.shared(np.asarray(data_x,
-                                           dtype=theano.config.floatX),
+                                           dtype=theano.config.floatX),  # @UndefinedVariable
                              borrow=borrow)
     shared_y = theano.shared(np.asarray(data_y,
-                                           dtype=theano.config.floatX),
+                                           dtype=theano.config.floatX), # @UndefinedVariable
                              borrow=borrow)
     # When storing data on the GPU it has to be stored as floats
     # therefore we will store the labels as ``floatX`` as well
@@ -150,7 +148,8 @@ def create_series(labels, classes):
 
 def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset=1, rng=None):
     if rng is None:
-        rng = np.random.seed(1)
+        rng = np.random
+        rng.seed(1)
     #shuffle the datasets
     train_indices = range(len(train_Y.get_value(borrow=True)))
     rng.shuffle(train_indices)
