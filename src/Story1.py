@@ -501,7 +501,7 @@ def experiment(state, outdir_base='./'):
 
         return numpy.vstack(visible_chain), numpy.vstack(noisy_h0_chain)
     
-    def plot_samples(epoch_number, iteration_number):
+    def plot_samples(epoch_number, iteration):
         to_sample = time.time()
         if layers == 1:
             # one layer model
@@ -510,7 +510,7 @@ def experiment(state, outdir_base='./'):
             V, _ = sample_some_numbers()
         img_samples =   PIL.Image.fromarray(tile_raster_images(V, (root_N_input,root_N_input), (20,20)))
         
-        fname       =   outdir+'samples_iteration_'+str(iteration_number)+'_epoch_'+str(epoch_number)+'.png'
+        fname       =   outdir+'samples_iteration_'+str(iteration)+'_epoch_'+str(epoch_number)+'.png'
         img_samples.save(fname) 
         print 'Took ' + str(time.time() - to_sample) + ' to sample 400 numbers'
    
@@ -564,9 +564,9 @@ def experiment(state, outdir_base='./'):
 
         return numpy.vstack(visible_chain), numpy.vstack(noisy_h0_chain)
 
-    def save_params(name, n, params, iteration_number):
+    def save_params(name, n, params, iteration):
         print 'saving parameters...'
-        save_path = outdir+name+'_params_iteration_'+str(iteration_number)+'_epoch_'+str(n)+'.pkl'
+        save_path = outdir+name+'_params_iteration_'+str(iteration)+'_epoch_'+str(n)+'.pkl'
         f = open(save_path, 'wb')
         try:
             cPickle.dump(params, f, protocol=cPickle.HIGHEST_PROTOCOL)
@@ -577,18 +577,18 @@ def experiment(state, outdir_base='./'):
     ################
     # GSN TRAINING #
     ################
-    def train_GSN(iteration_number, train_X, train_Y, valid_X, valid_Y, test_X, test_Y):
+    def train_GSN(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y):
         print '----------------------------------------'
-        print 'TRAINING GSN FOR ITERATION',iteration_number
+        print 'TRAINING GSN FOR ITERATION',iteration
         with open(logfile,'a') as f:
-            f.write("--------------------------\nTRAINING GSN FOR ITERATION {0!s}\n".format(iteration_number))
+            f.write("--------------------------\nTRAINING GSN FOR ITERATION {0!s}\n".format(iteration))
         
         # TRAINING
         n_epoch     =   state.n_epoch
         batch_size  =   state.batch_size
         STOP        =   False
         counter     =   0
-        if iteration_number == 0:
+        if iteration == 0:
             learning_rate.set_value(cast32(state.learning_rate))  # learning rate
         times = []
         best_cost = float('inf')
@@ -629,7 +629,7 @@ def experiment(state, outdir_base='./'):
             #train
             pre_train_cost = []
             post_train_cost = []
-            if iteration_number == 0: # if first run through (recurrent_weights V is the identity matrix), can do batch
+            if iteration == 0: # if first run through (recurrent_weights V is the identity matrix), can do batch
                 for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                     x = train_X.get_value()[i * batch_size : (i+1) * batch_size]
                     pre = f_learn_init(x)
@@ -659,7 +659,7 @@ def experiment(state, outdir_base='./'):
             #valid
             pre_valid_cost  =   []    
             post_valid_cost  =  []
-            if iteration_number == 0:
+            if iteration == 0:
                 for i in range(len(valid_X.get_value(borrow=True)) / batch_size):
                     x = valid_X.get_value()[i * batch_size : (i+1) * batch_size]
                     pre, post = f_cost(x,x)
@@ -689,7 +689,7 @@ def experiment(state, outdir_base='./'):
             #test
             pre_test_cost  =   []
             post_test_cost  =   []
-            if iteration_number == 0:
+            if iteration == 0:
                 for i in range(len(test_X.get_value(borrow=True)) / batch_size):
                     x = test_X.get_value()[i * batch_size : (i+1) * batch_size]
                     pre, post = f_cost(x,x)
@@ -718,7 +718,7 @@ def experiment(state, outdir_base='./'):
                 
             #check for early stopping
             cost = pre_train_cost
-            if iteration_number != 0:
+            if iteration != 0:
                 cost = cost + post_train_cost
             if cost < best_cost*state.early_stop_threshold:
                 patience = 0
@@ -728,7 +728,7 @@ def experiment(state, outdir_base='./'):
     
             if counter >= n_epoch or patience >= state.early_stop_length:
                 STOP = True
-                save_params('gsn', counter, params, iteration_number)
+                save_params('gsn', counter, params, iteration)
     
             timing = time.time() - t
             times.append(timing)
@@ -754,13 +754,13 @@ def experiment(state, outdir_base='./'):
             
                 number_reconstruction   =   PIL.Image.fromarray(tile_raster_images(stacked, (root_N_input,root_N_input), (10,40)))
                 #epoch_number    =   reduce(lambda x,y : x + y, ['_'] * (4-len(str(counter)))) + str(counter)
-                number_reconstruction.save(outdir+'gsn_number_reconstruction_iteration_'+str(iteration_number)+'_epoch_'+str(counter)+'.png')
+                number_reconstruction.save(outdir+'gsn_number_reconstruction_iteration_'+str(iteration)+'_epoch_'+str(counter)+'.png')
         
                 #sample_numbers(counter, 'seven')
-                plot_samples(counter, iteration_number)
+                plot_samples(counter, iteration)
         
                 #save params
-                save_params('gsn', counter, params, iteration_number)
+                save_params('gsn', counter, params, iteration)
          
             # ANNEAL!
             new_lr = learning_rate.get_value() * annealing
@@ -815,7 +815,7 @@ def experiment(state, outdir_base='./'):
     
             plot_inpainting =   PIL.Image.fromarray(tile_raster_images(INPAINTING, (root_N_input,root_N_input), (10,50)))
     
-            fname   =   'inpainting_'+str(Iter)+'_iteration_'+str(iteration_number)+'.png'
+            fname   =   'inpainting_'+str(Iter)+'_iteration_'+str(iteration)+'.png'
             #fname   =   os.path.join(state.model_path, fname)
     
             plot_inpainting.save(fname)
@@ -824,11 +824,11 @@ def experiment(state, outdir_base='./'):
             
             
             
-    def train_recurrent(iteration_number, train_X, train_Y, valid_X, valid_Y, test_X, test_Y):
+    def train_recurrent(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y):
         print '-------------------------------------------'
-        print 'TRAINING RECURRENT REGRESSION FOR ITERATION',iteration_number
+        print 'TRAINING RECURRENT REGRESSION FOR ITERATION',iteration
         with open(logfile,'a') as f:
-            f.write("\n\n--------------------------\nTRAINING RECURRENT REGRESSION FOR ITERATION {0!s}\n".format(iteration_number))
+            f.write("\n\n--------------------------\nTRAINING RECURRENT REGRESSION FOR ITERATION {0!s}\n".format(iteration))
         
         # TRAINING
         n_epoch     =   state.n_epoch
@@ -837,7 +837,7 @@ def experiment(state, outdir_base='./'):
         counter     =   0
         best_cost = float('inf')
         patience = 0
-        if iteration_number == 0:
+        if iteration == 0:
             recurrent_learning_rate.set_value(cast32(state.learning_rate))  # learning rate
         times = []
             
@@ -922,7 +922,7 @@ def experiment(state, outdir_base='./'):
                 
             if counter >= n_epoch or patience >= state.early_stop_length:
                 STOP = True
-                save_params('recurrent', counter, recurrent_params, iteration_number)
+                save_params('recurrent', counter, recurrent_params, iteration)
     
             timing = time.time() - t
             times.append(timing)
@@ -948,10 +948,10 @@ def experiment(state, outdir_base='./'):
             
                 number_reconstruction   =   PIL.Image.fromarray(tile_raster_images(stacked, (root_N_input,root_N_input), (10,40)))
                 #epoch_number    =   reduce(lambda x,y : x + y, ['_'] * (4-len(str(counter)))) + str(counter)
-                number_reconstruction.save(outdir+'recurrent_number_reconstruction_iteration_'+str(iteration_number)+'_epoch_'+str(counter)+'.png')
+                number_reconstruction.save(outdir+'recurrent_number_reconstruction_iteration_'+str(iteration)+'_epoch_'+str(counter)+'.png')
              
                 #save params
-                save_params('recurrent', counter, recurrent_params, iteration_number)
+                save_params('recurrent', counter, recurrent_params, iteration)
          
             # ANNEAL!
             new_r_lr = recurrent_learning_rate.get_value() * annealing
@@ -969,9 +969,9 @@ def experiment(state, outdir_base='./'):
     # STORY 1 ALGORITHM #
     #####################
     
-    for _ in range(state.max_iterations):
-        train_GSN(iter, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
-        train_recurrent(iter, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+    for iteration in range(state.max_iterations):
+        train_GSN(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+        train_recurrent(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
         
           
         
