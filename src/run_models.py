@@ -1,6 +1,5 @@
 import argparse
 import Story1
-import Story1_old
 import Story2e_untied_walkbacks
 import Story3
 
@@ -41,7 +40,7 @@ def main():
     args = parser.parse_args()
     
     # RUN STORY 1
-    Story1_old.experiment(args, '../outputs/model_1_old/')
+    Story1.experiment(args, '../outputs/model_1_test/')
     args.dataset = "MNIST_2"
     #Story1.experiment(args, '../outputs/model_1/')
     args.dataset = "MNIST_3"

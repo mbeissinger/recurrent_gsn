@@ -83,7 +83,6 @@ def load_data(dataset):
     #############
     # LOAD DATA #
     #############
-
     # Download the MNIST dataset if it is not present
     data_dir, data_file = os.path.split(dataset)
     if data_dir == "" and not os.path.isfile(dataset):
