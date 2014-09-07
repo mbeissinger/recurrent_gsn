@@ -183,5 +183,3 @@ def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, data
     test_Y.set_value(test_Y.get_value(borrow=True)[test_ordered_indices])
     
     
-    
-    

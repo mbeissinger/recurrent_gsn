@@ -115,7 +115,7 @@ def experiment(state, outdir='./'):
     print state
     # Load the data, train = train+valid, and shuffle train
     # Targets are not used (will be misaligned after shuffling train
-    if state.dataset == 'MNIST':
+    if state.dataset == 'MNIST_1':
         (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = data.load_mnist(state.data_path)
         train_X = numpy.concatenate((train_X, valid_X))
         train_Y = numpy.concatenate((train_Y, valid_Y))
@@ -131,15 +131,6 @@ def experiment(state, outdir='./'):
     print 'train set size:',len(train_Y)
     print 'valid set size:',len(valid_Y)
     print 'test set size:',len(test_Y)
-    # Find the order of MNIST data going from 0-9 repeating
-    train_ordered_indices = data.create_series(train_Y, state.classes)
-    valid_ordered_indices = data.create_series(valid_Y, state.classes)
-    test_ordered_indices = data.create_series(test_Y, state.classes)
-    
-    # Put the data sets in order
-    train_X, train_Y = data.sequence_data(train_X, train_Y, train_ordered_indices)
-    valid_X, valid_Y = data.sequence_data(valid_X, valid_Y, valid_ordered_indices)
-    test_X,  test_Y  = data.sequence_data(test_X, test_Y, test_ordered_indices)
     
     train_X   = theano.shared(train_X)
     valid_X   = theano.shared(valid_X)
@@ -148,6 +139,7 @@ def experiment(state, outdir='./'):
     valid_Y   = theano.shared(valid_Y)
     test_Y    = theano.shared(test_Y)
 
+    data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, 1)
     print 'train set size:',len(train_Y.eval())
     print 'valid set size:',len(valid_Y.eval())
     print 'test set size:',len(test_Y.eval())
@@ -258,7 +250,7 @@ def experiment(state, outdir='./'):
                 if (layer % 2) != 0: #if odd layer
                     print 'using',recurrent_weights_list[layer-1],'and',recurrent_bias_list[layer-1]
                     hiddens[layer] = hidden_activation(T.dot(hiddens[layer],recurrent_weights_list[layer-1]) + recurrent_bias_list[layer-1])
-             #even updates from the odd layer predictions
+            #even updates from the odd layer predictions
             for layer in range(len(hiddens)):
                 if layer != 0 and (layer % 2) == 0: #if even layer
                     print "using {0!s} and {1!s}.T".format(weights_list[layer-1], weights_list[layer])

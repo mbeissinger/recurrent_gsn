@@ -175,9 +175,9 @@ def experiment(state, outdir_base='./'):
         print 'done full update.'
         print
         
-    def update_layers_reverse(hiddens, p_X_chain, noisy = True):
+    def update_layers_reverse(hiddens, p_X1_chain, noisy = True):
         print 'even layer updates'
-        update_even_layers(hiddens, p_X_chain, noisy)
+        update_even_layers(hiddens, p_X1_chain, noisy)
         print 'odd layer updates'
         update_odd_layers(hiddens, noisy)
         print 'done full update.'
@@ -276,7 +276,10 @@ def experiment(state, outdir_base='./'):
             print "Walkback {!s}/{!s}".format(i+1,walkbacks)
             update_layers(hiddens, p_X_chain, noisy=noiseflag)
             
+        print ""
+        print "Performing regression step!"
         perform_recurrent_step(hiddens) # do the regression!
+        print ""
          
         for i in range(walkbacks):
             print "Post Regression Walkback {!s}/{!s}".format(i+1,walkbacks)
@@ -305,8 +308,8 @@ def experiment(state, outdir_base='./'):
     print "Creating functions for regression part"
     # The prediction of the recurrent regression - no noise! noise is only used as regularization for GSN from over-fitting
     hiddens1 = [X]
-    recurrent_pX_chain  =   []
-    recurrent_p_X1_chain  =   []
+    recurrent_pX_chain   =   []
+    recurrent_p_X1_chain =   []
     noiseflag = False
     for w in weights_list:
         hiddens1.append(T.zeros_like(T.dot(hiddens1[-1], w)))
@@ -334,7 +337,7 @@ def experiment(state, outdir_base='./'):
     #l2 regularization
     recurrent_regularization_cost = T.sum([T.sum(recurrent_weights ** 2) for recurrent_weights in recurrent_weights_list])
     #recurrent_cost = T.log(T.sum(T.pow((predicted_network - encoded_network),2)) + recurrent_regularization_cost)
-    recurrent_costs = [T.mean(T.nnet.binary_crossentropy(pX, X1)) for pX in recurrent_p_X1_chain]
+    recurrent_costs = [T.mean(T.nnet.binary_crossentropy(rX1, X1)) for rX1 in recurrent_p_X1_chain]
     recurrent_cost_show = recurrent_costs[-1]
     recurrent_cost = numpy.sum(recurrent_costs) + state.regularize_weight * recurrent_regularization_cost
     
@@ -345,13 +348,13 @@ def experiment(state, outdir_base='./'):
     print "creating functions..."
     
     gradient_init        =   T.grad(COST_pre, params)
-                
+                 
     gradient_buffer_init =   [theano.shared(numpy.zeros(param.get_value().shape, dtype='float32')) for param in params]
-    
+     
     m_gradient_init      =   [momentum * gb + (cast32(1) - momentum) * g for (gb, g) in zip(gradient_buffer_init, gradient_init)]
     param_updates_init   =   [(param, param - learning_rate * mg) for (param, mg) in zip(params, m_gradient_init)]
     gradient_buffer_updates_init = zip(gradient_buffer_init, m_gradient_init)
-        
+         
     updates_init         =   OrderedDict(param_updates_init + gradient_buffer_updates_init)
     
     
@@ -374,16 +377,16 @@ def experiment(state, outdir_base='./'):
     f_learn     =   theano.function(inputs  = [X, X1], 
                                     updates = updates, 
                                     outputs = [show_COST_pre, show_COST_post])
-    
+     
     f_learn_init     =   theano.function(inputs  = [X], 
                                     updates = updates_init, 
                                     outputs = [show_COST_pre])
     
     
     recurrent_gradient        =   T.grad(recurrent_cost, recurrent_params)
-    recurrent_gradient_buffer =   [theano.shared(numpy.zeros(param.get_value().shape, dtype='float32')) for param in recurrent_params]
-    recurrent_m_gradient      =   [momentum * gb + (cast32(1) - momentum) * g for (gb, g) in zip(recurrent_gradient_buffer, recurrent_gradient)]
-    recurrent_param_updates   =   [(param, param - recurrent_learning_rate * mg) for (param, mg) in zip(recurrent_params, recurrent_m_gradient)]
+    recurrent_gradient_buffer =   [theano.shared(numpy.zeros(rparam.get_value().shape, dtype='float32')) for rparam in recurrent_params]
+    recurrent_m_gradient      =   [momentum * rgb + (cast32(1) - momentum) * rg for (rgb, rg) in zip(recurrent_gradient_buffer, recurrent_gradient)]
+    recurrent_param_updates   =   [(rparam, rparam - recurrent_learning_rate * rmg) for (rparam, rmg) in zip(recurrent_params, recurrent_m_gradient)]
     recurrent_gradient_buffer_updates = zip(recurrent_gradient_buffer, recurrent_m_gradient)
         
     recurrent_updates         =   OrderedDict(recurrent_param_updates + recurrent_gradient_buffer_updates)
@@ -629,13 +632,15 @@ def experiment(state, outdir_base='./'):
             #train
             pre_train_cost = []
             post_train_cost = []
-            if iteration == 0: # if first run through (recurrent_weights V is the identity matrix), can do batch
+            if iteration == 0:
                 for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                     x = train_X.get_value()[i * batch_size : (i+1) * batch_size]
                     pre = f_learn_init(x)
+                    #pre, post = f_learn(x,x)
                     pre_train_cost.append(pre)
                     post_train_cost.append(-1)
-            else: # otherwise, no batch
+                    #post_train_cost.append(post)
+            else:
                 for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                     x = train_X.get_value()[i * batch_size : (i+1) * batch_size]
                     x1 = train_X.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
@@ -729,6 +734,7 @@ def experiment(state, outdir_base='./'):
             if counter >= n_epoch or patience >= state.early_stop_length:
                 STOP = True
                 save_params('gsn', counter, params, iteration)
+                print "next learning rate should be", learning_rate.get_value() * annealing
     
             timing = time.time() - t
             times.append(timing)
@@ -746,7 +752,7 @@ def experiment(state, outdir_base='./'):
             with open(logfile,'a') as f:
                 f.write("Time : {0!s} seconds\n".format(trunc(timing)))
     
-            if (counter % state.save_frequency) == 0:
+            if (counter % state.save_frequency) == 0 or STOP is True:
                 # Checking reconstruction
                 reconstructed, reconstructed_prediction   =   f_recon(noisy_numbers) 
                 # Concatenate stuff
@@ -923,6 +929,7 @@ def experiment(state, outdir_base='./'):
             if counter >= n_epoch or patience >= state.early_stop_length:
                 STOP = True
                 save_params('recurrent', counter, recurrent_params, iteration)
+                print "next learning rate should be",recurrent_learning_rate.get_value() * annealing
     
             timing = time.time() - t
             times.append(timing)
@@ -940,7 +947,7 @@ def experiment(state, outdir_base='./'):
             with open(logfile,'a') as f:
                 f.write("Time : {0!s} seconds\n".format(trunc(timing)))
     
-            if (counter % state.save_frequency) == 0: 
+            if (counter % state.save_frequency) == 0 or STOP is True: 
                 # Checking reconstruction
                 reconstructed, reconstructed_prediction   =   f_recon(noisy_numbers) 
                 # Concatenate stuff
