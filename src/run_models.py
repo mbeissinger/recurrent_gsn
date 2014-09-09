@@ -8,7 +8,7 @@ def main():
     # Add options here
 
     parser.add_argument('--layers', type=int, default=3) # number of hidden layers
-    parser.add_argument('--walkbacks', type=int, default=10) # number of walkbacks default 5
+    parser.add_argument('--walkbacks', type=int, default=5) # number of walkbacks default 5
     parser.add_argument('--recurrent_layers', type=int, default=1) # number of recurrent hidden layers
     parser.add_argument('--recurrent_walkbacks', type=int, default=0) # number of recurrent walkbacks
     parser.add_argument('--n_epoch', type=int, default=100)
@@ -18,9 +18,9 @@ def main():
     parser.add_argument('--batch_size', type=int, default=100)
     parser.add_argument('--hidden_add_noise_sigma', type=float, default=2)
     parser.add_argument('--input_salt_and_pepper', type=float, default=0.4) #default=0.4
-    parser.add_argument('--learning_rate', type=float, default=0.25)
-    parser.add_argument('--momentum', type=float, default=0.5)
-    parser.add_argument('--annealing', type=float, default=0.995)
+    parser.add_argument('--learning_rate', type=float, default=0.25) #default=.25
+    parser.add_argument('--momentum', type=float, default=0.5) #default=.5
+    parser.add_argument('--annealing', type=float, default=0.995) #default=.995
     parser.add_argument('--hidden_size', type=int, default=1500)
     parser.add_argument('--recurrent_hidden_size', type=int, default=3000)
     parser.add_argument('--act', type=str, default='tanh')

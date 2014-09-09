@@ -12,8 +12,8 @@ def main():
     parser = argparse.ArgumentParser()
     # Add options here
 
-    parser.add_argument('--K', type=int, default=2) # nubmer of hidden layers
-    parser.add_argument('--N', type=int, default=4) # number of walkbacks
+    parser.add_argument('--K', type=int, default=3) # number of hidden layers default 2
+    parser.add_argument('--N', type=int, default=6) # number of walkbacks default 4
     parser.add_argument('--n_epoch', type=int, default=1000)
     parser.add_argument('--batch_size', type=int, default=100)
     parser.add_argument('--hidden_add_noise_sigma', type=float, default=2)

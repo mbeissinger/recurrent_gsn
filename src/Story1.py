@@ -91,13 +91,15 @@ def experiment(state, outdir_base='./'):
     valid_Y = theano.shared(valid_Y) 
     test_X = theano.shared(test_X)
     test_Y = theano.shared(test_Y) 
-   
+    
+    # seed the numpy rng for sequencing data
+    rng.seed(1)
     if artificial:
         print 'Sequencing MNIST data...'
         print 'train set size:',len(train_Y.eval())
         print 'valid set size:',len(valid_Y.eval())
         print 'test set size:',len(test_Y.eval())
-        data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset)
+        data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset, rng)
         print 'train set size:',len(train_Y.eval())
         print 'valid set size:',len(valid_Y.eval())
         print 'test set size:',len(test_Y.eval())
@@ -322,13 +324,12 @@ def experiment(state, outdir_base='./'):
     # COST AND GRADIENTS    
     print
     print 'Cost w.r.t p(X|...) at every step in the graph'
-    COSTS            =   [T.mean(T.nnet.binary_crossentropy(rX, X)) for rX in p_X_chain]
-    show_COST_pre    =   COSTS[-1]
-    COST_pre         =   numpy.sum(COSTS)
-    prediction_COSTS =   [T.mean(T.nnet.binary_crossentropy(rX1, X1)) for rX1 in p_X1_chain]
-    #COST = [T.log(T.sum(T.pow((rX - X),2))) for rX in p_X_chain] #why does it work with log and not without???
-    show_COST_post   =   prediction_COSTS[-1]
-    COSTS            =   COSTS + prediction_COSTS
+    COSTS_pre        =   [T.mean(T.nnet.binary_crossentropy(rX, X)) for rX in p_X_chain]
+    show_COST_pre    =   COSTS_pre[-1]
+    COST_pre         =   numpy.sum(COSTS_pre)
+    COSTS_post       =   [T.mean(T.nnet.binary_crossentropy(rX1, X1)) for rX1 in p_X1_chain]
+    show_COST_post   =   COSTS_post[-1]
+    COSTS            =   COSTS_pre + COSTS_post
     COST             =   numpy.sum(COSTS)
     
     params      =   weights_list + bias_list    

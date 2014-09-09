@@ -3,7 +3,7 @@ Created on Nov 2, 2013
 
 @author: markus
 '''
-import numpy as np
+import numpy
 import theano
 import theano.tensor as T
 import os, cPickle
@@ -29,10 +29,10 @@ def shared_dataset(data_xy, borrow=True):
     variable) would lead to a large decrease in performance.
     """
     data_x, data_y = data_xy
-    shared_x = theano.shared(np.asarray(data_x,
+    shared_x = theano.shared(numpy.asarray(data_x,
                                            dtype=theano.config.floatX),  # @UndefinedVariable
                              borrow=borrow)
-    shared_y = theano.shared(np.asarray(data_y,
+    shared_y = theano.shared(numpy.asarray(data_y,
                                            dtype=theano.config.floatX), # @UndefinedVariable
                              borrow=borrow)
     # When storing data on the GPU it has to be stored as floats
@@ -123,7 +123,7 @@ def load_data(dataset):
 
 
 
-def create_series(labels, classes):
+def create_series(labels, classes=10):
     #Creates an ordering of indices for this MNIST label series (normally expressed as y in dataset) that makes the numbers go in order 0-9....
     seen = range(classes)
     #Initiate a list of indices with the worst case size: #input labels * #possible classes
@@ -135,7 +135,7 @@ def create_series(labels, classes):
                 indices[seen[c]] = i
                 seen[c] += classes
                     
-    end_idx = np.where(np.array(indices) == -1)[0]
+    end_idx = numpy.where(numpy.array(indices) == -1)[0]
     if end_idx.size == 0:        
         return indices
     else:
@@ -143,11 +143,102 @@ def create_series(labels, classes):
             raise Exception('missing first class from sequence labels')
         else:
             return indices[0:end_idx[0]]
-    
+        
+#order sequentially, but randomly choose when a 1, 4, or 8.
+def dataset2_indices(labels, rng, classes=10, change_prob=.5):
+    sequence = []
+    pool = []
+    for _ in range(classes):
+        pool.append([])
+    #organize the indices into groups by label
+    for i in range(len(labels)):
+        pool[labels[i]].append(i)
+    #draw from each pool (also with the random number insertions) until one is empty
+    stop = False
+    #check if there is an empty class
+    for n in pool:
+        if len(n) == 0:
+            stop = True
+            print "stopped early from dataset2 sequencing - missing some class of labels"
+    while not stop:
+        for i in range(classes):
+            if not stop:
+                n = i
+                if i==1:
+                    if rng.sample() < change_prob:
+                        n = rng.choice([4,8])
+                if i==4:
+                    if rng.sample() < change_prob:
+                        n = rng.choice([1,8])
+                elif i==8:
+                    if rng.sample() < change_prob:
+                        n = rng.choice([4,1])
+                sequence.append(pool[n].pop())
+                if len(pool[n]) == 0:
+                    stop = True
+    return sequence
+
+#order sequentially up then down
+def dataset2a_indices(labels, classes=10):
+    sequence = []
+    pool = []
+    for _ in range(classes):
+        pool.append([])
+    #organize the indices into groups by label
+    for i in range(len(labels)):
+        pool[labels[i]].append(i)
+    #draw from each pool (also with the random number insertions) until one is empty
+    stop = False
+    #check if there is an empty class
+    for n in pool:
+        if len(n) == 0:
+            stop = True
+            print "stopped early from dataset2a sequencing - missing some class of labels"
+    while not stop:
+        for i in range(classes)+range(classes-2,0,-1):
+            if not stop:
+                sequence.append(pool[i].pop())
+                if len(pool[i]) == 0:
+                    stop = True
+    return sequence
+                
+
+def dataset3_indices(labels, classes=10):
+    sequence = []
+    pool = []
+    for _ in range(classes):
+        pool.append([])
+    #organize the indices into groups by label
+    for i in range(len(labels)):
+        pool[labels[i]].append(i)
+    #draw from each pool (also with the random number insertions) until one is empty
+    stop = False
+    #check if there is an empty class
+    for n in pool:
+        if len(n) == 0:
+            stop = True
+            print "stopped early from dataset3 sequencing - missing some class of labels"
+    a = False
+    while not stop:
+        for i in range(classes):
+            if not stop:
+                n=i
+                if i == 1 and a:
+                    n = 4
+                elif i == 4 and a:
+                    n = 8
+                elif i == 8 and a:
+                    n = 1
+                sequence.append(pool[n].pop())
+                if len(pool[n]) == 0:
+                    stop = True
+        a = not a
+            
+    return sequence
 
 def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset=1, rng=None):
     if rng is None:
-        rng = np.random
+        rng = numpy.random
         rng.seed(1)
     #shuffle the datasets
     train_indices = range(len(train_Y.get_value(borrow=True)))
@@ -166,10 +257,26 @@ def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, data
     test_X.set_value(test_X.get_value(borrow=True)[test_indices])
     test_Y.set_value(test_Y.get_value(borrow=True)[test_indices])
     
-    # Find the order of MNIST data going from 0-9 repeating
-    train_ordered_indices = create_series(train_Y.get_value(borrow=True), 10)
-    valid_ordered_indices = create_series(valid_Y.get_value(borrow=True), 10)
-    test_ordered_indices = create_series(test_Y.get_value(borrow=True), 10)
+    # Find the order of MNIST data going from 0-9 repeating if the first dataset
+    if dataset == 1:
+        train_ordered_indices = create_series(train_Y.get_value(borrow=True))
+        valid_ordered_indices = create_series(valid_Y.get_value(borrow=True))
+        test_ordered_indices = create_series(test_Y.get_value(borrow=True))
+    elif dataset == 2:
+#         train_ordered_indices = dataset2_indices(train_Y.get_value(borrow=True),rng)
+#         valid_ordered_indices = dataset2_indices(valid_Y.get_value(borrow=True),rng)
+#         test_ordered_indices = dataset2_indices(test_Y.get_value(borrow=True),rng)
+        train_ordered_indices = dataset2a_indices(train_Y.get_value(borrow=True))
+        valid_ordered_indices = dataset2a_indices(valid_Y.get_value(borrow=True))
+        test_ordered_indices = dataset2a_indices(test_Y.get_value(borrow=True))
+    elif dataset == 3:
+        train_ordered_indices = dataset3_indices(train_Y.get_value(borrow=True))
+        valid_ordered_indices = dataset3_indices(valid_Y.get_value(borrow=True))
+        test_ordered_indices = dataset3_indices(test_Y.get_value(borrow=True))
+    else:
+        train_ordered_indices = train_indices
+        valid_ordered_indices = valid_indices
+        test_ordered_indices = test_indices
     
     # Put the data sets in order
     train_X.set_value(train_X.get_value(borrow=True)[train_ordered_indices])
