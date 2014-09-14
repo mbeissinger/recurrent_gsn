@@ -1,14 +1,14 @@
 import argparse
 import Story1
-import Story2e_untied_walkbacks
+import Story2e_untied_walkbacks as Story2
 import Story3
 
 def main():
     parser = argparse.ArgumentParser()
     # Add options here
 
-    parser.add_argument('--layers', type=int, default=3) # number of hidden layers
-    parser.add_argument('--walkbacks', type=int, default=5) # number of walkbacks default 5
+    parser.add_argument('--layers', type=int, default=2) # number of hidden layers default 3
+    parser.add_argument('--walkbacks', type=int, default=4) # number of walkbacks default 5
     parser.add_argument('--recurrent_layers', type=int, default=1) # number of recurrent hidden layers
     parser.add_argument('--recurrent_walkbacks', type=int, default=0) # number of recurrent walkbacks
     parser.add_argument('--n_epoch', type=int, default=100)
@@ -49,7 +49,7 @@ def main():
     # RUN STORY 2
     args.n_epoch = 1000
     args.dataset = "MNIST_1"
-    #Story2e_untied_walkbacks.experiment(args, '../outputs/model_2/')
+    #Story2.experiment(args, '../outputs/model_2/')
     #Story3.experiment(args, '../outputs/model_3/')
     
 if __name__ == '__main__':

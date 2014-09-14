@@ -1,4 +1,5 @@
 import numpy, os, sys, cPickle
+import numpy.random as rng
 import theano
 import theano.tensor as T
 import theano.sandbox.rng_mrg as RNG_MRG
@@ -7,6 +8,7 @@ from collections import OrderedDict
 from image_tiler import *
 import time
 import argparse
+import data_tools as data
 
 cast32      = lambda x : numpy.cast['float32'](x)
 trunc       = lambda x : str(x)[:8]
@@ -115,18 +117,33 @@ def experiment(state, channel):
     
     N_input =   train_X.shape[1]
     root_N_input = numpy.sqrt(N_input)
-    numpy.random.seed(1)
-    numpy.random.shuffle(train_X)
-    numpy.random.shuffle(train_X)
-    numpy.random.shuffle(train_X)
+    
+    
     train_X = theano.shared(train_X)
+    train_Y = theano.shared(train_Y)
     valid_X = theano.shared(valid_X)
-    test_X  = theano.shared(test_X)
+    valid_Y = theano.shared(valid_Y) 
+    test_X = theano.shared(test_X)
+    test_Y = theano.shared(test_Y) 
+    
+    # seed the numpy rng for sequencing data
+    rng.seed(1)
+    print 'Sequencing MNIST data...'
+    print 'train set size:',len(train_Y.eval())
+    print 'valid set size:',len(valid_Y.eval())
+    print 'test set size:',len(test_Y.eval())
+    data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, 1, rng)
+    print 'train set size:',len(train_Y.eval())
+    print 'valid set size:',len(valid_Y.eval())
+    print 'test set size:',len(test_Y.eval())
+    print 'Sequencing done.'
+    print
     
     numbers = train_X.get_value()[0:100]
     stacked = numpy.vstack([numpy.vstack([numbers[i*10 : (i+1)*10]]) for i in range(10)])
     number_reconstruction = PIL.Image.fromarray(tile_raster_images(stacked, (root_N_input,root_N_input), (10,10)))
-    number_reconstruction.save('train_model_dataset.png')
+    number_reconstruction.save('train_model_sequenced_dataset.png')
+    
 
     # Theano variables and RNG
     X       = T.fmatrix()
@@ -543,6 +560,10 @@ def experiment(state, channel):
 
 
     while not STOP:
+
+        #shuffle the data!
+        #data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, 1, rng)
+
         counter     +=  1
         t = time.time()
         print counter,'\t',
