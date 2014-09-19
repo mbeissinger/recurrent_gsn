@@ -92,8 +92,6 @@ def experiment(state, outdir_base='./'):
     test_X = theano.shared(test_X)
     test_Y = theano.shared(test_Y) 
     
-    # seed the numpy rng for sequencing data
-    rng.seed(1)
     if artificial:
         print 'Sequencing MNIST data...'
         print 'train set size:',len(train_Y.eval())

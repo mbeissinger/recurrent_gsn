@@ -102,6 +102,8 @@ def experiment(state, outdir_base='./'):
     N_input =   train_X.eval().shape[1]
     root_N_input = numpy.sqrt(N_input)  
     
+    
+    
     # Network and training specifications
     layers          =   state.layers # number hidden layers
     walkbacks       =   state.walkbacks # number of walkbacks 
@@ -115,6 +117,7 @@ def experiment(state, outdir_base='./'):
     weights_list           = [get_shared_weights(layer_sizes[i], layer_sizes[i+1], name="W_{0!s}_{1!s}".format(i,i+1)) for i in range(layers)] # initialize each layer to uniform sample from sqrt(6. / (n_in + n_out))
     recurrent_weights_list = [get_shared_weights(layer_sizes[i+1], layer_sizes[i], name="V_{0!s}_{1!s}".format(i+1,i)) for i in range(layers)] # initialize each layer to uniform sample from sqrt(6. / (n_in + n_out))
     bias_list              = [get_shared_bias(layer_sizes[i], name='b_'+str(i)) for i in range(layers + 1)] # initialize each layer to 0's.
+    walkback_bias_list     = [get_shared_bias(layer_sizes[i], name='rb_'+str(i)) for i in range(layers + 1)] # initialize each layer to 0's.
     
     # Theano variables and RNG
     MRG = RNG_MRG.MRG_RandomStreams(1)
@@ -122,6 +125,25 @@ def experiment(state, outdir_base='./'):
     Xs = [T.fmatrix(name="X_initial") if i==0 else T.fmatrix(name="X_"+str(i+1)) for i in range(walkbacks+1)]
     hiddens_input = [X] + [T.fmatrix(name="h_"+str(i+1)) for i in range(layers)]
     hiddens_output = hiddens_input[:1] + hiddens_input[1:]
+    
+# 
+#     if state.test_model:
+#         # Load the parameters of the last epoch
+#         # maybe if the path is given, load these specific attributes 
+#         param_files     =   filter(lambda x:'params' in x, os.listdir('.'))
+#         max_epoch_idx   =   numpy.argmax([int(x.split('_')[-1].split('.')[0]) for x in param_files])
+#         params_to_load  =   param_files[max_epoch_idx]
+#         PARAMS = cPickle.load(open(params_to_load,'r'))
+#         [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[:len(weights_list)], weights_list)]
+#         [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[len(weights_list):], bias_list)]
+#         
+#     if state.continue_training:
+#         # Load the parameters of the last GSN
+#         params_to_load = 'gsn_params.pkl'
+#         PARAMS = cPickle.load(open(params_to_load,'r'))
+#         [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[:len(weights_list)], weights_list)]
+#         [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[len(weights_list):], bias_list)]
+
  
     ''' F PROP '''
     if state.act == 'sigmoid':
@@ -226,6 +248,61 @@ def experiment(state, outdir_base='./'):
                 # DOES INPUT SAMPLING MAKE SENSE FOR SEQUENTIAL? NO RISK OF MEMORIZING RECONSTRUCTION FUNCTION BECAUSE NEXT INPUT SHOULD ALWAYS BE DIFFERENT
                 # set input layer
                 hiddens[i]  =   sampled
+                
+    def sequential_walkback_layer(hiddens, p_X_chain, Xs, sequence_idx, i, add_noise=True):             
+        # Compute the dot product, whatever layer
+        # If the visible layer X
+        if i == 0:
+            print 'using', str(weights_list[i])+'.T'
+            hiddens[i] = (T.dot(hiddens[i+1], weights_list[i].T) + walkback_bias_list[i])
+        # If the top layer
+        elif i == len(hiddens)-1:
+            print 'using', str(recurrent_weights_list[i])+'.T'
+            hiddens[i]  =   T.dot(hiddens[i-1], recurrent_weights_list[i].T) + walkback_bias_list[i]
+            # Otherwise in-between layers
+        else:
+            print "using {0!s}.T and {1!s}.T".format(weights_list[i], recurrent_weights_list[i])
+            hiddens[i]  =   T.dot(hiddens[i+1], weights_list[i].T) + T.dot(hiddens[i-1], recurrent_weights_list[i].T) + walkback_bias_list[i]
+    
+        # Add pre-activation noise if NOT input layer
+        if i==1 and state.noiseless_h1:
+            print '>>NO noise in first hidden layer'
+            add_noise   =   False
+    
+        # pre activation noise            
+        if i != 0 and add_noise:
+            print 'Adding pre-activation gaussian noise for layer', i
+            hiddens[i]  =   add_gaussian_noise(hiddens[i], state.hidden_add_noise_sigma)
+       
+        # ACTIVATION!
+        if i == 0:
+            print 'Sigmoid units activation for visible layer X'
+            hiddens[i]  =   visible_activation(hiddens[i])
+        else:
+            print 'Hidden units {} activation for layer'.format(state.act), i
+            hiddens[i]  =   hidden_activation(hiddens[i])
+    
+        # post activation noise            
+        if i != 0 and add_noise:
+            print 'Adding post-activation gaussian noise for layer', i
+            hiddens[i]  =   add_gaussian_noise(hiddens[i], state.hidden_add_noise_sigma)
+    
+        # build the reconstruction chain if updating the visible layer X
+        if i == 0:
+            # if input layer -> append p(X|...)
+            p_X_chain.append(hiddens[i]) #what the predicted next input should be
+            # sample from p(X|...) - SAMPLING NEEDS TO BE CORRECT FOR INPUT TYPES I.E. FOR BINARY MNIST SAMPLING IS BINOMIAL. real-valued inputs should be gaussian
+            if state.input_sampling:
+                print 'Sampling from input'
+                sampled     =   MRG.binomial(p = hiddens[i], size=hiddens[i].shape, dtype='float32')
+            else:
+                print '>>NO input sampling'
+                sampled     =   hiddens[i]
+            # add noise
+            sampled     =   salt_and_pepper(sampled, state.input_salt_and_pepper)
+            
+            # set input layer
+            hiddens[i]  =   sampled
             
     
     ''' Corrupt X '''
