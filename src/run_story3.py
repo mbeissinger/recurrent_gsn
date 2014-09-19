@@ -6,7 +6,7 @@ def main():
     # Add options here
 
     parser.add_argument('--layers', type=int, default=3) # number of hidden layers
-    parser.add_argument('--walkbacks', type=int, default=5) # number of walkbacks
+    parser.add_argument('--walkbacks', type=int, default=6) # number of walkbacks
     parser.add_argument('--recurrent_layers', type=int, default=1) # number of recurrent hidden layers
     parser.add_argument('--recurrent_walkbacks', type=int, default=0) # number of walkbacks
     parser.add_argument('--n_epoch', type=int, default=300)

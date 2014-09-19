@@ -223,7 +223,7 @@ def experiment(state, outdir_base='./'):
                 # add noise
                 sampled     =   salt_and_pepper(sampled, state.input_salt_and_pepper)
                 
-                # DOES INPUT SAMPLING MAKE SENSE FOR SEQUENTIAL? NO RISK OF MEMORIZING RECONSTRUCTION FUNCTION BECAUSE NEXT INPUT SHOULD ALWAYS BE DIFFERENT
+                # DOES INPUT SAMPLING MAKE SENSE FOR SEQUENTIAL?
                 # set input layer
                 hiddens[i]  =   sampled
             
@@ -231,7 +231,6 @@ def experiment(state, outdir_base='./'):
     ''' Corrupt X '''
     predicted_X_chain    = []
     hiddens_output[0] = salt_and_pepper(hiddens_output[0], state.input_salt_and_pepper)
-    #hiddens[0] = salt_and_pepper(Xs[0], state.input_salt_and_pepper)
     # The layer update scheme
     print "Building the graph :", walkbacks,"updates"
     for i in range(walkbacks):

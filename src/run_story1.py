@@ -1,16 +1,15 @@
 import argparse
-import Story1_old
 import Story1
 
 def main():
     parser = argparse.ArgumentParser()
     # Add options here
 
-    parser.add_argument('--layers', type=int, default=3) # number of hidden layers
-    parser.add_argument('--walkbacks', type=int, default=5) # number of walkbacks
+    parser.add_argument('--layers', type=int, default=2) # number of hidden layers
+    parser.add_argument('--walkbacks', type=int, default=4) # number of walkbacks
     parser.add_argument('--n_epoch', type=int, default=100)
     parser.add_argument('--save_frequency', type=int, default=10) #number of epochs between parameters being saved
-    parser.add_argument('--early_stop_threshold', type=float, default=0.9999999)
+    parser.add_argument('--early_stop_threshold', type=float, default=0.999)
     parser.add_argument('--early_stop_length', type=int, default=10)
     parser.add_argument('--batch_size', type=int, default=100)
     parser.add_argument('--hidden_add_noise_sigma', type=float, default=2)
@@ -24,7 +23,7 @@ def main():
     parser.add_argument('--data_path', type=str, default='../data/')
     parser.add_argument('--classes', type=int, default=10)
     parser.add_argument('--regularize_weight', type=float, default=0)
-    parser.add_argument('--max_iterations', type=int, default=3)
+    parser.add_argument('--max_iterations', type=int, default=10)
    
     # argparse does not deal with bool 
     parser.add_argument('--vis_init', type=int, default=0)
