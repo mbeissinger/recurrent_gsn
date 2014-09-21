@@ -560,7 +560,7 @@ def experiment(state, outdir_base='./'):
         print '----------------------------------------'
         print 'TRAINING GSN FOR ITERATION',iteration
         with open(logfile,'a') as f:
-            f.write("--------------------------\nTRAINING GSN FOR ITERATION {0!s}".format(iteration))
+            f.write("--------------------------\nTRAINING GSN FOR ITERATION {0!s}\n".format(iteration))
         
         # TRAINING
         n_epoch     =   state.n_epoch
@@ -570,6 +570,8 @@ def experiment(state, outdir_base='./'):
         if iteration == 0:
             learning_rate.set_value(cast32(state.learning_rate))  # learning rate
         times = []
+        best_cost = float('inf')
+        patience = 0
             
         print 'learning rate:',learning_rate.get_value()
         
@@ -613,10 +615,10 @@ def experiment(state, outdir_base='./'):
             for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                 xs = [train_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                 hiddens, xs = fix_input_size(hiddens, xs)
-                if i==500:
-                    print "hiddens {0!s}:".format(i),
-                    for h in hiddens:
-                        print trunc(numpy.mean(h)), trunc(numpy.min(h)), trunc(numpy.max(h)), "|",
+#                 if i==500:
+#                     print "hiddens {0!s}:".format(i),
+#                     for h in hiddens:
+#                         print trunc(numpy.mean(h)), trunc(numpy.min(h)), trunc(numpy.max(h)), "|",
                 _ins = hiddens + xs
                 _outs = f_learn(*_ins)
                 hiddens = _outs[:len(hiddens)]
@@ -690,7 +692,15 @@ def experiment(state, outdir_base='./'):
                 f.write("Test : {0!s} {1!s}\t".format(trunc(test_cost),trunc(test_cost_post)))
             
     
-            if counter >= n_epoch:
+            #check for early stopping
+            cost = train_cost
+            if cost < best_cost*state.early_stop_threshold:
+                patience = 0
+                best_cost = cost
+            else:
+                patience += 1
+                
+            if counter >= n_epoch or patience >= state.early_stop_length:
                 STOP = True
                 save_params('gsn', counter, params, iteration)
     
@@ -706,6 +716,15 @@ def experiment(state, outdir_base='./'):
             print 'W : ', [trunc(abs(w.get_value(borrow=True)).mean()) for w in weights_list],
             
             print 'V : ', [trunc(abs(v.get_value(borrow=True)).mean()) for v in recurrent_weights_list]
+            
+            with open(logfile,'a') as f:
+                f.write("MeanVisB : {0!s}\t".format(trunc(bias_list[0].get_value().mean())))
+            
+            with open(logfile,'a') as f:
+                f.write("W : {0!s}\t".format(str([trunc(abs(w.get_value(borrow=True)).mean()) for w in weights_list])))
+                
+            with open(logfile,'a') as f:
+                f.write("Time : {0!s} seconds\n".format(trunc(timing)))
     
             if (counter % state.save_frequency) == 0:
                 # Checking reconstruction

@@ -10,7 +10,7 @@ def main():
     parser.add_argument('--recurrent_layers', type=int, default=1) # number of recurrent hidden layers
     parser.add_argument('--recurrent_walkbacks', type=int, default=0) # number of walkbacks
     parser.add_argument('--n_epoch', type=int, default=300)
-    parser.add_argument('--early_stop_threshold', type=float, default=0.9999999)
+    parser.add_argument('--early_stop_threshold', type=float, default=0.9995)
     parser.add_argument('--early_stop_length', type=int, default=10)
     parser.add_argument('--save_frequency', type=int, default=10) #number of epochs between parameters being saved
     parser.add_argument('--batch_size', type=int, default=100)

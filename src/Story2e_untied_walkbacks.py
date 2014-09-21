@@ -235,22 +235,8 @@ def experiment(state, outdir_base='./'):
     print "Building the graph :", walkbacks,"updates"
     for i in range(walkbacks):
         print "Forward Prediction {!s}/{!s}".format(i+1,walkbacks)
-        update_layers(hiddens_output, predicted_X_chain, Xs, i, direction="forward", noisy=True)
+        update_layers(hiddens_output, predicted_X_chain, Xs, i, noisy=True)
         
-#     p_X_chain    = []
-#     X_corrupt   = salt_and_pepper(Xs[0], state.input_salt_and_pepper)
-#     hiddens     = [X_corrupt]
-#     print "Hidden units initialization"
-#     for w in weights_list:
-#         # init with zeros
-#         print "Init hidden units at zero before creating the graph"
-#         print
-#         hiddens.append(T.zeros_like(T.dot(hiddens[-1], w)))
-#     # The layer update scheme
-#     print "Building the graph :", walkbacks,"updates"
-#     for i in range(walkbacks):
-#         print "Backward Prediction {!s}/{!s}".format(i+1,walkbacks)
-#         update_layers(hiddens, p_X_chain, Xs, i, direction="back", noisy=True)
 
     # COST AND GRADIENTS    
     print
@@ -316,7 +302,7 @@ def experiment(state, outdir_base='./'):
     noiseflag = False
     for i in range(layers):
         print "Walkback {!s}/{!s}".format(i+1,layers)
-        update_layers(hiddens_R, p_X_chain_R, [X_recon], i, direction="forward", noisy=noiseflag)
+        update_layers(hiddens_R, p_X_chain_R, [X_recon], i, noisy=noiseflag)
 
     f_recon = theano.function(inputs = [X_recon], outputs = [p_X_chain_R[0] ,p_X_chain_R[-1]]) 
 
@@ -338,7 +324,7 @@ def experiment(state, outdir_base='./'):
 
     # ONE update
     print "Performing one walkback in network state sampling."
-    update_layers(network_state_output, visible_pX_chain, [X], 0, direction="forward", noisy=True)
+    update_layers(network_state_output, visible_pX_chain, [X], 0, noisy=True)
 
     if layers == 1: 
         f_sample_simple = theano.function(inputs = [X], outputs = visible_pX_chain[-1])
@@ -482,7 +468,7 @@ def experiment(state, outdir_base='./'):
         print '----------------------------------------'
         print 'TRAINING GSN FOR ITERATION',iteration
         with open(logfile,'a') as f:
-            f.write("--------------------------\nTRAINING GSN FOR ITERATION {0!s}".format(iteration))
+            f.write("--------------------------\nTRAINING GSN FOR ITERATION {0!s}\n".format(iteration))
         
         # TRAINING
         n_epoch     =   state.n_epoch
@@ -492,6 +478,8 @@ def experiment(state, outdir_base='./'):
         if iteration == 0:
             learning_rate.set_value(cast32(state.learning_rate))  # learning rate
         times = []
+        best_cost = float('inf')
+        patience = 0
             
         print 'learning rate:',learning_rate.get_value()
         
@@ -535,10 +523,6 @@ def experiment(state, outdir_base='./'):
             for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                 xs = [train_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                 hiddens, xs = fix_input_size(hiddens, xs)
-                if i==500:
-                    print "hiddens {0!s}:".format(i),
-                    for h in hiddens:
-                        print trunc(numpy.mean(h)), trunc(numpy.min(h)), trunc(numpy.max(h)), "|",
                 _ins = hiddens + xs
                 _outs = f_learn(*_ins)
                 hiddens = _outs[:len(hiddens)]
@@ -611,8 +595,15 @@ def experiment(state, outdir_base='./'):
             with open(logfile,'a') as f:
                 f.write("Test : {0!s} {1!s}\t".format(trunc(test_cost),trunc(test_cost_post)))
             
-    
-            if counter >= n_epoch:
+            #check for early stopping
+            cost = train_cost
+            if cost < best_cost*state.early_stop_threshold:
+                patience = 0
+                best_cost = cost
+            else:
+                patience += 1
+                
+            if counter >= n_epoch or patience >= state.early_stop_length:
                 STOP = True
                 save_params('gsn', counter, params, iteration)
     
@@ -628,6 +619,15 @@ def experiment(state, outdir_base='./'):
             print 'W : ', [trunc(abs(w.get_value(borrow=True)).mean()) for w in weights_list],
             
             print 'V : ', [trunc(abs(v.get_value(borrow=True)).mean()) for v in recurrent_weights_list]
+            
+            with open(logfile,'a') as f:
+                f.write("MeanVisB : {0!s}\t".format(trunc(bias_list[0].get_value().mean())))
+            
+            with open(logfile,'a') as f:
+                f.write("W : {0!s}\t".format(str([trunc(abs(w.get_value(borrow=True)).mean()) for w in weights_list])))
+                
+            with open(logfile,'a') as f:
+                f.write("Time : {0!s} seconds\n".format(trunc(timing)))
     
             if (counter % state.save_frequency) == 0:
                 # Checking reconstruction
