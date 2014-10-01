@@ -53,11 +53,12 @@ def load_mnist(path):
     pkl_file = os.path.join(path,'mnist.pkl')
     gzip_file = os.path.join(path,'mnist.pkl.gz')
     
+    #check if a pkl or gz file exists
     if os.path.isfile(pkl_file):
         data = cPickle.load(open(pkl_file, 'r'))
     elif os.path.isfile(gzip_file):
         data = cPickle.load(gzip.open(gzip_file, 'rb'))
-    else:
+    else: #otherwise, it doesn't exist - download from lisa lab
         import urllib
         origin = 'http://www.iro.umontreal.ca/~lisa/deep/data/mnist/mnist.pkl.gz'
         print 'Downloading data from %s' % origin
@@ -68,7 +69,23 @@ def load_mnist(path):
     return data
 
 def load_mnist_binary(path):
-    data = cPickle.load(open(os.path.join(path,'mnist.pkl'), 'r'))
+    pkl_file = os.path.join(path,'mnist.pkl')
+    gzip_file = os.path.join(path,'mnist.pkl.gz')
+    
+    #check if a pkl or gz file exists
+    if os.path.isfile(pkl_file):
+        data = cPickle.load(open(pkl_file, 'r'))
+    elif os.path.isfile(gzip_file):
+        data = cPickle.load(gzip.open(gzip_file, 'rb'))
+    else: #otherwise, it doesn't exist - download from lisa lab
+        import urllib
+        origin = 'http://www.iro.umontreal.ca/~lisa/deep/data/mnist/mnist.pkl.gz'
+        print 'Downloading data from %s' % origin
+        urllib.urlretrieve(origin, gzip_file)
+        # Load the dataset
+        data = cPickle.load(gzip.open(gzip_file, 'rb'))
+    
+    #make binary
     data = [list(d) for d in data] 
     data[0][0] = (data[0][0] > 0.5).astype('float32')
     data[1][0] = (data[1][0] > 0.5).astype('float32')
