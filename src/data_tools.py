@@ -93,27 +93,34 @@ def load_tfd(path):
     return (train_X, labels[unlabeled]), (valid_X, labels[unlabeled][:100]), (test_X, labels[labeled])
 
 
-
-def create_series(labels, classes=10):
+        
+def dataset1_indices(labels, classes=10):
     #Creates an ordering of indices for this MNIST label series (normally expressed as y in dataset) that makes the numbers go in order 0-9....
-    seen = range(classes)
-    #Initiate a list of indices with the worst case size: #input labels * #possible classes
-    indices = [-1]*(labels.shape[0]*classes)
-    e = labels
-    for i in range(len(e)):
-        for c in range(classes):
-            if e[i] == c:
-                indices[seen[c]] = i
-                seen[c] += classes
-                    
-    end_idx = numpy.where(numpy.array(indices) == -1)[0]
-    if end_idx.size == 0:        
-        return indices
-    else:
-        if end_idx[0] == 0:
-            raise Exception('missing first class from sequence labels')
-        else:
-            return indices[0:end_idx[0]]
+    sequence = []
+    pool = []
+    for _ in range(classes):
+        pool.append([])
+    #organize the indices into groups by label
+    for i in range(len(labels)):
+        pool[labels[i]].append(i)
+    #draw from each pool (also with the random number insertions) until one is empty
+    stop = False
+    #check if there is an empty class
+    for n in pool:
+        if len(n) == 0:
+            stop = True
+            print
+            print "stopped early from dataset1 sequencing - missing some class of labels"
+            print
+    while not stop:
+        #for i in range(classes)+range(classes-2,0,-1):
+        for i in range(classes):
+            if not stop:
+                if len(pool[i]) == 0: #stop the procedure if you are trying to pop from an empty list
+                    stop = True
+                else:
+                    sequence.append(pool[i].pop())
+    return sequence
         
 #order sequentially, but randomly choose when a 1, 4, or 8.
 def dataset2_indices(labels, rng, classes=10, change_prob=.5):
@@ -144,9 +151,10 @@ def dataset2_indices(labels, rng, classes=10, change_prob=.5):
                 elif i==8:
                     if rng.sample() < change_prob:
                         n = rng.choice([4,1])
-                sequence.append(pool[n].pop())
-                if len(pool[n]) == 0:
+                if len(pool[n]) == 0: #stop the procedure if you are trying to pop from an empty list
                     stop = True
+                else:
+                    sequence.append(pool[n].pop())
     return sequence
 
 #order sequentially up then down
@@ -171,9 +179,10 @@ def dataset2a_indices(labels, classes=10):
         #for i in range(classes)+range(classes-2,0,-1):
         for i in range(classes)+range(classes-1,-1,-1):
             if not stop:
-                sequence.append(pool[i].pop())
-                if len(pool[i]) == 0:
+                if len(pool[i]) == 0: #stop the procedure if you are trying to pop from an empty list
                     stop = True
+                else:
+                    sequence.append(pool[i].pop())
     return sequence
                 
 
@@ -203,12 +212,14 @@ def dataset3_indices(labels, classes=10):
                     n = 8
                 elif i == 8 and a:
                     n = 1
-                sequence.append(pool[n].pop())
-                if len(pool[n]) == 0:
+                if len(pool[n]) == 0: #stop the procedure if you are trying to pop from an empty list
                     stop = True
+                else:
+                    sequence.append(pool[n].pop())
         a = not a
             
     return sequence
+
 
 def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset=1, rng=None):
     if rng is None:
@@ -233,9 +244,9 @@ def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, data
     
     # Find the order of MNIST data going from 0-9 repeating if the first dataset
     if dataset == 1:
-        train_ordered_indices = create_series(train_Y.get_value(borrow=True))
-        valid_ordered_indices = create_series(valid_Y.get_value(borrow=True))
-        test_ordered_indices = create_series(test_Y.get_value(borrow=True))
+        train_ordered_indices = dataset1_indices(train_Y.get_value(borrow=True))
+        valid_ordered_indices = dataset1_indices(valid_Y.get_value(borrow=True))
+        test_ordered_indices = dataset1_indices(test_Y.get_value(borrow=True))
     elif dataset == 2:
 #         train_ordered_indices = dataset2_indices(train_Y.get_value(borrow=True),rng)
 #         valid_ordered_indices = dataset2_indices(valid_Y.get_value(borrow=True),rng)
