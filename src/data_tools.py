@@ -45,7 +45,26 @@ def shared_dataset(data_xy, borrow=True):
     return shared_x, T.cast(shared_y, 'int32')
 
 def load_mnist(path):
-    data = cPickle.load(open(os.path.join(path,'mnist.pkl'), 'r'))
+    ''' Loads the mnist dataset
+
+    :type path: string
+    :param dataset: the path to the directory containing MNIST
+    '''
+    pkl_file = os.path.join(path,'mnist.pkl')
+    gzip_file = os.path.join(path,'mnist.pkl.gz')
+    
+    if os.path.isfile(pkl_file):
+        data = cPickle.load(open(pkl_file, 'r'))
+    elif os.path.isfile(gzip_file):
+        data = cPickle.load(gzip.open(gzip_file, 'rb'))
+    else:
+        import urllib
+        origin = 'http://www.iro.umontreal.ca/~lisa/deep/data/mnist/mnist.pkl.gz'
+        print 'Downloading data from %s' % origin
+        urllib.urlretrieve(origin, gzip_file)
+        # Load the dataset
+        data = cPickle.load(gzip.open(gzip_file, 'rb'))
+    
     return data
 
 def load_mnist_binary(path):
