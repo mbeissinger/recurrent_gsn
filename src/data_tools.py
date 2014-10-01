@@ -164,9 +164,12 @@ def dataset2a_indices(labels, classes=10):
     for n in pool:
         if len(n) == 0:
             stop = True
+            print
             print "stopped early from dataset2a sequencing - missing some class of labels"
+            print
     while not stop:
-        for i in range(classes)+range(classes-2,0,-1):
+        #for i in range(classes)+range(classes-2,0,-1):
+        for i in range(classes)+range(classes-1,-1,-1):
             if not stop:
                 sequence.append(pool[i].pop())
                 if len(pool[i]) == 0:
