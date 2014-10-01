@@ -131,6 +131,7 @@ def experiment(state, outdir_base='./'):
         print 'Using rectifier activation'
         hidden_activation = lambda x : T.maximum(cast32(0), x)
     elif state.act == 'tanh':
+        print 'Using tanh activation'
         hidden_activation = lambda x : T.tanh(x)
         
     print 'Using sigmoid activation for visible layer'
@@ -538,6 +539,10 @@ def experiment(state, outdir_base='./'):
             print 'Train : ',trunc(train_cost),trunc(train_cost_post), '\t',
             with open(logfile,'a') as f:
                 f.write("Train : {0!s} {1!s}\t".format(trunc(train_cost),trunc(train_cost_post)))
+            with open(train_convergence_pre,'a') as f:
+                f.write("{0!s},".format(train_cost))
+            with open(train_convergence_post,'a') as f:
+                f.write("{0!s},".format(train_cost_post))
     
     
             #valid
@@ -566,6 +571,10 @@ def experiment(state, outdir_base='./'):
             print 'Valid : ', trunc(valid_cost),trunc(valid_cost_post), '\t',
             with open(logfile,'a') as f:
                 f.write("Valid : {0!s} {1!s}\t".format(trunc(valid_cost),trunc(valid_cost_post)))
+            with open(valid_convergence_pre,'a') as f:
+                f.write("{0!s},".format(valid_cost))
+            with open(valid_convergence_post,'a') as f:
+                f.write("{0!s},".format(valid_cost_post))
     
     
             #test
@@ -594,6 +603,10 @@ def experiment(state, outdir_base='./'):
             print 'Test  : ', trunc(test_cost),trunc(test_cost_post), '\t',
             with open(logfile,'a') as f:
                 f.write("Test : {0!s} {1!s}\t".format(trunc(test_cost),trunc(test_cost_post)))
+            with open(test_convergence_pre,'a') as f:
+                f.write("{0!s},".format(test_cost))
+            with open(test_convergence_post,'a') as f:
+                f.write("{0!s},".format(test_cost_post))
             
             #check for early stopping
             cost = train_cost

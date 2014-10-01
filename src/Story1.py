@@ -317,8 +317,6 @@ def experiment(state, outdir_base='./'):
     hiddens1, recurrent_pX_chain, recurrent_p_X1_chain = build_graph(hiddens1, recurrent_pX_chain, recurrent_p_X1_chain, noiseflag)
 
 
-
-
     # COST AND GRADIENTS    
     print
     print 'Cost w.r.t p(X|...) at every step in the graph'

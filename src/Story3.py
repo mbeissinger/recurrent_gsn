@@ -12,15 +12,46 @@ import numpy.random as rng
 from utils import *
 
 
-def experiment(state, outdir='./'):
+def experiment(state, outdir_base='./'):
+    rng.seed(1) #seed the numpy random generator  
+    data.mkdir_p(outdir_base)
+    outdir = outdir_base + "/" + state.dataset + "/"
     data.mkdir_p(outdir)
     logfile = outdir+"log.txt"
     with open(logfile,'w') as f:
-        f.write("MODEL 3\n\n")
+        f.write("MODEL 3, {0!s}\n\n".format(state.dataset))
+    train_convergence_pre = outdir+"train_convergence_pre.csv"
+    train_convergence_post = outdir+"train_convergence_post.csv"
+    valid_convergence_pre = outdir+"valid_convergence_pre.csv"
+    valid_convergence_post = outdir+"valid_convergence_post.csv"
+    test_convergence_pre = outdir+"test_convergence_pre.csv"
+    test_convergence_post = outdir+"test_convergence_post.csv"
+    recurrent_train_convergence = outdir+"recurrent_train_convergence.csv"
+    recurrent_valid_convergence = outdir+"recurrent_valid_convergence.csv"
+    recurrent_test_convergence = outdir+"recurrent_test_convergence.csv"
+    with open (train_convergence_pre, 'w') as f:
+        f.write("")
+    with open (train_convergence_post, 'w') as f:
+        f.write("")
+    with open (valid_convergence_pre, 'w') as f:
+        f.write("")
+    with open (valid_convergence_post, 'w') as f:
+        f.write("")
+    with open (test_convergence_pre, 'w') as f:
+        f.write("")
+    with open (test_convergence_post, 'w') as f:
+        f.write("")           
+    with open (recurrent_train_convergence, 'w') as f:
+        f.write("")
+    with open (recurrent_valid_convergence, 'w') as f:
+        f.write("")
+    with open (recurrent_test_convergence, 'w') as f:
+        f.write("")
+    
     print
     print "----------MODEL 3--------------"
     print
-    rng.seed(1)
+    
     if state.test_model and 'config' in os.listdir('.'):
         print 'Loading local config file'
         config_file =   open('config', 'r')
@@ -51,21 +82,18 @@ def experiment(state, outdir='./'):
     print state
     # Load the data, train = train+valid, and shuffle train
     # Targets are not used (will be misaligned after shuffling train
-    if state.dataset == 'MNIST':
+    artificial = False
+    if state.dataset == 'MNIST_1' or state.dataset == 'MNIST_2' or state.dataset == 'MNIST_3':
         (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = data.load_mnist(state.data_path)
         train_X = numpy.concatenate((train_X, valid_X))
         train_Y = numpy.concatenate((train_Y, valid_Y))
-    elif state.dataset == 'MNIST_binary':
-        (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = data.load_mnist_binary(state.data_path)
-        train_X = numpy.concatenate((train_X, valid_X))
-        train_Y = numpy.concatenate((train_Y, valid_Y))
+        artificial = True
+        try:
+            dataset = int(state.dataset.split('_')[1])
+        except:
+            raise AssertionError("artificial dataset number not recognized. Input was "+state.dataset)
     else:
         raise AssertionError("dataset not recognized.")
-    
-    print 'Sequencing MNIST data...'
-    print 'train set size:',train_X.shape
-    print 'valid set size:',valid_X.shape
-    print 'test set size:',test_X.shape
     
     train_X = theano.shared(train_X)
     train_Y = theano.shared(train_Y)
@@ -74,15 +102,17 @@ def experiment(state, outdir='./'):
     test_X = theano.shared(test_X)
     test_Y = theano.shared(test_Y) 
    
-    data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
-    
-    print 'train set size:',train_X.shape.eval()
-    print 'valid set size:',valid_X.shape.eval()
-    print 'test set size:',test_X.shape.eval()
-    print 'Sequencing done.'
-    print
-
-    
+    if artificial:
+        print 'Sequencing MNIST data...'
+        print 'train set size:',len(train_Y.eval())
+        print 'valid set size:',len(valid_Y.eval())
+        print 'test set size:',len(test_Y.eval())
+        data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset, rng)
+        print 'train set size:',len(train_Y.eval())
+        print 'valid set size:',len(valid_Y.eval())
+        print 'test set size:',len(test_Y.eval())
+        print 'Sequencing done.'
+        print
     
     N_input =   train_X.eval().shape[1]
     root_N_input = numpy.sqrt(N_input)
@@ -91,7 +121,6 @@ def experiment(state, outdir='./'):
     X       = T.fmatrix("X")
     X1      = T.fmatrix("X1")
     H       = T.fmatrix("H")
-    index   = T.lscalar()
     MRG = RNG_MRG.MRG_RandomStreams(1)
     
     
@@ -122,28 +151,6 @@ def experiment(state, outdir='./'):
     recurrent_weights_list = [get_shared_weights(recurrent_layer_sizes[i], recurrent_layer_sizes[i+1], name="U_{0!s}_{1!s}".format(i,i+1)) for i in range(recurrent_layers)] + [get_shared_weights(recurrent_layer_sizes[i+1], recurrent_layer_sizes[i], name="V_{0!s}_{1!s}".format(i+1,i)) for i in range(recurrent_layers-1, -1, -1)] #untied weights in the recurrent layers
     recurrent_bias_list = [get_shared_bias(recurrent_layer_sizes[i], name='vb_'+str(i)) for i in range(recurrent_layers+1)] # initialize to 0's.
 
-    if state.test_model:
-        # Load the parameters of the last epoch
-        # maybe if the path is given, load these specific attributes 
-        param_files     =   filter(lambda x:'params' in x, os.listdir('.'))
-        max_epoch_idx   =   numpy.argmax([int(x.split('_')[-1].split('.')[0]) for x in param_files])
-        params_to_load  =   param_files[max_epoch_idx]
-        PARAMS = cPickle.load(open(params_to_load,'r'))
-        [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[:len(weights_list)], weights_list)]
-        [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[len(weights_list):], bias_list)]
-        
-    if state.continue_training:
-        # Load the parameters of the last GSN
-        params_to_load = 'gsn_params.pkl'
-        PARAMS = cPickle.load(open(params_to_load,'r'))
-        [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[:len(weights_list)], weights_list)]
-        [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[len(weights_list):], bias_list)]
-        # Load the parameters of the last recurrent
-#         params_to_load = 'recurrent_params.pkl'
-#         PARAMS = cPickle.load(open(params_to_load,'r'))
-#         [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[:len(recurrent_weights_list)], recurrent_weights_list)]
-#         [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[len(recurrent_weights_list):], recurrent_bias_list)]
-
  
     ''' F PROP '''
     if state.act == 'sigmoid':
@@ -153,8 +160,10 @@ def experiment(state, outdir='./'):
         print 'Using rectifier activation'
         hidden_activation = lambda x : T.maximum(cast32(0), x)
     elif state.act == 'tanh':
+        print 'Using tanh activation'
         hidden_activation = lambda x : T.tanh(x)
         
+    print 'Using sigmoid activation for visible layer'
     visible_activation = T.nnet.sigmoid 
   
         
@@ -260,6 +269,14 @@ def experiment(state, outdir='./'):
         update_even_recurrent_layers(hiddens, p_X_chain, noisy)
         print 'done full update.'
         print
+    
+    def update_recurrent_layers_reverse(hiddens, p_X_chain, noisy = True):
+        print 'even layer updates'
+        update_even_recurrent_layers(hiddens, p_X_chain, noisy)
+        print 'odd layer updates'
+        update_odd_recurrent_layers(hiddens, noisy)
+        print 'done full update.'
+        print
         
     # Odd layer update function
     # just a loop over the odd layers
@@ -325,7 +342,7 @@ def experiment(state, outdir='./'):
             
             
     def sample_hiddens(hidden):
-        sampled     =   MRG.multinomial(pvals = hiddens[i], size=hiddens[i].shape, dtype='float32')
+        sampled = MRG.multinomial(pvals = hiddens[i], size=hiddens[i].shape, dtype='float32')
    
     
     ''' Corrupt X '''
@@ -378,14 +395,14 @@ def experiment(state, outdir='./'):
     COST_post         =   numpy.sum(COSTS_post)
     
     
-    for i in range(recurrent_walkbacks):
-        print "Recurrent Walkback {!s}/{!s}".format(i+1,walkbacks)
-#         if i == 0:
-#             update_layers(hiddens, None, p_X1_chain, X1_chain_flag = True, recurrent_step_flag = True) 
-#         else:
-#             update_layers(hiddens, None, p_X1_chain, X1_chain_flag = True)    
-        
-    print
+#     for i in range(recurrent_walkbacks):
+#         print "Recurrent Walkback {!s}/{!s}".format(i+1,walkbacks)
+# #         if i == 0:
+# #             update_layers(hiddens, None, p_X1_chain, X1_chain_flag = True, recurrent_step_flag = True) 
+# #         else:
+# #             update_layers(hiddens, None, p_X1_chain, X1_chain_flag = True)    
+#         
+#     print
 
 
 
@@ -649,7 +666,7 @@ def experiment(state, outdir='./'):
         print '----------------------------------------'
         print 'TRAINING GSN FOR ITERATION',iteration
         with open(logfile,'a') as f:
-            f.write("--------------------------\nTRAINING GSN FOR ITERATION {0!s}".format(iteration))
+            f.write("--------------------------\nTRAINING GSN FOR ITERATION {0!s}\n".format(iteration))
         
         # TRAINING
         n_epoch     =   state.n_epoch
@@ -659,6 +676,8 @@ def experiment(state, outdir='./'):
         if iteration == 0:
             learning_rate.set_value(cast32(state.learning_rate))  # learning rate
         times = []
+        best_cost = float('inf')
+        patience = 0
             
         print 'learning rate:',learning_rate.get_value()
         
@@ -718,6 +737,10 @@ def experiment(state, outdir='./'):
             print 'Train : ',trunc(pre_train_cost),trunc(post_train_cost), '\t',
             with open(logfile,'a') as f:
                 f.write("Train : {0!s} {1!s}\t".format(trunc(pre_train_cost),trunc(post_train_cost)))
+            with open(train_convergence_pre,'a') as f:
+                f.write("{0!s},".format(pre_train_cost))
+            with open(train_convergence_post,'a') as f:
+                f.write("{0!s},".format(post_train_cost))
     
             #valid
 #             recurrent_hiddens = [(T.zeros(batch_size, state.hidden_size))]
@@ -744,6 +767,10 @@ def experiment(state, outdir='./'):
             print 'Valid : ', trunc(pre_valid_cost),trunc(post_valid_cost), '\t',
             with open(logfile,'a') as f:
                 f.write("Valid : {0!s} {1!s}\t".format(trunc(pre_valid_cost),trunc(post_valid_cost)))
+            with open(valid_convergence_pre,'a') as f:
+                f.write("{0!s},".format(pre_valid_cost))
+            with open(valid_convergence_post,'a') as f:
+                f.write("{0!s},".format(post_valid_cost))
     
             #test
 #             recurrent_hiddens = [(T.zeros(batch_size, state.hidden_size))]
@@ -770,10 +797,25 @@ def experiment(state, outdir='./'):
             print 'Test  : ', trunc(pre_test_cost),trunc(post_test_cost), '\t',
             with open(logfile,'a') as f:
                 f.write("Test : {0!s} {1!s}\t".format(trunc(pre_test_cost),trunc(post_test_cost)))
+            with open(test_convergence_pre,'a') as f:
+                f.write("{0!s},".format(pre_test_cost))
+            with open(test_convergence_post,'a') as f:
+                f.write("{0!s},".format(post_test_cost))
     
-            if counter >= n_epoch:
+            #check for early stopping
+            cost = pre_train_cost
+            if iteration != 0:
+                cost = cost + post_train_cost
+            if cost < best_cost*state.early_stop_threshold:
+                patience = 0
+                best_cost = cost
+            else:
+                patience += 1
+    
+            if counter >= n_epoch or patience >= state.early_stop_length:
                 STOP = True
                 save_params('gsn', counter, params, iteration)
+                print "next learning rate should be", learning_rate.get_value() * annealing
                 
             timing = time.time() - t
             times.append(timing)
@@ -863,6 +905,8 @@ def experiment(state, outdir='./'):
     def train_recurrent(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y):
         print '-------------------------------------------'
         print 'TRAINING RECURRENT REGRESSION FOR ITERATION',iteration
+        with open(logfile,'a') as f:
+            f.write("--------------------------\nTRAINING RECURRENT REGRESSION FOR ITERATION {0!s}\n".format(iteration))
         
         # TRAINING
         # TRAINING
@@ -871,10 +915,12 @@ def experiment(state, outdir='./'):
         STOP        =   False
         counter     =   0
         if iteration == 0:
-            learning_rate.set_value(cast32(state.learning_rate))  # learning rate
+            recurrent_learning_rate.set_value(cast32(state.learning_rate))  # learning rate
         times = []
+        best_cost = float('inf')
+        patience = 0
             
-        print 'learning rate:',learning_rate.get_value()
+        print 'learning rate:',recurrent_learning_rate.get_value()
         
         print 'train X size:',str(train_X.shape.eval())
         print 'valid X size:',str(valid_X.shape.eval())
@@ -977,9 +1023,15 @@ def experiment(state, outdir='./'):
             post_test_costs.append(post_test_cost)
             print 'Test  : ', trunc(pre_test_cost),trunc(post_test_cost), '\t',
     
-            if counter >= n_epoch:
-                STOP = True
-                save_params('recurrent', counter, params, iteration)
+            #check for early stopping
+            cost = pre_train_cost
+            if iteration != 0:
+                cost = cost + post_train_cost
+            if cost < best_cost*state.early_stop_threshold:
+                patience = 0
+                best_cost = cost
+            else:
+                patience += 1
                 
             timing = time.time() - t
             times.append(timing)
@@ -987,6 +1039,15 @@ def experiment(state, outdir='./'):
             print 'time : ', trunc(timing),
             
             print 'remaining: ', trunc((n_epoch - counter) * numpy.mean(times) / 60 / 60), 'hrs'
+            
+            with open(logfile,'a') as f:
+                f.write("MeanVB : {0!s}\t".format(str([trunc(vb.get_value().mean()) for vb in recurrent_bias_list])))
+            
+            with open(logfile,'a') as f:
+                f.write("V : {0!s}\t".format(str([trunc(abs(v.get_value(borrow=True)).mean()) for v in recurrent_weights_list])))
+                
+            with open(logfile,'a') as f:
+                f.write("Time : {0!s} seconds\n".format(trunc(timing)))
                     
             if (counter % state.save_frequency) == 0:
                 # Checking reconstruction
@@ -1005,11 +1066,11 @@ def experiment(state, outdir='./'):
                 save_params('recurrent', counter, params, iteration)
          
             # ANNEAL!
-            new_lr = learning_rate.get_value() * annealing
-            learning_rate.set_value(new_lr)
+            new_r_lr = recurrent_learning_rate.get_value() * annealing
+            recurrent_learning_rate.set_value(new_r_lr)
     
         # Save
-        state.pre_train_costs = pre_train_costs
+        state.recurrent_pre_train_costs = pre_train_costs
         state.post_train_costs = post_train_costs
         state.pre_valid_costs = pre_valid_costs
         state.post_valid_costs = post_valid_costs
@@ -1029,11 +1090,9 @@ def experiment(state, outdir='./'):
             
             
     #####################
-    # STORY 1 ALGORITHM #
+    # STORY 3 ALGORITHM #
     #####################
     for iter in range(state.max_iterations):
-        if state.continue_training:
-            train_recurrent(iter, train_X, train_Y, valid_X, valid_Y, test_X, test_Y) 
         train_GSN(iter, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)        
-        
+        train_recurrent(iter, train_X, train_Y, valid_X, valid_Y, test_X, test_Y) 
 
