@@ -10,7 +10,11 @@ import os, cPickle
 import gzip
 import errno
 from utils import cast32
+import urllib
+import scipy.io as io
 
+
+#create a filesystem path if it doesn't exist.
 def mkdir_p(path):
     try:
         os.makedirs(path)
@@ -44,6 +48,14 @@ def shared_dataset(data_xy, borrow=True):
     # lets ous get around this issue
     return shared_x, T.cast(shared_y, 'int32')
 
+
+#downloads the mnist data to specified file
+def download_mnist(path):
+    origin = 'http://www.iro.umontreal.ca/~lisa/deep/data/mnist/mnist.pkl.gz'
+    gzip_file = os.path.join(path,'mnist.pkl.gz')
+    print 'Downloading data from %s' % origin
+    urllib.urlretrieve(origin, gzip_file)
+
 def load_mnist(path):
     ''' Loads the mnist dataset
 
@@ -59,10 +71,7 @@ def load_mnist(path):
     elif os.path.isfile(gzip_file):
         data = cPickle.load(gzip.open(gzip_file, 'rb'))
     else: #otherwise, it doesn't exist - download from lisa lab
-        import urllib
-        origin = 'http://www.iro.umontreal.ca/~lisa/deep/data/mnist/mnist.pkl.gz'
-        print 'Downloading data from %s' % origin
-        urllib.urlretrieve(origin, gzip_file)
+        download_mnist(path)
         # Load the dataset
         data = cPickle.load(gzip.open(gzip_file, 'rb'))
     
@@ -78,10 +87,7 @@ def load_mnist_binary(path):
     elif os.path.isfile(gzip_file):
         data = cPickle.load(gzip.open(gzip_file, 'rb'))
     else: #otherwise, it doesn't exist - download from lisa lab
-        import urllib
-        origin = 'http://www.iro.umontreal.ca/~lisa/deep/data/mnist/mnist.pkl.gz'
-        print 'Downloading data from %s' % origin
-        urllib.urlretrieve(origin, gzip_file)
+        download_mnist(path)
         # Load the dataset
         data = cPickle.load(gzip.open(gzip_file, 'rb'))
     
@@ -94,7 +100,6 @@ def load_mnist_binary(path):
     return data
     
 def load_tfd(path):
-    import scipy.io as io
     data = io.loadmat(os.path.join(path, 'TFD_48x48.mat'))
     X = cast32(data['images'])/cast32(255)
     X = X.reshape((X.shape[0], X.shape[1] * X.shape[2]))
@@ -265,9 +270,6 @@ def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, data
         valid_ordered_indices = dataset1_indices(valid_Y.get_value(borrow=True))
         test_ordered_indices = dataset1_indices(test_Y.get_value(borrow=True))
     elif dataset == 2:
-#         train_ordered_indices = dataset2_indices(train_Y.get_value(borrow=True),rng)
-#         valid_ordered_indices = dataset2_indices(valid_Y.get_value(borrow=True),rng)
-#         test_ordered_indices = dataset2_indices(test_Y.get_value(borrow=True),rng)
         train_ordered_indices = dataset2a_indices(train_Y.get_value(borrow=True))
         valid_ordered_indices = dataset2a_indices(valid_Y.get_value(borrow=True))
         test_ordered_indices = dataset2a_indices(test_Y.get_value(borrow=True))
