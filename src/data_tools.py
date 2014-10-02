@@ -62,6 +62,8 @@ def load_mnist(path):
     :type path: string
     :param dataset: the path to the directory containing MNIST
     '''
+    mkdir_p(path)
+    
     pkl_file = os.path.join(path,'mnist.pkl')
     gzip_file = os.path.join(path,'mnist.pkl.gz')
     
