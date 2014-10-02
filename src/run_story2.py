@@ -5,13 +5,13 @@ def main():
     parser = argparse.ArgumentParser()
     # Add options here
 
-    parser.add_argument('--layers', type=int, default=2) # number of hidden layers
-    parser.add_argument('--walkbacks', type=int, default=4) # number of walkbacks
+    parser.add_argument('--layers', type=int, default=3) # number of hidden layers
+    parser.add_argument('--walkbacks', type=int, default=5) # number of walkbacks
     parser.add_argument('--recurrent_walkbacks', type=int, default=0) # number of recurrent walkbacks
     parser.add_argument('--n_epoch', type=int, default=1000)
     parser.add_argument('--save_frequency', type=int, default=10) #number of epochs between parameters being saved
-    parser.add_argument('--early_stop_threshold', type=float, default=0.9995)
-    parser.add_argument('--early_stop_length', type=int, default=10)
+    parser.add_argument('--early_stop_threshold', type=float, default=0.9999)
+    parser.add_argument('--early_stop_length', type=int, default=40)
     parser.add_argument('--batch_size', type=int, default=100)
     parser.add_argument('--hidden_add_noise_sigma', type=float, default=2) #default=2
     parser.add_argument('--input_salt_and_pepper', type=float, default=0.4) #default=0.4
