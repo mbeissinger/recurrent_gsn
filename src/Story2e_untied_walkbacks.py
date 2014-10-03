@@ -10,6 +10,7 @@ import time
 import argparse
 import data_tools as data
 from utils import *
+from numpy import dtype
 
 
 def experiment(state, outdir_base='./'):
@@ -273,11 +274,6 @@ def experiment(state, outdir_base='./'):
                                         outputs = hiddens_output + show_COSTs,
                                         on_unused_input='warn')
     
-    f_recon         =   theano.function(inputs  = hiddens_input + Xs,
-                                        outputs = hiddens_output + predicted_X_chain,
-                                        on_unused_input='warn')
-    
-    f_predictions   =   theano.function(inputs = [X], outputs = predicted_X_chain) # function to get progression of walkbacks
     
     print "functions done."
     print
@@ -295,23 +291,21 @@ def experiment(state, outdir_base='./'):
     noisy_numbers   =   f_noise(test_X.get_value()[random_idx])
     #noisy_numbers   =   salt_and_pepper(numbers, state.input_salt_and_pepper)
 
-#     # Recompile the graph without noise for reconstruction function
-#     X_recon = T.fmatrix()
-#     hiddens_R     = [X_recon]
-#     p_X_chain_R   = []
-# 
-#     for w in weights_list:
-#         # init with zeros
-#         hiddens_R.append(T.zeros_like(T.dot(hiddens_R[-1], w)))
-# 
-#     # The layer update scheme
-#     print "Creating graph for noisy reconstruction function at checkpoints during training."
-#     noiseflag = False
-#     for i in range(layers):
-#         print "Walkback {!s}/{!s}".format(i+1,layers)
-#         update_layers(hiddens_R, p_X_chain_R, [X_recon], i, noisy=noiseflag)
-# 
-#     f_recon = theano.function(inputs = [X_recon], outputs = [p_X_chain_R[0] ,p_X_chain_R[-1]]) 
+    # Recompile the graph without noise for reconstruction function
+    X_recon = T.fvector("X_recon")
+    Xs_recon = [T.fvector("Xs_recon")]
+    hiddens_R_input = [X_recon] + [T.fvector(name="h_recon_"+str(i+1)) for i in range(layers)]
+    hiddens_R_output = hiddens_R_input[:1] + hiddens_R_input[1:]
+    p_X_chain_R   = []
+ 
+    # The layer update scheme
+    print "Creating graph for noisy reconstruction function at checkpoints during training."
+    noiseflag = False
+    for i in range(layers):
+        print "Prediction {!s}/{!s}".format(i+1,layers)
+        update_layers(hiddens_R_output, p_X_chain_R, Xs_recon, i, noisy=noiseflag)
+ 
+    f_recon = theano.function(inputs = hiddens_R_input+Xs_recon, outputs = hiddens_R_output+[p_X_chain_R[0] ,p_X_chain_R[-1]], on_unused_input="warn") 
 
 
     ############
@@ -643,9 +637,26 @@ def experiment(state, outdir_base='./'):
     
             if (counter % state.save_frequency) == 0:
                 # Checking reconstruction
-                reconstructed_prediction, reconstructed_prediction_end   =   f_recon(noisy_numbers) 
+                nums = test_X.get_value()[range(100)]
+                noisy_nums = f_noise(test_X.get_value()[range(100)])
+                reconstructed_prediction = []
+                reconstructed_prediction_end = []
+                #init reconstruction hiddens
+                hiddens = [(T.zeros_like(test_X[0]).eval())]
+                for i in range(len(weights_list)):
+                    # init with zeros
+                    hiddens.append(T.zeros_like(T.dot(hiddens[i], weights_list[i])).eval())
+                for num in noisy_nums:
+                    hiddens[0] = num
+                    _ins = hiddens + [num]
+                    _outs = f_recon(*_ins)
+                    hiddens = _outs[:len(hiddens)]
+                    [reconstructed_1,reconstructed_n] = _outs[len(hiddens):]
+                    reconstructed_prediction.append(reconstructed_1)
+                    reconstructed_prediction_end.append(reconstructed_n)
+                
                 # Concatenate stuff
-                stacked = numpy.vstack([numpy.vstack([numbers[i*10 : (i+1)*10], noisy_numbers[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10], reconstructed_prediction_end[i*10 : (i+1)*10]]) for i in range(10)])
+                stacked = numpy.vstack([numpy.vstack([nums[i*10 : (i+1)*10], noisy_nums[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10], reconstructed_prediction_end[i*10 : (i+1)*10]]) for i in range(10)])
             
                 numbers_reconstruction   =   PIL.Image.fromarray(tile_raster_images(stacked, (root_N_input,root_N_input), (10,40)))
                 #epoch_number    =   reduce(lambda x,y : x + y, ['_'] * (4-len(str(counter)))) + str(counter)
