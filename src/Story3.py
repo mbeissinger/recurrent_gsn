@@ -51,17 +51,10 @@ def experiment(state, outdir_base='./'):
     print
     print "----------MODEL 3--------------"
     print
-    
-    if state.test_model and 'config' in os.listdir('.'):
-        print 'Loading local config file'
-        config_file =   open('config', 'r')
-        config      =   config_file.readlines()
-        try:
-            config_vals =   config[0].split('(')[1:][0].split(')')[:-1][0].split(', ')
-        except:
-            config_vals =   config[0][3:-1].replace(': ','=').replace("'","").split(', ')
-            config_vals =   filter(lambda x:not 'jobman' in x and not '/' in x and not ':' in x and not 'experiment' in x, config_vals)
-        
+    #load parameters from config file if this is a test
+    config_filename = outdir+'config'
+    if state.test_model and 'config' in os.listdir(outdir):
+        config_vals = load_from_config(config_filename)
         for CV in config_vals:
             print CV
             if CV.startswith('test'):
@@ -75,7 +68,7 @@ def experiment(state, outdir_base='./'):
         # Save the current configuration
         # Useful for logs/experiments
         print 'Saving config'
-        with open(outdir+'config', 'w') as f:
+        with open(config_filename, 'w') as f:
             f.write(str(state))
 
 
@@ -393,16 +386,6 @@ def experiment(state, outdir_base='./'):
     COSTS_post        =   [T.mean(T.nnet.binary_crossentropy(rX, X1)) for rX in p_X1_chain]
     show_COST_post    =   COSTS_post[-1]
     COST_post         =   numpy.sum(COSTS_post)
-    
-    
-#     for i in range(recurrent_walkbacks):
-#         print "Recurrent Walkback {!s}/{!s}".format(i+1,walkbacks)
-# #         if i == 0:
-# #             update_layers(hiddens, None, p_X1_chain, X1_chain_flag = True, recurrent_step_flag = True) 
-# #         else:
-# #             update_layers(hiddens, None, p_X1_chain, X1_chain_flag = True)    
-#         
-#     print
 
 
 

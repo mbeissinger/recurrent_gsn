@@ -264,14 +264,20 @@ def experiment(state, outdir_base='./'):
     
     
     #odd layer h's not used from input -> calculated directly from even layers (starting with h_0) since the odd layers are updated first.
-    f_cost          =   theano.function(inputs = hiddens_input + Xs, outputs = hiddens_output + show_COSTs, on_unused_input='warn')
+    f_cost          =   theano.function(inputs  = hiddens_input + Xs, 
+                                        outputs = hiddens_output + show_COSTs, 
+                                        on_unused_input='warn')
 
     f_learn         =   theano.function(inputs  = hiddens_input + Xs,
                                         updates = updates,
                                         outputs = hiddens_output + show_COSTs,
                                         on_unused_input='warn')
     
-
+    f_recon         =   theano.function(inputs  = hiddens_input + Xs,
+                                        outputs = hiddens_output + predicted_X_chain,
+                                        on_unused_input='warn')
+    
+    f_predictions   =   theano.function(inputs = [X], outputs = predicted_X_chain) # function to get progression of walkbacks
     
     print "functions done."
     print
@@ -281,7 +287,7 @@ def experiment(state, outdir_base='./'):
     #############
     import random as R
     R.seed(1)
-    # Grab 100 random indices from test_X
+    # Shuffle the dataset and grabGrab 100 random indices from test_X
     random_idx      =   numpy.array(R.sample(range(len(test_X.get_value())), 100))
     numbers         =   test_X.get_value()[random_idx]
     
@@ -289,23 +295,23 @@ def experiment(state, outdir_base='./'):
     noisy_numbers   =   f_noise(test_X.get_value()[random_idx])
     #noisy_numbers   =   salt_and_pepper(numbers, state.input_salt_and_pepper)
 
-    # Recompile the graph without noise for reconstruction function
-    X_recon = T.fmatrix()
-    hiddens_R     = [X_recon]
-    p_X_chain_R   = []
-
-    for w in weights_list:
-        # init with zeros
-        hiddens_R.append(T.zeros_like(T.dot(hiddens_R[-1], w)))
-
-    # The layer update scheme
-    print "Creating graph for noisy reconstruction function at checkpoints during training."
-    noiseflag = False
-    for i in range(layers):
-        print "Walkback {!s}/{!s}".format(i+1,layers)
-        update_layers(hiddens_R, p_X_chain_R, [X_recon], i, noisy=noiseflag)
-
-    f_recon = theano.function(inputs = [X_recon], outputs = [p_X_chain_R[0] ,p_X_chain_R[-1]]) 
+#     # Recompile the graph without noise for reconstruction function
+#     X_recon = T.fmatrix()
+#     hiddens_R     = [X_recon]
+#     p_X_chain_R   = []
+# 
+#     for w in weights_list:
+#         # init with zeros
+#         hiddens_R.append(T.zeros_like(T.dot(hiddens_R[-1], w)))
+# 
+#     # The layer update scheme
+#     print "Creating graph for noisy reconstruction function at checkpoints during training."
+#     noiseflag = False
+#     for i in range(layers):
+#         print "Walkback {!s}/{!s}".format(i+1,layers)
+#         update_layers(hiddens_R, p_X_chain_R, [X_recon], i, noisy=noiseflag)
+# 
+#     f_recon = theano.function(inputs = [X_recon], outputs = [p_X_chain_R[0] ,p_X_chain_R[-1]]) 
 
 
     ############
@@ -455,13 +461,6 @@ def experiment(state, outdir_base='./'):
         finally:
             f.close() 
 
-    def fix_input_size(hiddens, xs):
-        sizes = [x.shape[0] for x in xs]
-        min_size = numpy.min(sizes)
-        xs = [x[:min_size] for x in xs]
-        hiddens = [xs[0] if i==0 else hiddens[i][:min_size] for i in range(len(hiddens))]
-        return hiddens, xs
-
     ################
     # GSN TRAINING #
     ################
@@ -523,7 +522,7 @@ def experiment(state, outdir_base='./'):
             train_cost_post = []
             for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                 xs = [train_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
-                hiddens, xs = fix_input_size(hiddens, xs)
+                xs, hiddens = fix_input_size(xs, hiddens)
                 _ins = hiddens + xs
                 _outs = f_learn(*_ins)
                 hiddens = _outs[:len(hiddens)]
@@ -555,7 +554,7 @@ def experiment(state, outdir_base='./'):
             valid_cost_post = []
             for i in range(len(valid_X.get_value(borrow=True)) / batch_size):
                 xs = [valid_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
-                hiddens, xs = fix_input_size(hiddens, xs)
+                xs, hiddens = fix_input_size(xs, hiddens)
                 _ins = hiddens + xs
                 _outs = f_cost(*_ins)
                 hiddens = _outs[:-2]
@@ -587,7 +586,7 @@ def experiment(state, outdir_base='./'):
             test_cost_post = []
             for i in range(len(test_X.get_value(borrow=True)) / batch_size):
                 xs = [test_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
-                hiddens, xs = fix_input_size(hiddens, xs)
+                xs, hiddens = fix_input_size(xs, hiddens)
                 _ins = hiddens + xs
                 _outs = f_cost(*_ins)
                 hiddens = _outs[:-2]

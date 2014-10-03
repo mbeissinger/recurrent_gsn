@@ -368,17 +368,18 @@ def experiment(state, outdir_base='./'):
     
     
     
-    f_cost          =   theano.function(inputs = [X, X1], outputs = [show_COST_pre, show_COST_post])
+    f_cost           =   theano.function(inputs = [X, X1], 
+                                         outputs = [show_COST_pre, show_COST_post])
 
 
-    f_learn     =   theano.function(inputs  = [X, X1], 
-                                    updates = updates, 
-                                    outputs = [show_COST_pre, show_COST_post])
+    f_learn          =   theano.function(inputs  = [X, X1], 
+                                         updates = updates, 
+                                         outputs = [show_COST_pre, show_COST_post])
      
     f_learn_init     =   theano.function(inputs  = [X], 
-                                    updates = updates_init, 
-                                    outputs = [show_COST_pre])
-    
+                                         updates = updates_init, 
+                                         outputs = [show_COST_pre])
+      
     
     recurrent_gradient        =   T.grad(recurrent_cost, recurrent_params)
     recurrent_gradient_buffer =   [theano.shared(numpy.zeros(rparam.get_value().shape, dtype='float32')) for rparam in recurrent_params]
@@ -406,24 +407,24 @@ def experiment(state, outdir_base='./'):
     # Grab 100 random indices from test_X
     random_idx      =   numpy.array(R.sample(range(len(test_X.get_value())), 100))
     numbers         =   test_X.get_value()[random_idx]
-    
+     
     f_noise         =   theano.function(inputs = [X], outputs = salt_and_pepper(X, state.input_salt_and_pepper))
     noisy_numbers   =   f_noise(test_X.get_value()[random_idx])
     #noisy_numbers   =   salt_and_pepper(numbers, state.input_salt_and_pepper)
-
+ 
     # Recompile the graph without noise for reconstruction function
     hiddens_R     = [X]
     p_X_chain_R   = []
     p_X1_chain_R   = []
-
+ 
     for w in weights_list:
         # init with zeros
         hiddens_R.append(T.zeros_like(T.dot(hiddens_R[-1], w)))
-
+ 
     # The layer update scheme
     print "Creating graph for noisy reconstruction function at checkpoints during training."
     hiddens_R, p_X_chain_R, p_X1_chain_R = build_graph(hiddens_R, p_X_chain_R, p_X1_chain_R, noiseflag=False) 
-
+ 
     f_recon = theano.function(inputs = [X], outputs = [p_X_chain_R[-1], p_X1_chain_R[-1]])
     f_walkbacks = theano.function(inputs = [X], outputs = p_X_chain_R + p_X1_chain_R) # function to get progression of walkbacks
 
@@ -641,7 +642,7 @@ def experiment(state, outdir_base='./'):
                 for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                     x = train_X.get_value()[i * batch_size : (i+1) * batch_size]
                     x1 = train_X.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
-                    x,x1 = fix_input_size(x,x1)
+                    [x,x1], _ = fix_input_size([x,x1])
                     pre, post = f_learn(x,x1)
                     pre_train_cost.append(pre)
                     post_train_cost.append(post)
@@ -671,7 +672,7 @@ def experiment(state, outdir_base='./'):
                 for i in range(len(valid_X.get_value(borrow=True)) / batch_size):
                     x = valid_X.get_value()[i * batch_size : (i+1) * batch_size]
                     x1 = valid_X.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
-                    x,x1 = fix_input_size(x,x1)
+                    [x,x1], _ = fix_input_size([x,x1])
                     pre, post = f_cost(x, x1)
                     pre_valid_cost.append(pre)
                     post_valid_cost.append(post)
@@ -701,7 +702,7 @@ def experiment(state, outdir_base='./'):
                 for i in range(len(test_X.get_value(borrow=True)) / batch_size):
                     x = test_X.get_value()[i * batch_size : (i+1) * batch_size]
                     x1 = test_X.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
-                    x,x1 = fix_input_size(x,x1)
+                    [x,x1], _ = fix_input_size([x,x1])
                     pre, post = f_cost(x, x1)
                     pre_test_cost.append(pre)
                     post_test_cost.append(post)
@@ -751,9 +752,13 @@ def experiment(state, outdir_base='./'):
     
             if (counter % state.save_frequency) == 0 or STOP is True:
                 # Checking reconstruction
-                reconstructed, reconstructed_prediction   =   f_recon(noisy_numbers) 
+                # grab 100 numbers in the sequence from the test set
+                nums = test_X.get_value()[range(100)]
+                noisy_nums = f_noise(test_X.get_value()[range(100)])
+                
+                reconstructed, reconstructed_prediction   =   f_recon(noisy_nums) 
                 # Concatenate stuff
-                stacked = numpy.vstack([numpy.vstack([numbers[i*10 : (i+1)*10], noisy_numbers[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10]]) for i in range(10)])
+                stacked = numpy.vstack([numpy.vstack([nums[i*10 : (i+1)*10], noisy_nums[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10]]) for i in range(10)])
             
                 number_reconstruction   =   PIL.Image.fromarray(tile_raster_images(stacked, (root_N_input,root_N_input), (10,40)))
                 #epoch_number    =   reduce(lambda x,y : x + y, ['_'] * (4-len(str(counter)))) + str(counter)
@@ -874,7 +879,7 @@ def experiment(state, outdir_base='./'):
             for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                 x = train_X.get_value()[i * batch_size : (i+1) * batch_size]
                 x1 = train_X.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
-                x,x1 = fix_input_size(x,x1)
+                [x,x1], _ = fix_input_size([x,x1])
                 train_cost.append(recurrent_f_learn(x, x1))
                 
             train_cost = numpy.mean(train_cost) 
@@ -890,7 +895,7 @@ def experiment(state, outdir_base='./'):
             for i in range(len(valid_X.get_value(borrow=True)) / batch_size):
                 x = valid_X.get_value()[i * batch_size : (i+1) * batch_size]
                 x1 = valid_X.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
-                x,x1 = fix_input_size(x,x1)
+                [x,x1], _ = fix_input_size([x,x1])
                 valid_cost.append(recurrent_f_cost(x, x1))
             valid_cost = numpy.mean(valid_cost)
             valid_costs.append(valid_cost)
@@ -905,7 +910,7 @@ def experiment(state, outdir_base='./'):
             for i in range(len(test_X.get_value(borrow=True)) / batch_size):
                 x = test_X.get_value()[i * batch_size : (i+1) * batch_size]
                 x1 = test_X.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
-                x,x1 = fix_input_size(x,x1)
+                [x,x1], _ = fix_input_size([x,x1])
                 test_cost.append(recurrent_f_cost(x, x1))
             test_cost = numpy.mean(test_cost)
             test_costs.append(test_cost)
@@ -946,9 +951,13 @@ def experiment(state, outdir_base='./'):
     
             if (counter % state.save_frequency) == 0 or STOP is True: 
                 # Checking reconstruction
-                reconstructed, reconstructed_prediction   =   f_recon(noisy_numbers) 
+                # grab 100 numbers in the sequence from the test set
+                nums = test_X.get_value()[range(100)]
+                noisy_nums = f_noise(test_X.get_value()[range(100)])
+                
+                reconstructed, reconstructed_prediction   =   f_recon(noisy_nums) 
                 # Concatenate stuff
-                stacked = numpy.vstack([numpy.vstack([numbers[i*10 : (i+1)*10], noisy_numbers[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10]]) for i in range(10)])
+                stacked = numpy.vstack([numpy.vstack([nums[i*10 : (i+1)*10], noisy_nums[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10]]) for i in range(10)])
             
                 number_reconstruction   =   PIL.Image.fromarray(tile_raster_images(stacked, (root_N_input,root_N_input), (10,40)))
                 #epoch_number    =   reduce(lambda x,y : x + y, ['_'] * (4-len(str(counter)))) + str(counter)
