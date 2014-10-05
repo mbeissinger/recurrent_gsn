@@ -692,7 +692,7 @@ def experiment(state, outdir_base='./'):
                 f.write("{0!s}\t".format(counter))
             
             #shuffle the data
-            data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+            data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset, rng)
             
             #train
 #             recurrent_hiddens = [(T.zeros(batch_size, state.hidden_size))]
@@ -931,7 +931,7 @@ def experiment(state, outdir_base='./'):
             print counter,'\t',
             
             #shuffle the data
-            data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+            data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset, rng)
             
             #train
 #             recurrent_hiddens = [(T.zeros(batch_size, state.hidden_size))]

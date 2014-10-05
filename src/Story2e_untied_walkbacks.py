@@ -504,7 +504,7 @@ def experiment(state, outdir_base='./'):
             with open(logfile,'a') as f:
                 f.write("{0!s}\t".format(counter))
             #shuffle the data
-            data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+            data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset, rng)
             
             #train
             #init hiddens

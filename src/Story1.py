@@ -625,7 +625,7 @@ def experiment(state, outdir_base='./'):
                 f.write("{0!s}\t".format(counter))
                 
             #shuffle the data
-            data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset)
+            data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset, rng)
                 
             #train
             pre_train_cost = []
@@ -872,7 +872,7 @@ def experiment(state, outdir_base='./'):
                 f.write("{0!s}\t".format(counter))
                 
             #shuffle the data
-            data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset)
+            data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset, rng)
     
             #train
             train_cost = []
