@@ -14,6 +14,7 @@ from utils import *
 
 def experiment(state, outdir_base='./'):
     rng.seed(1) #seed the numpy random generator  
+    # create the output directories and log/result files
     data.mkdir_p(outdir_base)
     outdir = outdir_base + "/" + state.dataset + "/"
     data.mkdir_p(outdir)
@@ -73,9 +74,8 @@ def experiment(state, outdir_base='./'):
 
 
     print state
-    # Load the data, train = train+valid, and shuffle train
-    # Targets are not used (will be misaligned after shuffling train
-    artificial = False
+    # Load the data
+    artificial = False #flag for using my artificially-sequenced mnist datasets
     if state.dataset == 'MNIST_1' or state.dataset == 'MNIST_2' or state.dataset == 'MNIST_3':
         (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = data.load_mnist(state.data_path)
         train_X = numpy.concatenate((train_X, valid_X))
@@ -88,6 +88,7 @@ def experiment(state, outdir_base='./'):
     else:
         raise AssertionError("dataset not recognized.")
     
+    #make shared variables for better use of the gpu
     train_X = theano.shared(train_X)
     train_Y = theano.shared(train_Y)
     valid_X = theano.shared(valid_X)
@@ -95,7 +96,7 @@ def experiment(state, outdir_base='./'):
     test_X = theano.shared(test_X)
     test_Y = theano.shared(test_Y) 
    
-    if artificial:
+    if artificial: #run the appropriate artificial sequencing of mnist data
         print 'Sequencing MNIST data...'
         print 'train set size:',len(train_Y.eval())
         print 'valid set size:',len(valid_Y.eval())
@@ -113,7 +114,7 @@ def experiment(state, outdir_base='./'):
     # Theano variables and RNG
     X       = T.fmatrix("X")
     X1      = T.fmatrix("X1")
-    H       = T.fmatrix("H")
+    H       = T.fmatrix("Hrecurr_visible")
     MRG = RNG_MRG.MRG_RandomStreams(1)
     
     
@@ -131,17 +132,17 @@ def experiment(state, outdir_base='./'):
     annealing       =   cast32(state.annealing) # exponential annealing coefficient
     momentum        =   theano.shared(cast32(state.momentum)) # momentum term 
     
-    #Xs = [T.fmatrix(name="X_initial") if i==0 else T.fmatrix(name="X_"+str(i+1)) for i in range(walkbacks+1)]
     recurrent_hiddens_input = [H] + [T.fmatrix(name="hrecurr_"+str(i+1)) for i in range(recurrent_layers)]
     recurrent_hiddens_output = recurrent_hiddens_input[:1] + recurrent_hiddens_input[1:]
 
     # PARAMETERS : weights list and bias list.
-    # initialize a list of weights and biases based on layer_sizes
+    # initialize a list of weights and biases based on layer_sizes: these are theta_gsn parameters
     weights_list    =   [get_shared_weights(layer_sizes[i], layer_sizes[i+1], name="W_{0!s}_{1!s}".format(i,i+1)) for i in range(layers)] # initialize each layer to uniform sample from sqrt(6. / (n_in + n_out))
     bias_list       =   [get_shared_bias(layer_sizes[i], name='b_'+str(i)) for i in range(layers + 1)] # initialize each layer to 0's.
     # parameters for recurrent part
-    #recurrent weights initial visible layer is the even layers of the network below it.
-    recurrent_weights_list = [get_shared_weights(recurrent_layer_sizes[i], recurrent_layer_sizes[i+1], name="U_{0!s}_{1!s}".format(i,i+1)) for i in range(recurrent_layers)] + [get_shared_weights(recurrent_layer_sizes[i+1], recurrent_layer_sizes[i], name="V_{0!s}_{1!s}".format(i+1,i)) for i in range(recurrent_layers-1, -1, -1)] #untied weights in the recurrent layers
+    #recurrent weights initial visible layer is the even layers of the network below it: these are theta_transition parameters
+    recurrent_weights_list_encode = [get_shared_weights(recurrent_layer_sizes[i], recurrent_layer_sizes[i+1], name="U_{0!s}_{1!s}".format(i,i+1)) for i in range(recurrent_layers)] #untied weights in the recurrent layers
+    recurrent_weights_list_decode = [get_shared_weights(recurrent_layer_sizes[i+1], recurrent_layer_sizes[i], name="V_{0!s}_{1!s}".format(i+1,i)) for i in range(recurrent_layers)]
     recurrent_bias_list = [get_shared_bias(recurrent_layer_sizes[i], name='vb_'+str(i)) for i in range(recurrent_layers+1)] # initialize to 0's.
 
  
@@ -245,7 +246,7 @@ def experiment(state, outdir_base='./'):
             # sample from p(X|...) - SAMPLING NEEDS TO BE CORRECT FOR INPUT TYPES I.E. FOR BINARY MNIST SAMPLING IS BINOMIAL. real-valued inputs should be gaussian
             if state.input_sampling:
                 print 'Sampling from input'
-                sampled     =   MRG.binomial(p = hiddens[i], size=hiddens[i].shape, dtype='float32')
+                sampled     =   sample_visibles(hiddens[i])
             else:
                 print '>>NO input sampling'
                 sampled     =   hiddens[i]
@@ -260,14 +261,6 @@ def experiment(state, outdir_base='./'):
         update_odd_recurrent_layers(hiddens, noisy)
         print 'even layer updates'
         update_even_recurrent_layers(hiddens, p_X_chain, noisy)
-        print 'done full update.'
-        print
-    
-    def update_recurrent_layers_reverse(hiddens, p_X_chain, noisy = True):
-        print 'even layer updates'
-        update_even_recurrent_layers(hiddens, p_X_chain, noisy)
-        print 'odd layer updates'
-        update_odd_recurrent_layers(hiddens, noisy)
         print 'done full update.'
         print
         
@@ -296,18 +289,18 @@ def experiment(state, outdir_base='./'):
         # Compute the dot product, whatever layer        
         # If the visible layer X
         if i == 0:
-            print 'using '+str(recurrent_weights_list[i+recurrent_layers])
-            hiddens[i]  =   T.dot(hiddens[i+1], recurrent_weights_list[i+recurrent_layers]) + recurrent_bias_list[i]           
+            print 'using '+str(recurrent_weights_list_decode[i])
+            hiddens[i]  =   T.dot(hiddens[i+1], recurrent_weights_list_decode[i]) + recurrent_bias_list[i]           
         # If the top layer
         elif i == len(hiddens)-1:
-            print 'using',recurrent_weights_list[i-1]
-            hiddens[i]  =   T.dot(hiddens[i-1], recurrent_weights_list[i-1]) + recurrent_bias_list[i]
+            print 'using',recurrent_weights_list_encode[i-1]
+            hiddens[i]  =   T.dot(hiddens[i-1], recurrent_weights_list_encode[i-1]) + recurrent_bias_list[i]
         # Otherwise in-between layers
         else:
-            print "using {0!s} and {1!s}".format(recurrent_weights_list[i-1], recurrent_weights_list[i+recurrent_layers])
+            print "using {0!s} and {1!s}".format(recurrent_weights_list_encode[i-1], recurrent_weights_list_decode[i])
             # next layer        :   hiddens[i+1], assigned weights : W_i
             # previous layer    :   hiddens[i-1], assigned weights : W_(i-1)
-            hiddens[i]  =   T.dot(hiddens[i+1], recurrent_weights_list[i+recurrent_layers]) + T.dot(hiddens[i-1], recurrent_weights_list[i-1]) + recurrent_bias_list[i]
+            hiddens[i]  =   T.dot(hiddens[i+1], recurrent_weights_list_decode[i]) + T.dot(hiddens[i-1], recurrent_weights_list_encode[i-1]) + recurrent_bias_list[i]
     
         # Add pre-activation noise if NOT input layer
         if i==1 and state.noiseless_h1:
@@ -333,76 +326,120 @@ def experiment(state, outdir_base='./'):
             # if input layer -> append p(X|...)
             p_X_chain.append(hiddens[i])
             
+            # sample from p(X|...) - SAMPLING NEEDS TO BE CORRECT FOR INPUT TYPES I.E. FOR BINARY MNIST SAMPLING IS BINOMIAL. real-valued inputs should be gaussian
+            if state.input_sampling:
+                print 'Sampling from input'
+                sampled     =   sample_hiddens(hiddens[i])
+            else:
+                print '>>NO input sampling'
+                sampled     =   hiddens[i]
+            # add noise
+            sampled     =   salt_and_pepper(sampled, state.input_salt_and_pepper)
             
-    def sample_hiddens(hidden):
-        sampled = MRG.multinomial(pvals = hiddens[i], size=hiddens[i].shape, dtype='float32')
+            # set input layer
+            hiddens[i]  =   sampled
+            
+            
+    def sample_hiddens(hiddens):
+        return MRG.multinomial(pvals = hiddens, size=hiddens.shape, dtype='float32')
+    
+    def sample_visibles(visibles):
+        return MRG.binomial(p = visibles, size=visibles.shape, dtype='float32')
+    
+    def build_gsn(hiddens, p_X_chain, noiseflag):
+        print "Building the gsn graph :", walkbacks,"updates"
+        for i in range(walkbacks):
+            print "Walkback {!s}/{!s}".format(i+1,walkbacks)
+            update_layers(hiddens, p_X_chain, noisy=noiseflag)
+            
+    def build_gsn_reverse(hiddens, p_X_chain, noiseflag):
+        print "Building the gsn graph reverse layer update order:", walkbacks,"updates"
+        for i in range(walkbacks):
+            print "Walkback {!s}/{!s}".format(i+1,walkbacks)
+            update_layers_reverse_order(hiddens, p_X_chain, noisy=noiseflag)
+    
+    def build_recurrent_gsn(hiddens, p_X_chain, noiseflag):
+        print "Building the recurrent gsn graph :", recurrent_walkbacks,"updates"
+        for i in range(recurrent_walkbacks):
+            print "Recurrent walkback {!s}/{!s}".format(i+1,recurrent_walkbacks)
+            update_recurrent_layers(hiddens, p_X_chain, noisy=noiseflag)
+        
+        
+        
+    def build_graph(hiddens, recurrent_hiddens, noiseflag, prediction_index=0):
+        p_X_chain = []
+        p_H_chain = []
+        p_X1_chain = []
+        # The layer update scheme
+        print "Building the model graph :", walkbacks*2 + recurrent_walkbacks,"updates"
+
+        build_gsn(hiddens, p_X_chain, noiseflag)
+        
+        #the recurrent hiddens base layer only consists of the odd layers from the gsn hiddens
+        recurrent_hiddens[0] = T.concatenate([hiddens[i] for i in range(1,len(hiddens),2)], axis=1)
+        if noiseflag:
+            recurrent_hiddens[0] = salt_and_pepper(recurrent_hiddens[0], state.input_salt_and_pepper)
+        build_recurrent_gsn(recurrent_hiddens, p_H_chain, noiseflag)
+        
+        #restore the odd layers of the hiddens from what they were predicted to be by the recurrent gsn
+        index_accumulator = 0
+        for i in range(1,len(hiddens),2):
+            hiddens[i] = p_H_chain[prediction_index][:, index_accumulator:index_accumulator + layer_sizes[i]]
+            index_accumulator += layer_sizes[i]
+        build_gsn_reverse(hiddens, p_X1_chain, noiseflag)
+        
+        return hiddens, recurrent_hiddens, p_X_chain, p_H_chain, p_X1_chain
    
     
     ''' Corrupt X '''
     X_corrupt   = salt_and_pepper(X, state.input_salt_and_pepper)
-    X1_corrupt   = salt_and_pepper(X1, state.input_salt_and_pepper)
 
     ''' hidden layer init '''
     hiddens     = [X_corrupt]
-    #hiddens1     = [X1_corrupt]
-    hiddens1 = [T.zeros_like(X_corrupt)]
-    recurrent_hiddens = []
-    p_X_chain   = []
-    p_X1_chain  = []
-    recurrent_chain = []
+    
     print "Hidden units initialization"
     for w in weights_list:
         # init with zeros
         print "Init hidden units at zero before creating the graph"
         print
         hiddens.append(T.zeros_like(T.dot(hiddens[-1], w)))
-        hiddens1.append(T.zeros_like(T.dot(hiddens1[-1], w)))
 
-    # The layer update scheme
-    print "Building the graph :", walkbacks,"updates"
-    for i in range(walkbacks):
-        print "Walkback {!s}/{!s}".format(i+1,walkbacks)
-        update_layers(hiddens, p_X_chain)
-        #update_layers(hiddens1, p_X1_chain)
-    print
+    hiddens, recurrent_hiddens_output, p_X_chain, p_H_chain, p_X1_chain = build_graph(hiddens, recurrent_hiddens_output, noiseflag=True)
     
-    COSTS_pre        =   [T.mean(T.nnet.binary_crossentropy(rX, X)) for rX in p_X_chain]
-    show_COST_pre    =   COSTS_pre[-1]
-    COST_pre         =   numpy.sum(COSTS_pre)
-    
-    print "Building the recurrent graph"
-    recurrent_hiddens.append(T.concatenate([hiddens[1],hiddens[3]],axis=1))
-    for i in range(len(recurrent_weights_list)/2):
-        recurrent_hiddens.append(T.zeros_like(T.dot(recurrent_hiddens[-1], recurrent_weights_list[i])))
-    update_recurrent_layers(recurrent_hiddens, recurrent_chain)
-    hiddens1[1] = recurrent_chain[0][:,0:state.hidden_size]
-    hiddens1[3] = recurrent_chain[0][:,state.hidden_size:]
-    print "Building the predicted graph :", walkbacks,"updates"
-    for i in range(walkbacks):
-        print "Walkback {!s}/{!s}".format(i+1,walkbacks)
-        update_layers_reverse_order(hiddens1, p_X1_chain)
-    print
-    
-    COSTS_post        =   [T.mean(T.nnet.binary_crossentropy(rX, X1)) for rX in p_X1_chain]
-    show_COST_post    =   COSTS_post[-1]
-    COST_post         =   numpy.sum(COSTS_post)
-
-
 
     # COST AND GRADIENTS    
     print
     print 'Cost w.r.t p(X|...) at every step in the graph'
-    COST = COST_pre + COST_post
+    COSTS_pre        =   [T.mean(T.nnet.binary_crossentropy(rX, X)) for rX in p_X_chain]
+    show_COST_pre    =   COSTS_pre[-1]
+    COST_pre         =   numpy.sum(COSTS_pre)
+    COSTS_post       =   [T.mean(T.nnet.binary_crossentropy(rX1, X1)) for rX1 in p_X1_chain]
+    show_COST_post   =   COSTS_post[-1]
+    COST_post        =   numpy.sum(COSTS_post)
+    COSTS            =   COSTS_pre + COSTS_post
+    COST             =   numpy.sum(COSTS)
         
-    params      =   weights_list + bias_list
+    params           =   weights_list + bias_list
     print "params:",params
 
+    recurrent_params = recurrent_weights_list_encode + recurrent_weights_list_decode + recurrent_bias_list
+    print "recurrent params:", recurrent_params   
     
-    recurrent_params = recurrent_weights_list + recurrent_bias_list
-    print "recurrent params:", recurrent_params    
+     
     
     print "creating functions..."
-    gradient        =   T.grad(COST_pre, params)
+    gradient_init        =   T.grad(COST_pre, params)
+                 
+    gradient_buffer_init =   [theano.shared(numpy.zeros(param.get_value().shape, dtype='float32')) for param in params]
+     
+    m_gradient_init      =   [momentum * gb + (cast32(1) - momentum) * g for (gb, g) in zip(gradient_buffer_init, gradient_init)]
+    param_updates_init   =   [(param, param - learning_rate * mg) for (param, mg) in zip(params, m_gradient_init)]
+    gradient_buffer_updates_init = zip(gradient_buffer_init, m_gradient_init)
+         
+    updates_init         =   OrderedDict(param_updates_init + gradient_buffer_updates_init)
+    
+    
+    gradient        =   T.grad(COST, params)
                 
     gradient_buffer =   [theano.shared(numpy.zeros(param.get_value().shape, dtype='float32')) for param in params]
     
@@ -413,13 +450,19 @@ def experiment(state, outdir_base='./'):
     updates         =   OrderedDict(param_updates + gradient_buffer_updates)
     
     
-    
-    f_cost          =   theano.function(inputs = [X], outputs = [show_COST_pre], on_unused_input='warn')
+    f_cost          =   theano.function(inputs  = recurrent_hiddens_input + [X, X1], 
+                                        outputs = recurrent_hiddens_output + [show_COST_pre, show_COST_post], 
+                                        on_unused_input='warn')
 
-    f_learn         =   theano.function(inputs  = [X], 
-                                    updates = updates, 
-                                    outputs = [show_COST_pre],
-                                    on_unused_input='warn')
+    f_learn         =   theano.function(inputs  = recurrent_hiddens_input + [X, X1], 
+                                        updates = updates, 
+                                        outputs = recurrent_hiddens_output + [show_COST_pre, show_COST_post],
+                                        on_unused_input='warn')
+    
+    f_learn_init    =   theano.function(inputs  = [X], 
+                                        updates = updates_init, 
+                                        outputs = [show_COST_pre],
+                                        on_unused_input='warn')
        
     
     
@@ -431,17 +474,10 @@ def experiment(state, outdir_base='./'):
         
     recurrent_updates         =   OrderedDict(recurrent_param_updates + recurrent_gradient_buffer_updates)
     
-#     recurrent_f_cost          =   theano.function(inputs = [X, X1, recurrent_hiddens_input], outputs = recurrent_hiddens_output + [show_COST_post], on_unused_input='warn')
-#         
-#     recurrent_f_learn         =   theano.function(inputs  = [X, X1, recurrent_hiddens_input], 
-#                                                   updates = recurrent_updates, 
-#                                                   outputs = recurrent_hiddens_output + [show_COST_post],
-#                                                   on_unused_input='warn')
-    recurrent_f_cost          =   theano.function(inputs = [X, X1], outputs = [show_COST_pre, show_COST_post], on_unused_input='warn')
-        
-    recurrent_f_learn         =   theano.function(inputs  = [X, X1], 
-                                                  updates = recurrent_updates, 
-                                                  outputs = [show_COST_pre, show_COST_post],
+
+    recurrent_f_learn         =   theano.function(inputs  = recurrent_hiddens_input + [X,X1],
+                                                  updates = recurrent_updates,
+                                                  outputs = recurrent_hiddens_output + [show_COST_pre, show_COST_post],
                                                   on_unused_input='warn')
 
     print "functions done."
@@ -461,38 +497,21 @@ def experiment(state, outdir_base='./'):
     #noisy_numbers   =   salt_and_pepper(numbers, state.input_salt_and_pepper)
 
     # Recompile the graph without noise for reconstruction function
-    hiddens_R     = [X]
-    hiddens1_R = [T.zeros_like(X)]
-    recurr_hiddens_R = []
-    p_X_chain_R   = []
-    p_X1_chain_R   = []
-    p_recurr_chain = []
+    X_recon          = T.fvector("X_recon")
+    hiddens_R        = [X_recon]
+    hiddens_R_input  = [T.fvector(name="h_recon_visible")] + [T.fvector(name="h_recon_"+str(i+1)) for i in range(layers)]
+    hiddens_R_output = hiddens_R_input[:1] + hiddens_R_input[1:]
 
     for w in weights_list:
-        # init with zeros
         hiddens_R.append(T.zeros_like(T.dot(hiddens_R[-1], w)))
-        hiddens1_R.append(T.zeros_like(T.dot(hiddens1_R[-1], w)))
 
     # The layer update scheme
     print "Creating graph for noisy reconstruction function at checkpoints during training."
-    for i in range(walkbacks):
-        print "Walkback {!s}/{!s}".format(i+1,walkbacks)
-        update_layers(hiddens_R, p_X_chain_R, noisy=False)
-        
-    recurr_hiddens_R.append(T.concatenate([hiddens_R[1],hiddens_R[3]],axis=1))
-    for i in range(len(recurrent_weights_list)/2):
-        recurr_hiddens_R.append(T.zeros_like(T.dot(recurr_hiddens_R[-1], recurrent_weights_list[i])))
-        
-    update_recurrent_layers(recurr_hiddens_R, p_recurr_chain, noisy=False)
-    hiddens1_R[1] = p_recurr_chain[0][:,0:state.hidden_size]
-    hiddens1_R[3] = p_recurr_chain[0][:,state.hidden_size:]
-    
-    for i in range(walkbacks):
-        print "Walkback {!s}/{!s}".format(i+1,walkbacks)
-        update_layers_reverse_order(hiddens1_R, p_X1_chain_R, noisy=False)
-    print  
+    hiddens_R, recurrent_hiddens_output, p_X_chain_R, p_H_chain_R, p_X1_chain_R = build_graph(hiddens_R, hiddens_R_output, noiseflag=False)
 
-    f_recon = theano.function(inputs = [X], outputs = [p_X_chain_R[-1], p_X1_chain_R[-1]]) 
+    f_recon = theano.function(inputs = hiddens_R_input+[X_recon], 
+                              outputs = hiddens_R_output+[p_X_chain_R[-1] ,p_X1_chain_R[-1]], 
+                              on_unused_input="warn")
 
 
     ############
@@ -695,24 +714,30 @@ def experiment(state, outdir_base='./'):
             data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset, rng)
             
             #train
-#             recurrent_hiddens = [(T.zeros(batch_size, state.hidden_size))]
-#             for i in range(len(recurrent_weights_list)/2):
-#                 # init with zeros
-#                 recurrent_hiddens.append(T.zeros_like(T.dot(recurrent_hiddens[i], recurrent_weights_list[i])).eval())
+            #init recurrent hiddens as zero
+            recurrent_hiddens = [T.zeros((batch_size,recurrent_layer_size)).eval() for recurrent_layer_size in recurrent_layer_sizes]
             pre_train_cost = []
             post_train_cost = []
-            for i in range(len(train_X.get_value(borrow=True)) / batch_size):
-                x = train_X.get_value()[i * batch_size : (i+1) * batch_size]
-                x1 = train_X.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
-                xs = [x,x1]
-                xs, _ = fix_input_size(xs)
-                pre = f_learn(x)
-                _outs = recurrent_f_learn(xs[0], xs[1])
-                #recurrent_hiddens = _outs[:-1]
-                post = _outs[-1]
-                pre_train_cost.append(pre)
-                post_train_cost.append(post)
-                
+            if iteration == 0:
+                for i in range(len(train_X.get_value(borrow=True)) / batch_size):
+                    x = train_X.get_value()[i * batch_size : (i+1) * batch_size]
+                    pre = f_learn_init(x)
+                    pre_train_cost.append(pre)
+                    post_train_cost.append(-1)
+            else:
+                for i in range(len(train_X.get_value(borrow=True)) / batch_size):
+                    x = train_X.get_value()[i * batch_size : (i+1) * batch_size]
+                    x1 = train_X.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
+                    [x,x1], recurrent_hiddens = fix_input_size([x,x1], recurrent_hiddens)
+                    _ins = recurrent_hiddens + [x,x1]
+                    _outs = f_learn(*_ins)
+                    recurrent_hiddens = _outs[:len(recurrent_hiddens)]
+                    pre = _outs[-2]
+                    post = _outs[-1]
+                    pre_train_cost.append(pre)
+                    post_train_cost.append(post)
+                    
+                                    
             pre_train_cost = numpy.mean(pre_train_cost) 
             pre_train_costs.append(pre_train_cost)
             post_train_cost = numpy.mean(post_train_cost) 
@@ -726,19 +751,18 @@ def experiment(state, outdir_base='./'):
                 f.write("{0!s},".format(post_train_cost))
     
             #valid
-#             recurrent_hiddens = [(T.zeros(batch_size, state.hidden_size))]
-#             for i in range(len(recurrent_weights_list)/2):
-#                 recurrent_hiddens.append(T.zeros_like(T.dot(recurrent_hiddens[i], recurrent_weights_list[i])).eval())
+            #init recurrent hiddens as zero
+            recurrent_hiddens = [T.zeros((batch_size,recurrent_layer_size)).eval() for recurrent_layer_size in recurrent_layer_sizes]
             pre_valid_cost  =   []    
             post_valid_cost  =  []
             for i in range(len(valid_X.get_value(borrow=True)) / batch_size):
                 x = valid_X.get_value()[i * batch_size : (i+1) * batch_size]
                 x1 = valid_X.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
-                xs = [x,x1]
-                xs, _ = fix_input_size(xs)
-                pre = f_cost(x)
-                _outs = recurrent_f_cost(xs[0],xs[1])
-#                 recurrent_hiddens = _outs[:-1]
+                [x,x1], recurrent_hiddens = fix_input_size([x,x1], recurrent_hiddens)
+                _ins = recurrent_hiddens + [x,x1]
+                _outs = f_cost(*_ins)
+                recurrent_hiddens = _outs[:len(recurrent_hiddens)]
+                pre = _outs[-2]
                 post = _outs[-1]
                 pre_valid_cost.append(pre)
                 post_valid_cost.append(post)
@@ -756,19 +780,18 @@ def experiment(state, outdir_base='./'):
                 f.write("{0!s},".format(post_valid_cost))
     
             #test
-#             recurrent_hiddens = [(T.zeros(batch_size, state.hidden_size))]
-#             for i in range(len(recurrent_weights_list)/2):
-#                 recurrent_hiddens.append(T.zeros_like(T.dot(recurrent_hiddens[i], recurrent_weights_list[i])).eval())
+            #init recurrent hiddens as zero
+            recurrent_hiddens = [T.zeros((batch_size,recurrent_layer_size)).eval() for recurrent_layer_size in recurrent_layer_sizes]
             pre_test_cost  =   []
             post_test_cost  =   []
             for i in range(len(test_X.get_value(borrow=True)) / batch_size):
                 x = test_X.get_value()[i * batch_size : (i+1) * batch_size]
                 x1 = test_X.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
-                xs = [x,x1]
-                xs, _ = fix_input_size(xs)
-                pre = f_cost(x)
-                _outs = recurrent_f_cost(xs[0],xs[1])
-#                 recurrent_hiddens = _outs[:-1]
+                [x,x1], recurrent_hiddens = fix_input_size([x,x1], recurrent_hiddens)
+                _ins = recurrent_hiddens + [x,x1]
+                _outs = f_cost(*_ins)
+                recurrent_hiddens = _outs[:len(recurrent_hiddens)]
+                pre = _outs[-2]
                 post = _outs[-1]
                 pre_test_cost.append(pre)
                 post_test_cost.append(post)
@@ -809,7 +832,20 @@ def experiment(state, outdir_base='./'):
                     
             if (counter % state.save_frequency) == 0:
                 # Checking reconstruction
-                reconstructed, reconstructed_prediction   =   f_recon(noisy_numbers) 
+                nums = test_X.get_value()[range(100)]
+                noisy_nums = f_noise(test_X.get_value()[range(100)])
+                reconstructed = []
+                reconstructed_prediction = []
+                #init recurrent hiddens as zero
+                recurrent_hiddens = [T.zeros((batch_size,recurrent_layer_size)).eval() for recurrent_layer_size in recurrent_layer_sizes]
+                for num in noisy_nums:
+                    recurrent_hiddens[0] = num
+                    _ins = recurrent_hiddens + [num]
+                    _outs = f_recon(*_ins)
+                    recurrent_hiddens = _outs[:len(recurrent_hiddens)]
+                    [recon,recon_pred] = _outs[len(recurrent_hiddens):]
+                    reconstructed_prediction.append(reconstructed_1)
+                    reconstructed_prediction_end.append(reconstructed_n)
                 # Concatenate stuff
                 stacked = numpy.vstack([numpy.vstack([numbers[i*10 : (i+1)*10], noisy_numbers[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10]]) for i in range(10)])
             

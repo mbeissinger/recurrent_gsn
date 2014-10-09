@@ -10,7 +10,7 @@ def main():
     parser.add_argument('--n_epoch', type=int, default=100)
     parser.add_argument('--save_frequency', type=int, default=10) #number of epochs between parameters being saved
     parser.add_argument('--early_stop_threshold', type=float, default=0.9995) #0.9995
-    parser.add_argument('--early_stop_length', type=int, default=40)#10
+    parser.add_argument('--early_stop_length', type=int, default=30)#10
     parser.add_argument('--batch_size', type=int, default=100)
     parser.add_argument('--hidden_add_noise_sigma', type=float, default=2)
     parser.add_argument('--input_salt_and_pepper', type=float, default=0.4) #default=0.4
@@ -35,7 +35,7 @@ def main():
     args = parser.parse_args()
        
     # RUN STORY 1
-    Story1.experiment(args, '../outputs/model_1/')
+    #Story1.experiment(args, '../outputs/model_1/')
     args.dataset = "MNIST_2"
     Story1.experiment(args, '../outputs/model_1/')
     args.dataset = "MNIST_3"

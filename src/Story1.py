@@ -269,7 +269,9 @@ def experiment(state, outdir_base='./'):
                 print 'using',recurrent_weights_list[i-1],'and',recurrent_bias_list[i-1]
                 hiddens[i] = T.dot(hiddens[i],recurrent_weights_list[i-1]) + recurrent_bias_list[i-1]
                 
-    def build_graph(hiddens, p_X_chain, p_X1_chain, noiseflag):
+    def build_graph(hiddens, noiseflag):
+        p_X_chain = []
+        p_X1_chain = []
         # The layer update scheme
         print "Building the graph :", walkbacks*2,"updates"
         for i in range(walkbacks):
@@ -295,26 +297,20 @@ def experiment(state, outdir_base='./'):
 
     ''' hidden layer init '''
     hiddens     = [X_corrupt]
-    p_X_chain   = [] 
-    p_X1_chain  = []
-    noiseflag = True
     for w in weights_list:
         # init with zeros
         hiddens.append(T.zeros_like(T.dot(hiddens[-1], w)))
 
-    hiddens, p_X_chain, p_X1_chain = build_graph(hiddens, p_X_chain, p_X1_chain, noiseflag)
+    hiddens, p_X_chain, p_X1_chain = build_graph(hiddens, noiseflag=True)
         
         
     print "Creating functions for regression part"
     # The prediction of the recurrent regression - no noise! noise is only used as regularization for GSN from over-fitting
     hiddens1 = [X]
-    recurrent_pX_chain   =   []
-    recurrent_p_X1_chain =   []
-    noiseflag = False
     for w in weights_list:
         hiddens1.append(T.zeros_like(T.dot(hiddens1[-1], w)))
     
-    hiddens1, recurrent_pX_chain, recurrent_p_X1_chain = build_graph(hiddens1, recurrent_pX_chain, recurrent_p_X1_chain, noiseflag)
+    hiddens1, _, recurrent_p_X1_chain = build_graph(hiddens1, noiseflag=False)
 
 
     # COST AND GRADIENTS    
@@ -368,7 +364,7 @@ def experiment(state, outdir_base='./'):
     
     
     
-    f_cost           =   theano.function(inputs = [X, X1], 
+    f_cost           =   theano.function(inputs  = [X, X1], 
                                          outputs = [show_COST_pre, show_COST_post])
 
 
@@ -414,16 +410,13 @@ def experiment(state, outdir_base='./'):
  
     # Recompile the graph without noise for reconstruction function
     hiddens_R     = [X]
-    p_X_chain_R   = []
-    p_X1_chain_R   = []
- 
     for w in weights_list:
         # init with zeros
         hiddens_R.append(T.zeros_like(T.dot(hiddens_R[-1], w)))
  
     # The layer update scheme
     print "Creating graph for noisy reconstruction function at checkpoints during training."
-    hiddens_R, p_X_chain_R, p_X1_chain_R = build_graph(hiddens_R, p_X_chain_R, p_X1_chain_R, noiseflag=False) 
+    hiddens_R, p_X_chain_R, p_X1_chain_R = build_graph(hiddens_R, noiseflag=False) 
  
     f_recon = theano.function(inputs = [X], outputs = [p_X_chain_R[-1], p_X1_chain_R[-1]])
     f_walkbacks = theano.function(inputs = [X], outputs = p_X_chain_R + p_X1_chain_R) # function to get progression of walkbacks
@@ -566,13 +559,14 @@ def experiment(state, outdir_base='./'):
         return numpy.vstack(visible_chain), numpy.vstack(noisy_h0_chain)
 
     def save_params(name, n, params, iteration):
-        print 'saving parameters...'
-        save_path = outdir+name+'_params_iteration_'+str(iteration)+'_epoch_'+str(n)+'.pkl'
-        f = open(save_path, 'wb')
-        try:
-            cPickle.dump(params, f, protocol=cPickle.HIGHEST_PROTOCOL)
-        finally:
-            f.close() 
+        pass
+#         print 'saving parameters...'
+#         save_path = outdir+name+'_params_iteration_'+str(iteration)+'_epoch_'+str(n)+'.pkl'
+#         f = open(save_path, 'wb')
+#         try:
+#             cPickle.dump(params, f, protocol=cPickle.HIGHEST_PROTOCOL)
+#         finally:
+#             f.close() 
 
 
     ################
@@ -634,10 +628,8 @@ def experiment(state, outdir_base='./'):
                 for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                     x = train_X.get_value()[i * batch_size : (i+1) * batch_size]
                     pre = f_learn_init(x)
-                    #pre, post = f_learn(x,x)
                     pre_train_cost.append(pre)
                     post_train_cost.append(-1)
-                    #post_train_cost.append(post)
             else:
                 for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                     x = train_X.get_value()[i * batch_size : (i+1) * batch_size]

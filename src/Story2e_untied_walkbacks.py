@@ -300,12 +300,13 @@ def experiment(state, outdir_base='./'):
  
     # The layer update scheme
     print "Creating graph for noisy reconstruction function at checkpoints during training."
-    noiseflag = False
     for i in range(layers):
         print "Prediction {!s}/{!s}".format(i+1,layers)
-        update_layers(hiddens_R_output, p_X_chain_R, Xs_recon, i, noisy=noiseflag)
+        update_layers(hiddens_R_output, p_X_chain_R, Xs_recon, i, noisy=False)
  
-    f_recon = theano.function(inputs = hiddens_R_input+Xs_recon, outputs = hiddens_R_output+[p_X_chain_R[0] ,p_X_chain_R[-1]], on_unused_input="warn") 
+    f_recon = theano.function(inputs = hiddens_R_input+Xs_recon, 
+                              outputs = hiddens_R_output+[p_X_chain_R[0] ,p_X_chain_R[-1]], 
+                              on_unused_input="warn") 
 
 
     ############
@@ -447,13 +448,14 @@ def experiment(state, outdir_base='./'):
         return numpy.vstack(visible_chain), numpy.vstack(noisy_h0_chain)
 
     def save_params(name, n, params, iteration):
-        print 'saving parameters...'
-        save_path = outdir+name+'_params_iteration_'+str(iteration)+'_epoch_'+str(n)+'.pkl'
-        f = open(save_path, 'wb')
-        try:
-            cPickle.dump(params, f, protocol=cPickle.HIGHEST_PROTOCOL)
-        finally:
-            f.close() 
+        pass
+#         print 'saving parameters...'
+#         save_path = outdir+name+'_params_iteration_'+str(iteration)+'_epoch_'+str(n)+'.pkl'
+#         f = open(save_path, 'wb')
+#         try:
+#             cPickle.dump(params, f, protocol=cPickle.HIGHEST_PROTOCOL)
+#         finally:
+#             f.close() 
 
     ################
     # GSN TRAINING #
@@ -517,6 +519,7 @@ def experiment(state, outdir_base='./'):
             for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                 xs = [train_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                 xs, hiddens = fix_input_size(xs, hiddens)
+                hiddens[0] = xs[0]
                 _ins = hiddens + xs
                 _outs = f_learn(*_ins)
                 hiddens = _outs[:len(hiddens)]
@@ -549,6 +552,7 @@ def experiment(state, outdir_base='./'):
             for i in range(len(valid_X.get_value(borrow=True)) / batch_size):
                 xs = [valid_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                 xs, hiddens = fix_input_size(xs, hiddens)
+                hiddens[0] = xs[0]
                 _ins = hiddens + xs
                 _outs = f_cost(*_ins)
                 hiddens = _outs[:-2]
@@ -581,6 +585,7 @@ def experiment(state, outdir_base='./'):
             for i in range(len(test_X.get_value(borrow=True)) / batch_size):
                 xs = [test_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                 xs, hiddens = fix_input_size(xs, hiddens)
+                hiddens[0] = xs[0]
                 _ins = hiddens + xs
                 _outs = f_cost(*_ins)
                 hiddens = _outs[:-2]

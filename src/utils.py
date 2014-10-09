@@ -94,7 +94,7 @@ def fix_input_size(xs, hiddens=None):
     min_size = numpy.min(sizes)
     xs = [x[:min_size] for x in xs]
     if hiddens is not None:
-        hiddens = [xs[0] if i==0 else hiddens[i][:min_size] for i in range(len(hiddens))]
+        hiddens = [hiddens[i][:min_size] for i in range(len(hiddens))]
     return xs, hiddens
 
 def load_from_config(config_filename):
