@@ -448,14 +448,13 @@ def experiment(state, outdir_base='./'):
         return numpy.vstack(visible_chain), numpy.vstack(noisy_h0_chain)
 
     def save_params(name, n, params, iteration):
-        pass
-#         print 'saving parameters...'
-#         save_path = outdir+name+'_params_iteration_'+str(iteration)+'_epoch_'+str(n)+'.pkl'
-#         f = open(save_path, 'wb')
-#         try:
-#             cPickle.dump(params, f, protocol=cPickle.HIGHEST_PROTOCOL)
-#         finally:
-#             f.close() 
+        print 'saving parameters...'
+        save_path = outdir+name+'_params_iteration_'+str(iteration)+'_epoch_'+str(n)+'.pkl'
+        f = open(save_path, 'wb')
+        try:
+            cPickle.dump(params, f, protocol=cPickle.HIGHEST_PROTOCOL)
+        finally:
+            f.close() 
 
     ################
     # GSN TRAINING #

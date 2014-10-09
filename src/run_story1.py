@@ -35,7 +35,7 @@ def main():
     args = parser.parse_args()
        
     # RUN STORY 1
-    #Story1.experiment(args, '../outputs/model_1/')
+    Story1.experiment(args, '../outputs/model_1/')
     args.dataset = "MNIST_2"
     Story1.experiment(args, '../outputs/model_1/')
     args.dataset = "MNIST_3"

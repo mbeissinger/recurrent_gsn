@@ -839,15 +839,14 @@ def experiment(state, outdir_base='./'):
                 #init recurrent hiddens as zero
                 recurrent_hiddens = [T.zeros((batch_size,recurrent_layer_size)).eval() for recurrent_layer_size in recurrent_layer_sizes]
                 for num in noisy_nums:
-                    recurrent_hiddens[0] = num
                     _ins = recurrent_hiddens + [num]
                     _outs = f_recon(*_ins)
                     recurrent_hiddens = _outs[:len(recurrent_hiddens)]
                     [recon,recon_pred] = _outs[len(recurrent_hiddens):]
-                    reconstructed_prediction.append(reconstructed_1)
-                    reconstructed_prediction_end.append(reconstructed_n)
+                    reconstructed.append(recon)
+                    reconstructed_prediction.append(recon_pred)
                 # Concatenate stuff
-                stacked = numpy.vstack([numpy.vstack([numbers[i*10 : (i+1)*10], noisy_numbers[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10]]) for i in range(10)])
+                stacked = numpy.vstack([numpy.vstack([nums[i*10 : (i+1)*10], noisy_nums[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10]]) for i in range(10)])
             
                 number_reconstruction   =   PIL.Image.fromarray(tile_raster_images(stacked, (root_N_input,root_N_input), (10,40)))
                 #epoch_number    =   reduce(lambda x,y : x + y, ['_'] * (4-len(str(counter)))) + str(counter)
@@ -1070,10 +1069,22 @@ def experiment(state, outdir_base='./'):
                     
             if (counter % state.save_frequency) == 0:
                 # Checking reconstruction
-                reconstructed, reconstructed_prediction   =   f_recon(noisy_numbers) 
+                nums = test_X.get_value()[range(100)]
+                noisy_nums = f_noise(test_X.get_value()[range(100)])
+                reconstructed = []
+                reconstructed_prediction = []
+                #init recurrent hiddens as zero
+                recurrent_hiddens = [T.zeros((batch_size,recurrent_layer_size)).eval() for recurrent_layer_size in recurrent_layer_sizes]
+                for num in noisy_nums:
+                    _ins = recurrent_hiddens + [num]
+                    _outs = f_recon(*_ins)
+                    recurrent_hiddens = _outs[:len(recurrent_hiddens)]
+                    [recon,recon_pred] = _outs[len(recurrent_hiddens):]
+                    reconstructed.append(recon)
+                    reconstructed_prediction.append(recon_pred)
                 # Concatenate stuff
-                stacked = numpy.vstack([numpy.vstack([numbers[i*10 : (i+1)*10], noisy_numbers[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10]]) for i in range(10)])
-            
+                stacked = numpy.vstack([numpy.vstack([nums[i*10 : (i+1)*10], noisy_nums[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10]]) for i in range(10)])
+                
                 number_reconstruction   =   PIL.Image.fromarray(tile_raster_images(stacked, (root_N_input,root_N_input), (10,40)))
                 #epoch_number    =   reduce(lambda x,y : x + y, ['_'] * (4-len(str(counter)))) + str(counter)
                 number_reconstruction.save(outdir+'recurrent_number_reconstruction_iteration_'+str(iteration)+'_epoch_'+str(counter)+'.png')
