@@ -341,7 +341,7 @@ def experiment(state, outdir_base='./'):
             
             
     def sample_hiddens(hiddens):
-        return MRG.multinomial(pvals = hiddens, size=hiddens.shape, dtype='float32')
+        return MRG.multinomial(pvals = hiddens, dtype='float32')
     
     def sample_visibles(visibles):
         return MRG.binomial(p = visibles, size=visibles.shape, dtype='float32')
@@ -477,7 +477,7 @@ def experiment(state, outdir_base='./'):
 
     recurrent_f_learn         =   theano.function(inputs  = recurrent_hiddens_input + [X,X1],
                                                   updates = recurrent_updates,
-                                                  outputs = recurrent_hiddens_output + [show_COST_pre, show_COST_post],
+                                                  outputs = recurrent_hiddens_output + [show_COST_post],
                                                   on_unused_input='warn')
 
     print "functions done."
@@ -862,14 +862,6 @@ def experiment(state, outdir_base='./'):
             new_lr = learning_rate.get_value() * annealing
             learning_rate.set_value(new_lr)
     
-        # Save
-        state.pre_train_costs = pre_train_costs
-        state.post_train_costs = post_train_costs
-        state.pre_valid_costs = pre_valid_costs
-        state.post_valid_costs = post_valid_costs
-        state.pre_test_costs = pre_test_costs
-        state.post_test_costs = post_test_costs
-    
         # if test
     
         # 10k samples
@@ -944,12 +936,9 @@ def experiment(state, outdir_base='./'):
         print 'valid X size:',str(valid_X.shape.eval())
         print 'test X size:',str(test_X.shape.eval())
     
-        pre_train_costs =   []
-        pre_valid_costs =   []
-        pre_test_costs  =   []
-        post_train_costs =   []
-        post_valid_costs =   []
-        post_test_costs  =   []
+        train_costs =   []
+        valid_costs =   []
+        test_costs  =   []
         
         if state.vis_init:
             bias_list[0].set_value(logit(numpy.clip(0.9,0.001,train_X.get_value().mean(axis=0))))
@@ -969,82 +958,74 @@ def experiment(state, outdir_base='./'):
             data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset, rng)
             
             #train
-#             recurrent_hiddens = [(T.zeros(batch_size, state.hidden_size))]
-#             for i in range(len(recurrent_weights_list)/2):
-#                 # init with zeros
-#                 recurrent_hiddens.append(T.zeros_like(T.dot(recurrent_hiddens[i], recurrent_weights_list[i])).eval())
-            pre_train_cost = []
-            post_train_cost = []
+            #init recurrent hiddens as zero
+            recurrent_hiddens = [T.zeros((batch_size,recurrent_layer_size)).eval() for recurrent_layer_size in recurrent_layer_sizes]
+            train_cost = []
             for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                 x = train_X.get_value()[i * batch_size : (i+1) * batch_size]
                 x1 = train_X.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
-                xs = [x,x1]
-                xs, _ = fix_input_size(xs)
-                _outs = recurrent_f_learn(xs[0], xs[1])
-                #recurrent_hiddens = _outs[:-1]
-                pre = _outs[-2]
-                post = _outs[-1]
-                pre_train_cost.append(pre)
-                post_train_cost.append(post)
+                [x,x1], recurrent_hiddens = fix_input_size([x,x1], recurrent_hiddens)
+                _ins = recurrent_hiddens + [x,x1]
+                _outs = recurrent_f_learn(*_ins)
+                recurrent_hiddens = _outs[:len(recurrent_hiddens)]
+                cost = _outs[-1]
+                train_cost.append(cost)
                 
-            pre_train_cost = numpy.mean(pre_train_cost) 
-            pre_train_costs.append(pre_train_cost)
-            post_train_cost = numpy.mean(post_train_cost) 
-            post_train_costs.append(post_train_cost)
-            print 'Train : ',trunc(pre_train_cost),trunc(post_train_cost), '\t',
+            train_cost = numpy.mean(train_cost) 
+            train_costs.append(train_cost)
+            print 'rTrain : ',trunc(train_cost), '\t',
+            with open(logfile,'a') as f:
+                f.write("rTrain : {0!s}\t".format(trunc(train_cost)))
+            with open(recurrent_train_convergence,'a') as f:
+                f.write("{0!s},".format(train_cost))
     
             #valid
-#             recurrent_hiddens = [(T.zeros(batch_size, state.hidden_size))]
-#             for i in range(len(recurrent_weights_list)/2):
-#                 recurrent_hiddens.append(T.zeros_like(T.dot(recurrent_hiddens[i], recurrent_weights_list[i])).eval())
-            pre_valid_cost  =   []    
-            post_valid_cost  =  []
+            #init recurrent hiddens as zero
+            recurrent_hiddens = [T.zeros((batch_size,recurrent_layer_size)).eval() for recurrent_layer_size in recurrent_layer_sizes]
+            valid_cost  =  []
             for i in range(len(valid_X.get_value(borrow=True)) / batch_size):
                 x = valid_X.get_value()[i * batch_size : (i+1) * batch_size]
                 x1 = valid_X.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
-                xs = [x,x1]
-                xs, _ = fix_input_size(xs)
-                _outs = recurrent_f_cost(xs[0],xs[1])
-#                 recurrent_hiddens = _outs[:-1]
-                pre = _outs[-2]
-                post = _outs[-1]
-                pre_valid_cost.append(pre)
-                post_valid_cost.append(post)
+                [x,x1], recurrent_hiddens = fix_input_size([x,x1], recurrent_hiddens)
+                _ins = recurrent_hiddens + [x,x1]
+                _outs = f_cost(*_ins)
+                recurrent_hiddens = _outs[:len(recurrent_hiddens)]
+                cost = _outs[-1]
+                valid_cost.append(cost)
                     
-            pre_valid_cost = numpy.mean(pre_valid_cost) 
-            pre_valid_costs.append(pre_valid_cost)
-            post_valid_cost = numpy.mean(post_valid_cost) 
-            post_valid_costs.append(post_valid_cost)
-            print 'Valid : ', trunc(pre_valid_cost),trunc(post_valid_cost), '\t',
+            valid_cost = numpy.mean(valid_cost) 
+            valid_costs.append(valid_cost)
+            print 'rValid : ', trunc(valid_cost), '\t',
+            with open(logfile,'a') as f:
+                f.write("rValid : {0!s}\t".format(trunc(valid_cost)))
+            with open(recurrent_valid_convergence,'a') as f:
+                f.write("{0!s},".format(valid_cost))
     
             #test
-#             recurrent_hiddens = [(T.zeros(batch_size, state.hidden_size))]
-#             for i in range(len(recurrent_weights_list)/2):
-#                 recurrent_hiddens.append(T.zeros_like(T.dot(recurrent_hiddens[i], recurrent_weights_list[i])).eval())
-            pre_test_cost  =   []
-            post_test_cost  =   []
+            recurrent_hiddens = [T.zeros((batch_size,recurrent_layer_size)).eval() for recurrent_layer_size in recurrent_layer_sizes]
+            test_cost  =   []
             for i in range(len(test_X.get_value(borrow=True)) / batch_size):
                 x = test_X.get_value()[i * batch_size : (i+1) * batch_size]
                 x1 = test_X.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
-                xs = [x,x1]
-                xs, _ = fix_input_size(xs)
-                _outs = recurrent_f_cost(xs[0],xs[1])
-#                 recurrent_hiddens = _outs[:-1]
-                pre = _outs[-2]
-                post = _outs[-1]
-                pre_test_cost.append(pre)
-                post_test_cost.append(post)
+                [x,x1], recurrent_hiddens = fix_input_size([x,x1], recurrent_hiddens)
+                _ins = recurrent_hiddens + [x,x1]
+                _outs = f_cost(*_ins)
+                recurrent_hiddens = _outs[:len(recurrent_hiddens)]
+                cost = _outs[-1]
+                test_cost.append(cost)
                 
-            pre_test_cost = numpy.mean(pre_test_cost) 
-            pre_test_costs.append(pre_test_cost)
-            post_test_cost = numpy.mean(post_test_cost) 
-            post_test_costs.append(post_test_cost)
-            print 'Test  : ', trunc(pre_test_cost),trunc(post_test_cost), '\t',
+            test_cost = numpy.mean(test_cost) 
+            test_costs.append(test_cost)
+            print 'rTest  : ', trunc(test_cost), '\t',
+            with open(logfile,'a') as f:
+                f.write("rTest : {0!s}\t".format(trunc(test_cost)))
+            with open(recurrent_test_convergence,'a') as f:
+                f.write("{0!s},".format(test_cost))
     
             #check for early stopping
-            cost = pre_train_cost
+            cost = train_cost
             if iteration != 0:
-                cost = cost + post_train_cost
+                cost = cost + train_cost
             if cost < best_cost*state.early_stop_threshold:
                 patience = 0
                 best_cost = cost
@@ -1059,10 +1040,13 @@ def experiment(state, outdir_base='./'):
             print 'remaining: ', trunc((n_epoch - counter) * numpy.mean(times) / 60 / 60), 'hrs'
             
             with open(logfile,'a') as f:
-                f.write("MeanVB : {0!s}\t".format(str([trunc(vb.get_value().mean()) for vb in recurrent_bias_list])))
+                f.write("B : {0!s}\t".format(str([trunc(vb.get_value().mean()) for vb in recurrent_bias_list])))
+                
+            with open(logfile,'a') as f:
+                f.write("W : {0!s}\t".format(str([trunc(abs(v.get_value(borrow=True)).mean()) for v in recurrent_weights_list_encode])))
             
             with open(logfile,'a') as f:
-                f.write("V : {0!s}\t".format(str([trunc(abs(v.get_value(borrow=True)).mean()) for v in recurrent_weights_list])))
+                f.write("V : {0!s}\t".format(str([trunc(abs(v.get_value(borrow=True)).mean()) for v in recurrent_weights_list_decode])))
                 
             with open(logfile,'a') as f:
                 f.write("Time : {0!s} seconds\n".format(trunc(timing)))
@@ -1098,14 +1082,6 @@ def experiment(state, outdir_base='./'):
             # ANNEAL!
             new_r_lr = recurrent_learning_rate.get_value() * annealing
             recurrent_learning_rate.set_value(new_r_lr)
-    
-        # Save
-        state.recurrent_pre_train_costs = pre_train_costs
-        state.post_train_costs = post_train_costs
-        state.pre_valid_costs = pre_valid_costs
-        state.post_valid_costs = post_valid_costs
-        state.pre_test_costs = pre_test_costs
-        state.post_test_costs = post_test_costs
     
         # if test
     

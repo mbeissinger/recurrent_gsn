@@ -12,7 +12,7 @@ def main():
     parser.add_argument('--save_frequency', type=int, default=10) #number of epochs between parameters being saved
     parser.add_argument('--early_stop_threshold', type=float, default=0.9995)
     parser.add_argument('--early_stop_length', type=int, default=100)
-    parser.add_argument('--batch_size', type=int, default=100)
+    parser.add_argument('--batch_size', type=int, default=106) #batch size here to speed up training - doesn't work in practice unless you know the maximum sequence length. In my case it is 10, so using 10*10+walkbacks+1 allows the continuation of the recurrent hidden variables.
     parser.add_argument('--hidden_add_noise_sigma', type=float, default=2) #default=2
     parser.add_argument('--input_salt_and_pepper', type=float, default=0.4) #default=0.4
     parser.add_argument('--learning_rate', type=float, default=0.25)

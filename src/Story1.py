@@ -764,14 +764,7 @@ def experiment(state, outdir_base='./'):
             # ANNEAL!
             new_lr = learning_rate.get_value() * annealing
             learning_rate.set_value(new_lr)
-    
-        # Save
-        state.pre_train_costs = pre_train_costs
-        state.post_train_costs = post_train_costs
-        state.pre_valid_costs = pre_valid_costs
-        state.post_valid_costs = post_valid_costs
-        state.pre_test_costs = pre_test_costs
-        state.post_test_costs = post_test_costs
+
     
         # if test
     
@@ -960,11 +953,6 @@ def experiment(state, outdir_base='./'):
             # ANNEAL!
             new_r_lr = recurrent_learning_rate.get_value() * annealing
             recurrent_learning_rate.set_value(new_r_lr)
-    
-        # Save
-        state.recurrent_train_costs = train_costs
-        state.recurrent_valid_costs = valid_costs
-        state.recurrent_test_costs = test_costs
             
             
             

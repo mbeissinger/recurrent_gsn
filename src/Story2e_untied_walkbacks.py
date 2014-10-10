@@ -676,11 +676,6 @@ def experiment(state, outdir_base='./'):
             new_lr = learning_rate.get_value() * annealing
             learning_rate.set_value(new_lr)
     
-        # Save
-        state.train_costs = train_costs
-        state.valid_costs = valid_costs
-        state.test_costs = test_costs
-    
     
         # 10k samples
         print 'Generating 10,000 samples'

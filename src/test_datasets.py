@@ -40,22 +40,29 @@ def test(n, batch_size = 100, iters = 100):
     for i in range(len(train_Y.get_value(borrow=True)) / batch_size):
         x = train_Y.get_value()[i * batch_size : (i+1) * batch_size]
         x1 = train_Y.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
+        x2 = train_Y.get_value()[(i * batch_size) + 2 : ((i+1) * batch_size) + 2]
         [x,x1], _ = fix_input_size([x,x1])
-        if i==0 or i==1 or i==2 or i==(len(train_Y.get_value(borrow=True)) / batch_size)-1:
-            print x[0],x1[0],"...",x[1],x1[1],"...",x[2],x1[2],".....",x[-1],x1[-1]
+        if i<5 or i==(len(train_Y.get_value(borrow=True)) / batch_size)-1:
+            if i==(len(train_Y.get_value(borrow=True)) / batch_size)-1:
+                print '...'
+            print x[0],x1[0],x2[0],"...",x[-1],x1[-1],x2[0]
     print
     for i in range(len(valid_Y.get_value(borrow=True)) / batch_size):
         x = valid_Y.get_value()[i * batch_size : (i+1) * batch_size]
         x1 = valid_Y.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
         [x,x1], _ = fix_input_size([x,x1])
-        if i==0 or i==(len(valid_Y.get_value(borrow=True)) / batch_size)-1:
+        if i<5 or i==(len(valid_Y.get_value(borrow=True)) / batch_size)-1:
+            if i==(len(valid_Y.get_value(borrow=True)) / batch_size)-1:
+                print '...'
             print x[0],x1[0],"...",x[-1],x1[-1]
     print
     for i in range(len(test_Y.get_value(borrow=True)) / batch_size):
         x = test_Y.get_value()[i * batch_size : (i+1) * batch_size]
         x1 = test_Y.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
         [x,x1], _ = fix_input_size([x,x1])
-        if i==0 or i==(len(test_Y.get_value(borrow=True)) / batch_size)-1:
+        if i<5 or i==(len(test_Y.get_value(borrow=True)) / batch_size)-1:
+            if i==(len(test_Y.get_value(borrow=True)) / batch_size)-1:
+                print '...'
             print x[0],x1[0],"...",x[-1],x1[-1]
     print
     print train_Y.get_value()[:80]
