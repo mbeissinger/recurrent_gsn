@@ -5,12 +5,12 @@ import theano.tensor as T
 import theano.sandbox.rng_mrg as RNG_MRG
 import PIL.Image
 from collections import OrderedDict
-from image_tiler import *
+from image_tiler import tile_raster_images
 import time
-import argparse
 import data_tools as data
 from utils import *
 from numpy import dtype
+import warnings
 
 
 def experiment(state, outdir_base='./'):
@@ -123,6 +123,12 @@ def experiment(state, outdir_base='./'):
     Xs = [T.fmatrix(name="X_initial") if i==0 else T.fmatrix(name="X_"+str(i+1)) for i in range(walkbacks+1)]
     hiddens_input = [X] + [T.fmatrix(name="h_"+str(i+1)) for i in range(layers)]
     hiddens_output = hiddens_input[:1] + hiddens_input[1:]
+    
+    # Check variables for bad inputs and stuff
+    if state.batch_size > len(Xs):
+        warnings.warn("Batch size should not be bigger than walkbacks+1 (len(Xs)) unless you know what you're doing. You need to know the sequence length beforehand.")
+    if state.batch_size <= 0:
+        raise AssertionError("batch size cannot be <= 0")
  
     ''' F PROP '''
     if state.act == 'sigmoid':
@@ -139,11 +145,13 @@ def experiment(state, outdir_base='./'):
     visible_activation = T.nnet.sigmoid 
   
         
-    def update_layers(hiddens, p_X_chain, Xs, sequence_idx, noisy = True):
+    def update_layers(hiddens, p_X_chain, H_chain, Xs, sequence_idx, noisy = True):
         print 'odd layer updates'
         update_odd_layers(hiddens, noisy)
         print 'even layer updates'
         update_even_layers(hiddens, p_X_chain, Xs, sequence_idx, noisy)
+        # record the entire hidden state
+        H_chain.append(hiddens)
         print 'done full update.'
         print
         
@@ -228,16 +236,21 @@ def experiment(state, outdir_base='./'):
                 # DOES INPUT SAMPLING MAKE SENSE FOR SEQUENTIAL?
                 # set input layer
                 hiddens[i]  =   sampled
-            
+                
+    def build_graph(hiddens, Xs, noisy=True):
+        predicted_X_chain = []
+        H_chain           = []
+        print "Building the graph :", walkbacks,"updates"
+        for i in range(walkbacks):
+            print "Forward Prediction {!s}/{!s}".format(i+1,walkbacks)
+            update_layers(hiddens, predicted_X_chain, H_chain, Xs, i, noisy)
+        return predicted_X_chain, H_chain
     
+    
+    # Build the main training graph
     ''' Corrupt X '''
-    predicted_X_chain    = []
     hiddens_output[0] = salt_and_pepper(hiddens_output[0], state.input_salt_and_pepper)
-    # The layer update scheme
-    print "Building the graph :", walkbacks,"updates"
-    for i in range(walkbacks):
-        print "Forward Prediction {!s}/{!s}".format(i+1,walkbacks)
-        update_layers(hiddens_output, predicted_X_chain, Xs, i, noisy=True)
+    predicted_X_chain, H_chain = build_graph(hiddens_output, Xs, noisy=True)
         
 
     # COST AND GRADIENTS    
@@ -245,8 +258,14 @@ def experiment(state, outdir_base='./'):
     print 'Cost w.r.t p(X|...) at every step in the graph'
     
     costs = [T.mean(T.nnet.binary_crossentropy(predicted_X_chain[i], Xs[i+1])) for i in range(len(predicted_X_chain))]
-    pred = predicted_X_chain[0]
+    # outputs for the functions
     show_COSTs = [costs[0]] + [costs[-1]]
+    # choose the correct output from H_chain for hidden_outputs based on batch_size and walkbacks
+    if state.batch_size <= len(Xs):
+        for i in len(hiddens_output):
+            hiddens_output[i] = H_chain[state.batch_size - 1][i]
+            
+    # cost for the gradient
     COST = T.sum(costs)
     
     params      =   weights_list + recurrent_weights_list + bias_list
@@ -289,20 +308,21 @@ def experiment(state, outdir_base='./'):
     
     f_noise         =   theano.function(inputs = [X], outputs = salt_and_pepper(X, state.input_salt_and_pepper))
     noisy_numbers   =   f_noise(test_X.get_value()[random_idx])
-    #noisy_numbers   =   salt_and_pepper(numbers, state.input_salt_and_pepper)
 
     # Recompile the graph without noise for reconstruction function
     X_recon = T.fvector("X_recon")
     Xs_recon = [T.fvector("Xs_recon")]
     hiddens_R_input = [X_recon] + [T.fvector(name="h_recon_"+str(i+1)) for i in range(layers)]
     hiddens_R_output = hiddens_R_input[:1] + hiddens_R_input[1:]
-    p_X_chain_R   = []
  
     # The layer update scheme
     print "Creating graph for noisy reconstruction function at checkpoints during training."
-    for i in range(layers):
-        print "Prediction {!s}/{!s}".format(i+1,layers)
-        update_layers(hiddens_R_output, p_X_chain_R, Xs_recon, i, noisy=False)
+    p_X_chain_R, H_chain_R = build_graph(hiddens_R_output, Xs_recon, noisy=False)
+    
+    # choose the correct output from H_chain for hidden_outputs based on batch_size and walkbacks
+    if state.batch_size <= len(Xs_recon):
+        for i in len(hiddens_R_output):
+            hiddens_R_output[i] = H_chain_R[state.batch_size - 1][i]
  
     f_recon = theano.function(inputs = hiddens_R_input+Xs_recon, 
                               outputs = hiddens_R_output+[p_X_chain_R[0] ,p_X_chain_R[-1]], 
@@ -314,29 +334,28 @@ def experiment(state, outdir_base='./'):
     ############
     
     # the input to the sampling function
-    
-    network_state_input     =   [X] + [T.fmatrix() for i in range(layers)]
+    X_sample = T.fmatrix("X_sampling")
+    network_state_input     =   [X_sample] + [T.fmatrix("H_sampling_"+str(i+1)) for i in range(layers)]
    
     # "Output" state of the network (noisy)
     # initialized with input, then we apply updates
     
-    network_state_output    =   [X] + network_state_input[1:]
+    network_state_output    =   [X_sample] + network_state_input[1:]
 
     visible_pX_chain        =   []
 
     # ONE update
     print "Performing one walkback in network state sampling."
-    update_layers(network_state_output, visible_pX_chain, [X], 0, noisy=True)
+    update_layers(network_state_output, visible_pX_chain, [], [X_sample], 0, noisy=True)
 
     if layers == 1: 
-        f_sample_simple = theano.function(inputs = [X], outputs = visible_pX_chain[-1])
+        f_sample_simple = theano.function(inputs = [X_sample], outputs = visible_pX_chain[-1])
     
     
     # WHY IS THERE A WARNING????
     # because the first odd layers are not used -> directly computed FROM THE EVEN layers
     # unused input = warn
     f_sample2   =   theano.function(inputs = network_state_input, outputs = network_state_output + visible_pX_chain, on_unused_input='warn')
-    #f_sample2   =   theano.function(inputs = network_state_input, outputs = network_state_output + visible_pX_chain)
 
     def sample_some_numbers_single_layer():
         x0    =   test_X.get_value()[:1]
@@ -683,44 +702,6 @@ def experiment(state, outdir_base='./'):
         f_samples   =   outdir+'samples.npy'
         numpy.save(f_samples, samples)
         print 'saved digits'
-    
-    
-        # parzen
-#         print 'Evaluating parzen window'
-#         import likelihood_estimation_parzen
-#         likelihood_estimation_parzen.main(0.20,'mnist') 
-    
-        # Inpainting
-        '''
-        print 'Inpainting'
-        test_X  =   test_X.get_value()
-    
-        numpy.random.seed(2)
-        test_idx    =   numpy.arange(len(test_Y.get_value(borrow=True)))
-    
-        for Iter in range(10):
-    
-            numpy.random.shuffle(test_idx)
-            test_X = test_X[test_idx]
-            test_Y = test_Y[test_idx]
-    
-            digit_idx = [(test_Y==i).argmax() for i in range(10)]
-            inpaint_list = []
-    
-            for idx in digit_idx:
-                DIGIT = test_X[idx:idx+1]
-                V_inpaint, H_inpaint = inpainting(DIGIT)
-                inpaint_list.append(V_inpaint)
-    
-            INPAINTING  =   numpy.vstack(inpaint_list)
-    
-            plot_inpainting =   PIL.Image.fromarray(tile_raster_images(INPAINTING, (root_N_input,root_N_input), (10,50)))
-    
-            fname   =   'inpainting_'+str(Iter)+'_iteration_'+str(iteration)+'.png'
-            #fname   =   os.path.join(state.model_path, fname)
-    
-            plot_inpainting.save(fname)
-    '''        
             
             
             
@@ -728,7 +709,4 @@ def experiment(state, outdir_base='./'):
     # STORY 2 ALGORITHM #
     #####################
     for iter in range(state.max_iterations):
-        train_recurrent_GSN(iter, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)        
-        
-        
-
+        train_recurrent_GSN(iter, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)

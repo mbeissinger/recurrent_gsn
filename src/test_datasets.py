@@ -11,7 +11,7 @@ from image_tiler import tile_raster_images
 import time
 from utils import trunc, fix_input_size
 
-def test(n, batch_size = 100, iters = 100):
+def test(n, batch_size = 121, iters = 100, xslength=21):
     (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = data.load_mnist('../data/')
     train_X = numpy.concatenate((train_X, valid_X))
     train_Y = numpy.concatenate((train_Y, valid_Y))
@@ -38,14 +38,11 @@ def test(n, batch_size = 100, iters = 100):
     print 'test set size:',test_pre
     print 
     for i in range(len(train_Y.get_value(borrow=True)) / batch_size):
-        x = train_Y.get_value()[i * batch_size : (i+1) * batch_size]
-        x1 = train_Y.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
-        x2 = train_Y.get_value()[(i * batch_size) + 2 : ((i+1) * batch_size) + 2]
-        [x,x1], _ = fix_input_size([x,x1])
-        if i<5 or i==(len(train_Y.get_value(borrow=True)) / batch_size)-1:
-            if i==(len(train_Y.get_value(borrow=True)) / batch_size)-1:
-                print '...'
-            print x[0],x1[0],x2[0],"...",x[-1],x1[-1],x2[0]
+        xs = [train_Y.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(xslength)]
+        xs, _ = fix_input_size(xs)
+        if i<10:
+            print i
+            print numpy.transpose(numpy.vstack([x[0] for x in xs]))
     print
     for i in range(len(valid_Y.get_value(borrow=True)) / batch_size):
         x = valid_Y.get_value()[i * batch_size : (i+1) * batch_size]
@@ -106,7 +103,7 @@ def fix_size(xs):
 
 
 if __name__ == "__main__":
-    test(0)
+    #test(0)
     test(1)
-    test(2)
-    test(3)
+    #test(2)
+    #test(3)

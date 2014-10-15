@@ -4,9 +4,8 @@ import theano.tensor as T
 import theano.sandbox.rng_mrg as RNG_MRG
 import PIL.Image
 from collections import OrderedDict
-from image_tiler import *
+from image_tiler import tile_raster_images
 import time
-import argparse
 import data_tools as data
 import numpy.random as rng
 from utils import *
@@ -358,35 +357,41 @@ def experiment(state, outdir_base='./'):
             print "Walkback {!s}/{!s}".format(i+1,walkbacks)
             update_layers_reverse_order(hiddens, p_X_chain, noisy=noiseflag)
     
-    def build_recurrent_gsn(hiddens, p_X_chain, noiseflag):
+    def build_recurrent_gsn(recurrent_hiddens, p_H_chain, noiseflag):
+        #recurrent_hiddens is a list that will be appended to for each of the walkbacks. Used because I need the immediate next set of hidden states to carry through when using the functions - trying not to break the sequences.
         print "Building the recurrent gsn graph :", recurrent_walkbacks,"updates"
         for i in range(recurrent_walkbacks):
             print "Recurrent walkback {!s}/{!s}".format(i+1,recurrent_walkbacks)
-            update_recurrent_layers(hiddens, p_X_chain, noisy=noiseflag)
+            update_recurrent_layers(recurrent_hiddens, p_H_chain, noisy=noiseflag)
         
         
         
     def build_graph(hiddens, recurrent_hiddens, noiseflag, prediction_index=0):
         p_X_chain = []
+        recurrent_hiddens = []
         p_H_chain = []
         p_X1_chain = []
         # The layer update scheme
         print "Building the model graph :", walkbacks*2 + recurrent_walkbacks,"updates"
 
+        # First, build the GSN for the given input.
         build_gsn(hiddens, p_X_chain, noiseflag)
         
-        #the recurrent hiddens base layer only consists of the odd layers from the gsn hiddens
+        # Next, use the recurrent GSN to predict future hidden states
+        # the recurrent hiddens base layer only consists of the odd layers from the gsn - this is because the gsn is constructed by half its layers every time
         recurrent_hiddens[0] = T.concatenate([hiddens[i] for i in range(1,len(hiddens),2)], axis=1)
         if noiseflag:
             recurrent_hiddens[0] = salt_and_pepper(recurrent_hiddens[0], state.input_salt_and_pepper)
+        # Build the recurrent gsn predicting the next hidden states of future input gsn's
         build_recurrent_gsn(recurrent_hiddens, p_H_chain, noiseflag)
         
-        #restore the odd layers of the hiddens from what they were predicted to be by the recurrent gsn
-        index_accumulator = 0
-        for i in range(1,len(hiddens),2):
-            hiddens[i] = p_H_chain[prediction_index][:, index_accumulator:index_accumulator + layer_sizes[i]]
-            index_accumulator += layer_sizes[i]
-        build_gsn_reverse(hiddens, p_X1_chain, noiseflag)
+        #for every next predicted hidden states H, restore the odd layers of the hiddens from what they were predicted to be by the recurrent gsn
+        for predicted_H in p_H_chain:
+            index_accumulator = 0
+            for i in range(1,len(hiddens),2):
+                hiddens[i] = p_H_chain[prediction_index][:, index_accumulator:index_accumulator + layer_sizes[i]]
+                index_accumulator += layer_sizes[i]
+            build_gsn_reverse(hiddens, p_X1_chain, noiseflag)
         
         return hiddens, recurrent_hiddens, p_X_chain, p_H_chain, p_X1_chain
    
