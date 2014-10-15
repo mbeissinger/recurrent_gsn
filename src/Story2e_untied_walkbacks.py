@@ -262,7 +262,7 @@ def experiment(state, outdir_base='./'):
     show_COSTs = [costs[0]] + [costs[-1]]
     # choose the correct output from H_chain for hidden_outputs based on batch_size and walkbacks
     if state.batch_size <= len(Xs):
-        for i in len(hiddens_output):
+        for i in range(len(hiddens_output)):
             hiddens_output[i] = H_chain[state.batch_size - 1][i]
             
     # cost for the gradient
@@ -321,7 +321,7 @@ def experiment(state, outdir_base='./'):
     
     # choose the correct output from H_chain for hidden_outputs based on batch_size and walkbacks
     if state.batch_size <= len(Xs_recon):
-        for i in len(hiddens_R_output):
+        for i in range(len(hiddens_R_output)):
             hiddens_R_output[i] = H_chain_R[state.batch_size - 1][i]
  
     f_recon = theano.function(inputs = hiddens_R_input+Xs_recon, 
