@@ -200,7 +200,34 @@ def dataset2a_indices(labels, classes=10):
             print "stopped early from dataset2a sequencing - missing some class of labels"
             print
     while not stop:
-        #for i in range(classes)+range(classes-2,0,-1):
+        for i in range(classes)+range(classes-1,-1,-1):
+            if not stop:
+                if len(pool[i]) == 0: #stop the procedure if you are trying to pop from an empty list
+                    stop = True
+                else:
+                    sequence.append(pool[i].pop())
+    return sequence
+
+#order sequentially up then down but only for 0-1-1-0-0-1.....
+def dataset2b_indices(labels, classes=2):
+    sequence = []
+    pool = []
+    for _ in range(classes):
+        pool.append([])
+    #organize the indices into groups by label
+    for i in range(len(labels)):
+        if labels[i] < len(pool):
+            pool[labels[i]].append(i)
+    #draw from each pool (also with the random number insertions) until one is empty
+    stop = False
+    #check if there is an empty class
+    for n in pool:
+        if len(n) == 0:
+            stop = True
+            print
+            print "stopped early from dataset2b sequencing - missing some class of labels"
+            print
+    while not stop:
         for i in range(classes)+range(classes-1,-1,-1):
             if not stop:
                 if len(pool[i]) == 0: #stop the procedure if you are trying to pop from an empty list
@@ -272,9 +299,9 @@ def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, data
         valid_ordered_indices = dataset1_indices(valid_Y.get_value(borrow=True))
         test_ordered_indices = dataset1_indices(test_Y.get_value(borrow=True))
     elif dataset == 2:
-        train_ordered_indices = dataset2a_indices(train_Y.get_value(borrow=True))
-        valid_ordered_indices = dataset2a_indices(valid_Y.get_value(borrow=True))
-        test_ordered_indices = dataset2a_indices(test_Y.get_value(borrow=True))
+        train_ordered_indices = dataset2b_indices(train_Y.get_value(borrow=True))
+        valid_ordered_indices = dataset2b_indices(valid_Y.get_value(borrow=True))
+        test_ordered_indices = dataset2b_indices(test_Y.get_value(borrow=True))
     elif dataset == 3:
         train_ordered_indices = dataset3_indices(train_Y.get_value(borrow=True))
         valid_ordered_indices = dataset3_indices(valid_Y.get_value(borrow=True))
