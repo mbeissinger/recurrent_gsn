@@ -6,7 +6,7 @@ def main():
     # Add options here
 
     parser.add_argument('--layers', type=int, default=3) # number of hidden layers
-    parser.add_argument('--walkbacks', type=int, default=6) # number of walkbacks
+    parser.add_argument('--walkbacks', type=int, default=5) # number of walkbacks
     parser.add_argument('--n_epoch', type=int, default=100)
     parser.add_argument('--save_frequency', type=int, default=10) #number of epochs between parameters being saved
     parser.add_argument('--early_stop_threshold', type=float, default=0.9995) #0.9995
@@ -35,12 +35,11 @@ def main():
     args = parser.parse_args()
        
     # RUN STORY 1
-    Story1.experiment(args, '../outputs/model_1_3layers_6walkbacks/')
-#     Story1.experiment(args, '../outputs/model_1/')
-#     args.dataset = "MNIST_2"
-#     Story1.experiment(args, '../outputs/model_1/')
-#     args.dataset = "MNIST_3"
-#     Story1.experiment(args, '../outputs/model_1/')
+    Story1.experiment(args, '../outputs/model_1/')
+    args.dataset = "MNIST_2"
+    Story1.experiment(args, '../outputs/model_1/')
+    args.dataset = "MNIST_3"
+    Story1.experiment(args, '../outputs/model_1/')
     
 if __name__ == '__main__':
     main()
