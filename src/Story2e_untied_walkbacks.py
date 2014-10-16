@@ -266,7 +266,9 @@ def experiment(state, outdir_base='./'):
             hiddens_output[i] = H_chain[state.batch_size - 1][i]
             
     # cost for the gradient
-    COST = T.sum(costs)
+    # care more about the immediate next predictions rather than the future - use exponential decay
+#     COST = T.sum(costs)
+    COST = T.sum([T.exp(-i/T.ceil(walkbacks/3))*costs[i] for i in range(len(costs))])
     
     params      =   weights_list + recurrent_weights_list + bias_list
     print "params:",params
