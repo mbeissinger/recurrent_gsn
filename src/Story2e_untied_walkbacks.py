@@ -357,7 +357,7 @@ def experiment(state, outdir_base='./'):
 
     # ONE update
     print "Performing one walkback in network state sampling."
-    _ = update_layers(network_state_output, visible_pX_chain, [], [X_sample], 0, noisy=True)
+    _ = update_layers(network_state_output, visible_pX_chain, [X_sample], 0, noisy=True)
 
     if layers == 1: 
         f_sample_simple = theano.function(inputs = [X_sample], outputs = visible_pX_chain[-1])
