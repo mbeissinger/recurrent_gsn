@@ -150,7 +150,7 @@ def experiment(state, outdir_base='./'):
         update_odd_layers(hiddens, noisy)
         print 'even layer updates'
         update_even_layers(hiddens, p_X_chain, Xs, sequence_idx, noisy, sampling)
-        # choose the correct output for hidden_outputs based on batch_size and walkbacks
+        # choose the correct output for hidden_outputs based on batch_size and walkbacks (this is due to an issue with batches, see note in run_story2.py)
         if state.batch_size <= len(Xs) and sequence_idx==state.batch_size-1:
             return hiddens
         else:
@@ -256,7 +256,7 @@ def experiment(state, outdir_base='./'):
     hiddens_output[0] = salt_and_pepper(hiddens_output[0], state.input_salt_and_pepper)
     predicted_X_chain, H_chain = build_graph(hiddens_output, Xs, noisy=True, sampling=state.input_sampling)
     
-    # choose the correct output for hiddens_output
+    # choose the correct output for hiddens_output (this is due to the issue with batches - see note in run_story2.py)
     h_empty = [True if h is None else False for h in H_chain]
     if False in h_empty: # if there was a set of hiddens output from the batch_size-1 element of the chain
         hiddens_output = H_chain[h_empty.index(False)] # extract out the not-None element from the list if it exists
@@ -269,10 +269,6 @@ def experiment(state, outdir_base='./'):
     costs = [T.mean(T.nnet.binary_crossentropy(predicted_X_chain[i], Xs[i+1])) for i in range(len(predicted_X_chain))]
     # outputs for the functions
     show_COSTs = [costs[0]] + [costs[-1]]
-#     # choose the correct output from H_chain for hidden_outputs based on batch_size and walkbacks
-#     if state.batch_size <= len(Xs):
-#         for i in range(len(hiddens_output)):
-#             hiddens_output[i] = H_chain[state.batch_size - 1][i]
             
     # cost for the gradient
     # care more about the immediate next predictions rather than the future - use exponential decay
