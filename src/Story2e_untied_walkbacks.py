@@ -145,13 +145,17 @@ def experiment(state, outdir_base='./'):
     visible_activation = T.nnet.sigmoid 
   
         
-    def update_layers(hiddens, p_X_chain, H_chain, Xs, sequence_idx, noisy = True):
+    def update_layers(hiddens, p_X_chain, Xs, sequence_idx, noisy = True, sampling=True):
         print 'odd layer updates'
         update_odd_layers(hiddens, noisy)
         print 'even layer updates'
-        update_even_layers(hiddens, p_X_chain, Xs, sequence_idx, noisy)
-        # record the entire hidden state
-        H_chain.append(hiddens)
+        update_even_layers(hiddens, p_X_chain, Xs, sequence_idx, noisy, sampling)
+        # choose the correct output for hidden_outputs based on batch_size and walkbacks
+        if state.batch_size <= len(Xs) and sequence_idx==state.batch_size-1:
+            return hiddens
+        else:
+            return None
+#         H_chain.append(hiddens)
         print 'done full update.'
         print
         
@@ -164,10 +168,10 @@ def experiment(state, outdir_base='./'):
     
     # Even layer update
     # p_X_chain is given to append the p(X|...) at each full update (one update = odd update + even update)
-    def update_even_layers(hiddens, p_X_chain, Xs, sequence_idx, noisy):
+    def update_even_layers(hiddens, p_X_chain, Xs, sequence_idx, noisy, sampling):
         for i in range(0, len(hiddens), 2):
             print 'updating layer',i
-            simple_update_layer(hiddens, p_X_chain, Xs, sequence_idx, i, add_noise = noisy)
+            simple_update_layer(hiddens, p_X_chain, Xs, sequence_idx, i, add_noise = noisy, input_sampling=sampling)
     
     # The layer update function
     # hiddens   :   list containing the symbolic theano variables [visible, hidden1, hidden2, ...]
@@ -176,7 +180,7 @@ def experiment(state, outdir_base='./'):
     #               update_layer will append to this list
     # add_noise     : pre and post activation gaussian noise
     
-    def simple_update_layer(hiddens, p_X_chain, Xs, sequence_idx, i, add_noise=True):             
+    def simple_update_layer(hiddens, p_X_chain, Xs, sequence_idx, i, add_noise=True, input_sampling=True):             
         # Compute the dot product, whatever layer
         # If the visible layer X
         if i == 0:
@@ -224,7 +228,7 @@ def experiment(state, outdir_base='./'):
             if sequence_idx+1 < len(Xs):
                 next_input = Xs[sequence_idx+1]
                 # sample from p(X|...) - SAMPLING NEEDS TO BE CORRECT FOR INPUT TYPES I.E. FOR BINARY MNIST SAMPLING IS BINOMIAL. real-valued inputs should be gaussian
-                if state.input_sampling:
+                if input_sampling:
                     print 'Sampling from input'
                     sampled     =   MRG.binomial(p = next_input, size=next_input.shape, dtype='float32')
                 else:
@@ -233,24 +237,29 @@ def experiment(state, outdir_base='./'):
                 # add noise
                 sampled     =   salt_and_pepper(sampled, state.input_salt_and_pepper)
                 
-                # DOES INPUT SAMPLING MAKE SENSE FOR SEQUENTIAL?
+                # DOES INPUT SAMPLING MAKE SENSE FOR SEQUENTIAL? - not really since it was used in walkbacks which was gibbs.
                 # set input layer
                 hiddens[i]  =   sampled
                 
-    def build_graph(hiddens, Xs, noisy=True):
+    def build_graph(hiddens, Xs, noisy=True, sampling=True):
         predicted_X_chain = []
-        H_chain           = []
+        H_chain = []
         print "Building the graph :", walkbacks,"updates"
         for i in range(walkbacks):
             print "Forward Prediction {!s}/{!s}".format(i+1,walkbacks)
-            update_layers(hiddens, predicted_X_chain, H_chain, Xs, i, noisy)
+            H_chain.append(update_layers(hiddens, predicted_X_chain, Xs, i, noisy, sampling))
         return predicted_X_chain, H_chain
     
     
-    # Build the main training graph
-    ''' Corrupt X '''
+    '''Build the main training graph'''
+    # corrupt x
     hiddens_output[0] = salt_and_pepper(hiddens_output[0], state.input_salt_and_pepper)
-    predicted_X_chain, H_chain = build_graph(hiddens_output, Xs, noisy=True)
+    predicted_X_chain, H_chain = build_graph(hiddens_output, Xs, noisy=True, sampling=state.input_sampling)
+    
+    # choose the correct output for hiddens_output
+    h_empty = [True if h is None else False for h in H_chain]
+    if False in h_empty: # if there was a set of hiddens output from the batch_size-1 element of the chain
+        hiddens_output = H_chain[h_empty.index(False)] # extract out the not-None element from the list if it exists
         
 
     # COST AND GRADIENTS    
@@ -260,10 +269,10 @@ def experiment(state, outdir_base='./'):
     costs = [T.mean(T.nnet.binary_crossentropy(predicted_X_chain[i], Xs[i+1])) for i in range(len(predicted_X_chain))]
     # outputs for the functions
     show_COSTs = [costs[0]] + [costs[-1]]
-    # choose the correct output from H_chain for hidden_outputs based on batch_size and walkbacks
-    if state.batch_size <= len(Xs):
-        for i in range(len(hiddens_output)):
-            hiddens_output[i] = H_chain[state.batch_size - 1][i]
+#     # choose the correct output from H_chain for hidden_outputs based on batch_size and walkbacks
+#     if state.batch_size <= len(Xs):
+#         for i in range(len(hiddens_output)):
+#             hiddens_output[i] = H_chain[state.batch_size - 1][i]
             
     # cost for the gradient
     # care more about the immediate next predictions rather than the future - use exponential decay
@@ -286,13 +295,13 @@ def experiment(state, outdir_base='./'):
     
     
     #odd layer h's not used from input -> calculated directly from even layers (starting with h_0) since the odd layers are updated first.
-    f_cost          =   theano.function(inputs  = hiddens_input + Xs, 
-                                        outputs = hiddens_output + show_COSTs, 
+    f_cost          =   theano.function(inputs  = theano.In(hiddens_input + Xs, borrow=True), 
+                                        outputs = theano.Out(hiddens_output + show_COSTs, borrow=True), 
                                         on_unused_input='warn')
 
-    f_learn         =   theano.function(inputs  = hiddens_input + Xs,
+    f_learn         =   theano.function(inputs  = theano.In(hiddens_input + Xs, borrow=True),
                                         updates = updates,
-                                        outputs = hiddens_output + show_COSTs,
+                                        outputs = theano.Out(hiddens_output + show_COSTs, borrow=True),
                                         on_unused_input='warn')
     
     
@@ -322,9 +331,13 @@ def experiment(state, outdir_base='./'):
     p_X_chain_R, H_chain_R = build_graph(hiddens_R_output, Xs_recon, noisy=False)
     
     # choose the correct output from H_chain for hidden_outputs based on batch_size and walkbacks
-    if state.batch_size <= len(Xs_recon):
-        for i in range(len(hiddens_R_output)):
-            hiddens_R_output[i] = H_chain_R[state.batch_size - 1][i]
+    # choose the correct output for hiddens_output
+    h_empty = [True if h is None else False for h in H_chain_R]
+    if False in h_empty: # if there was a set of hiddens output from the batch_size-1 element of the chain
+        hiddens_R_output = H_chain_R[h_empty.index(False)] # extract out the not-None element from the list if it exists
+#     if state.batch_size <= len(Xs_recon):
+#         for i in range(len(hiddens_R_output)):
+#             hiddens_R_output[i] = H_chain_R[state.batch_size - 1][i]
  
     f_recon = theano.function(inputs = hiddens_R_input+Xs_recon, 
                               outputs = hiddens_R_output+[p_X_chain_R[0] ,p_X_chain_R[-1]], 
@@ -348,7 +361,7 @@ def experiment(state, outdir_base='./'):
 
     # ONE update
     print "Performing one walkback in network state sampling."
-    update_layers(network_state_output, visible_pX_chain, [], [X_sample], 0, noisy=True)
+    _ = update_layers(network_state_output, visible_pX_chain, [], [X_sample], 0, noisy=True)
 
     if layers == 1: 
         f_sample_simple = theano.function(inputs = [X_sample], outputs = visible_pX_chain[-1])
