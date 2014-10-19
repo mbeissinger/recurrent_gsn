@@ -295,13 +295,13 @@ def experiment(state, outdir_base='./'):
     
     
     #odd layer h's not used from input -> calculated directly from even layers (starting with h_0) since the odd layers are updated first.
-    f_cost          =   theano.function(inputs  = theano.In(hiddens_input + Xs, borrow=True), 
-                                        outputs = theano.Out(hiddens_output + show_COSTs, borrow=True), 
+    f_cost          =   theano.function(inputs  = hiddens_input + Xs, 
+                                        outputs = hiddens_output + show_COSTs, 
                                         on_unused_input='warn')
 
-    f_learn         =   theano.function(inputs  = theano.In(hiddens_input + Xs, borrow=True),
+    f_learn         =   theano.function(inputs  = hiddens_input + Xs,
                                         updates = updates,
-                                        outputs = theano.Out(hiddens_output + show_COSTs, borrow=True),
+                                        outputs = hiddens_output + show_COSTs,
                                         on_unused_input='warn')
     
     
