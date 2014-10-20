@@ -539,10 +539,11 @@ def experiment(state, outdir_base='./'):
             
             #train
             #init hiddens
-            hiddens = [(T.zeros_like(train_X[:batch_size]).eval())]
-            for i in range(len(weights_list)):
-                # init with zeros
-                hiddens.append(T.zeros_like(T.dot(hiddens[i], weights_list[i])).eval())
+#             hiddens = [(T.zeros_like(train_X[:batch_size]).eval())]
+#             for i in range(len(weights_list)):
+#                 # init with zeros
+#                 hiddens.append(T.zeros_like(T.dot(hiddens[i], weights_list[i])).eval())
+            hiddens = [T.zeros((batch_size,layer_size)).eval() for layer_size in layer_sizes]
             train_cost = []
             train_cost_post = []
             for i in range(len(train_X.get_value(borrow=True)) / batch_size):
@@ -572,10 +573,7 @@ def experiment(state, outdir_base='./'):
     
             #valid
             #init hiddens
-            hiddens[0] = (T.zeros_like(valid_X[:batch_size]).eval())
-            for i in range(len(weights_list)):
-                # init with zeros
-                hiddens[i+1] = (T.zeros_like(T.dot(hiddens[i], weights_list[i])).eval())
+            hiddens = [T.zeros((batch_size,layer_size)).eval() for layer_size in layer_sizes]
             valid_cost = []
             valid_cost_post = []
             for i in range(len(valid_X.get_value(borrow=True)) / batch_size):
@@ -605,10 +603,7 @@ def experiment(state, outdir_base='./'):
     
             #test
             #init hiddens
-            hiddens[0] = (T.zeros_like(test_X[:batch_size]).eval())
-            for i in range(len(weights_list)):
-                # init with zeros
-                hiddens[i+1] = (T.zeros_like(T.dot(hiddens[i], weights_list[i])).eval())
+            hiddens = [T.zeros((batch_size,layer_size)).eval() for layer_size in layer_sizes]
             test_cost = []
             test_cost_post = []
             for i in range(len(test_X.get_value(borrow=True)) / batch_size):
@@ -676,10 +671,7 @@ def experiment(state, outdir_base='./'):
                 reconstructed_prediction = []
                 reconstructed_prediction_end = []
                 #init reconstruction hiddens
-                hiddens = [(T.zeros_like(test_X[0]).eval())]
-                for i in range(len(weights_list)):
-                    # init with zeros
-                    hiddens.append(T.zeros_like(T.dot(hiddens[i], weights_list[i])).eval())
+                hiddens = [T.zeros((batch_size,layer_size)).eval() for layer_size in layer_sizes]
                 for num in noisy_nums:
                     hiddens[0] = num
                     _ins = hiddens + [num]
