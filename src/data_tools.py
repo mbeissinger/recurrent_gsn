@@ -299,9 +299,9 @@ def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, data
         valid_ordered_indices = dataset1_indices(valid_Y.get_value(borrow=True))
         test_ordered_indices = dataset1_indices(test_Y.get_value(borrow=True))
     elif dataset == 2:
-        train_ordered_indices = dataset2b_indices(train_Y.get_value(borrow=True))
-        valid_ordered_indices = dataset2b_indices(valid_Y.get_value(borrow=True))
-        test_ordered_indices = dataset2b_indices(test_Y.get_value(borrow=True))
+        train_ordered_indices = dataset2a_indices(train_Y.get_value(borrow=True))
+        valid_ordered_indices = dataset2a_indices(valid_Y.get_value(borrow=True))
+        test_ordered_indices = dataset2a_indices(test_Y.get_value(borrow=True))
     elif dataset == 3:
         train_ordered_indices = dataset3_indices(train_Y.get_value(borrow=True))
         valid_ordered_indices = dataset3_indices(valid_Y.get_value(borrow=True))
@@ -320,5 +320,20 @@ def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, data
     
     test_X.set_value(test_X.get_value(borrow=True)[test_ordered_indices])
     test_Y.set_value(test_Y.get_value(borrow=True)[test_ordered_indices])
+    
+    
+    ###############################################################################################################
+    # For testing one-hot encoding to see if it can learn sequences without having to worry about nonlinear input #
+    ###############################################################################################################
+    #construct the numpy matrix of representations from y
+    train = numpy.array([[1 if i==y else 0 for i in range(10)] for y in train_Y.get_value(borrow=True)],dtype="float32")
+    train_X.set_value(train)
+    valid = numpy.array([[1 if i==y else 0 for i in range(10)] for y in valid_Y.get_value(borrow=True)],dtype="float32")
+    valid_X.set_value(valid)
+    test = numpy.array([[1 if i==y else 0 for i in range(10)] for y in test_Y.get_value(borrow=True)],dtype="float32")
+    test_X.set_value(test)
+    
+    
+    
     
     

@@ -99,6 +99,8 @@ def experiment(state, outdir_base='./'):
         print 'test set size:',len(test_Y.eval())
         print 'Sequencing done.'
         print
+        
+    
     
     N_input =   train_X.eval().shape[1]
     root_N_input = numpy.sqrt(N_input)  
@@ -242,8 +244,8 @@ def experiment(state, outdir_base='./'):
                 hiddens[i]  =   sampled
                 
     def build_graph(hiddens, Xs, noisy=True, sampling=True):
-        predicted_X_chain = []
-        H_chain = []
+        predicted_X_chain = [] # the visible layer that gets generated at each update_layers run
+        H_chain = [] # either None or hiddens that gets generated at each update_layers run, this is used to determine what the correct hiddens_output should be
         print "Building the graph :", walkbacks,"updates"
         for i in range(walkbacks):
             print "Forward Prediction {!s}/{!s}".format(i+1,walkbacks)
@@ -254,12 +256,16 @@ def experiment(state, outdir_base='./'):
     '''Build the main training graph'''
     # corrupt x
     hiddens_output[0] = salt_and_pepper(hiddens_output[0], state.input_salt_and_pepper)
-    predicted_X_chain, H_chain = build_graph(hiddens_output, Xs, noisy=True, sampling=state.input_sampling)
+    # build the computation graph and the generated visible layers and appropriate hidden_output
+#     predicted_X_chain, H_chain = build_graph(hiddens_output, Xs, noisy=True, sampling=state.input_sampling)
+    predicted_X_chain, H_chain = build_graph(hiddens_output, Xs, noisy=False, sampling=state.input_sampling) #testing one-hot without noise
+
     
     # choose the correct output for hiddens_output (this is due to the issue with batches - see note in run_story2.py)
+    # this finds the not-None element of H_chain and uses that for hiddens_output
     h_empty = [True if h is None else False for h in H_chain]
-    if False in h_empty: # if there was a set of hiddens output from the batch_size-1 element of the chain
-        hiddens_output = H_chain[h_empty.index(False)] # extract out the not-None element from the list if it exists
+    if False in h_empty: # if there was a not-None element
+        hiddens_output = H_chain[h_empty.index(False)] # set hiddens_output to the appropriate element from H_chain
         
 
     # COST AND GRADIENTS    
@@ -309,14 +315,10 @@ def experiment(state, outdir_base='./'):
     #############
     import random as R
     R.seed(1)
-    # Shuffle the dataset and grabGrab 100 random indices from test_X
-    random_idx      =   numpy.array(R.sample(range(len(test_X.get_value())), 100))
-    numbers         =   test_X.get_value()[random_idx]
-    
-    f_noise         =   theano.function(inputs = [X], outputs = salt_and_pepper(X, state.input_salt_and_pepper))
-    noisy_numbers   =   f_noise(test_X.get_value()[random_idx])
+    # a function to add salt and pepper noise
+    f_noise = theano.function(inputs = [X], outputs = salt_and_pepper(X, state.input_salt_and_pepper))
 
-    # Recompile the graph without noise for reconstruction function
+    # Recompile the graph without noise for reconstruction function - the input x_recon is already going to be noisy, and this is to test on a simulated 'real' input.
     X_recon = T.fvector("X_recon")
     Xs_recon = [T.fvector("Xs_recon")]
     hiddens_R_input = [X_recon] + [T.fvector(name="h_recon_"+str(i+1)) for i in range(layers)]
@@ -671,7 +673,7 @@ def experiment(state, outdir_base='./'):
                 reconstructed_prediction = []
                 reconstructed_prediction_end = []
                 #init reconstruction hiddens
-                hiddens = [T.zeros((batch_size,layer_size)).eval() for layer_size in layer_sizes]
+                hiddens = [T.zeros(layer_size).eval() for layer_size in layer_sizes]
                 for num in noisy_nums:
                     hiddens[0] = num
                     _ins = hiddens + [num]
@@ -680,19 +682,22 @@ def experiment(state, outdir_base='./'):
                     [reconstructed_1,reconstructed_n] = _outs[len(hiddens):]
                     reconstructed_prediction.append(reconstructed_1)
                     reconstructed_prediction_end.append(reconstructed_n)
-                
-                # Concatenate stuff
-                stacked = numpy.vstack([numpy.vstack([nums[i*10 : (i+1)*10], noisy_nums[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10], reconstructed_prediction_end[i*10 : (i+1)*10]]) for i in range(10)])
-            
-                numbers_reconstruction   =   PIL.Image.fromarray(tile_raster_images(stacked, (root_N_input,root_N_input), (10,40)))
-                #epoch_number    =   reduce(lambda x,y : x + y, ['_'] * (4-len(str(counter)))) + str(counter)
-                numbers_reconstruction.save(outdir+'gsn_number_reconstruction_iteration_'+str(iteration)+'_epoch_'+str(counter)+'.png')
-        
-                #sample_numbers(counter, 'seven')
-                plot_samples(counter, iteration)
-        
-                #save params
-                save_params('gsn', counter, params, iteration)
+                    
+                for i in range(len(nums)):
+                    print nums[i].tolist(), "->", reconstructed_prediction[i].tolist(), "->", reconstructed_prediction_end[i].tolist()
+                    with open(logfile,'a') as f:
+                        f.write("{0!s} -> {1!s} -> {2!s}".format(nums[i].tolist(),[trunc(n) for n in reconstructed_prediction[i].tolist()],[trunc(n) for n in reconstructed_prediction_end[i].tolist()]))
+                                    
+#                 # Concatenate stuff
+#                 stacked = numpy.vstack([numpy.vstack([nums[i*10 : (i+1)*10], noisy_nums[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10], reconstructed_prediction_end[i*10 : (i+1)*10]]) for i in range(10)])
+#                 numbers_reconstruction = PIL.Image.fromarray(tile_raster_images(stacked, (root_N_input,root_N_input), (10,40)))
+#                 numbers_reconstruction.save(outdir+'gsn_number_reconstruction_iteration_'+str(iteration)+'_epoch_'+str(counter)+'.png')
+#         
+#                 #sample_numbers(counter, 'seven')
+#                 plot_samples(counter, iteration)
+#         
+#                 #save params
+#                 save_params('gsn', counter, params, iteration)
          
             # ANNEAL!
             new_lr = learning_rate.get_value() * annealing
