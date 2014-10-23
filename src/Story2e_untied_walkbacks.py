@@ -257,8 +257,8 @@ def experiment(state, outdir_base='./'):
     # corrupt x
     hiddens_output[0] = salt_and_pepper(hiddens_output[0], state.input_salt_and_pepper)
     # build the computation graph and the generated visible layers and appropriate hidden_output
-#     predicted_X_chain, H_chain = build_graph(hiddens_output, Xs, noisy=True, sampling=state.input_sampling)
-    predicted_X_chain, H_chain = build_graph(hiddens_output, Xs, noisy=False, sampling=state.input_sampling) #testing one-hot without noise
+    predicted_X_chain, H_chain = build_graph(hiddens_output, Xs, noisy=True, sampling=state.input_sampling)
+#     predicted_X_chain, H_chain = build_graph(hiddens_output, Xs, noisy=False, sampling=state.input_sampling) #testing one-hot without noise
 
     
     # choose the correct output for hiddens_output (this is due to the issue with batches - see note in run_story2.py)
@@ -682,11 +682,15 @@ def experiment(state, outdir_base='./'):
                     [reconstructed_1,reconstructed_n] = _outs[len(hiddens):]
                     reconstructed_prediction.append(reconstructed_1)
                     reconstructed_prediction_end.append(reconstructed_n)
-                    
+                
+                with open(logfile, 'a') as f:
+                    f.write("\n")
                 for i in range(len(nums)):
-                    print nums[i].tolist(), "->", reconstructed_prediction[i].tolist(), "->", reconstructed_prediction_end[i].tolist()
+                    print nums[i].tolist(), "->", reconstructed_prediction[i].tolist()
                     with open(logfile,'a') as f:
-                        f.write("{0!s} -> {1!s} -> {2!s}".format(nums[i].tolist(),[trunc(n) for n in reconstructed_prediction[i].tolist()],[trunc(n) for n in reconstructed_prediction_end[i].tolist()]))
+                        f.write("{0!s} -> {1!s}\n".format(nums[i].tolist(),[trunc(n) if n>0.0001 else trunc(0.00000000000000000) for n in reconstructed_prediction[i].tolist()]))
+                with open(logfile, 'a') as f:
+                    f.write("\n")
                                     
 #                 # Concatenate stuff
 #                 stacked = numpy.vstack([numpy.vstack([nums[i*10 : (i+1)*10], noisy_nums[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10], reconstructed_prediction_end[i*10 : (i+1)*10]]) for i in range(10)])
