@@ -259,8 +259,8 @@ def experiment(state, outdir_base='./'):
     # corrupt x
     hiddens_output[0] = salt_and_pepper(hiddens_output[0], state.input_salt_and_pepper)
     # build the computation graph and the generated visible layers and appropriate hidden_output
-#     predicted_X_chain, H_chain = build_graph(hiddens_output, Xs, noisy=True, sampling=state.input_sampling)
-    predicted_X_chain, H_chain = build_graph(hiddens_output, Xs, noisy=False, sampling=state.input_sampling) #testing one-hot without noise
+    predicted_X_chain, H_chain = build_graph(hiddens_output, Xs, noisy=True, sampling=state.input_sampling)
+#     predicted_X_chain, H_chain = build_graph(hiddens_output, Xs, noisy=False, sampling=state.input_sampling) #testing one-hot without noise
 
     
     # choose the correct output for hiddens_output (this is due to the issue with batches - see note in run_story2.py)
