@@ -159,7 +159,6 @@ def experiment(state, outdir_base='./'):
             return hiddens
         else:
             return None
-#         H_chain.append(hiddens)
         print 'done full update.'
         print
         
@@ -678,6 +677,9 @@ def experiment(state, outdir_base='./'):
                 hiddens = [T.zeros(layer_size).eval() for layer_size in layer_sizes]
                 for num in noisy_nums:
                     hiddens[0] = num
+                    for i in range(len(hiddens)):
+                        if len(hiddens[i].shape) == 2 and hiddens[i].shape[0] == 1:
+                            hiddens[i] = hiddens[i][0]
                     _ins = hiddens + [num]
                     _outs = f_recon(*_ins)
                     hiddens = _outs[:len(hiddens)]
