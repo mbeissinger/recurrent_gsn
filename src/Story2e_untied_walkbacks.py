@@ -690,6 +690,8 @@ def experiment(state, outdir_base='./'):
                 with open(logfile, 'a') as f:
                     f.write("\n")
                 for i in range(len(nums)):
+                    if len(reconstructed_prediction[i].shape) == 2 and reconstructed_prediction[i].shape[0] == 1:
+                            reconstructed_prediction[i] = reconstructed_prediction[i][0]
                     print nums[i].tolist(), "->", reconstructed_prediction[i].tolist()
                     with open(logfile,'a') as f:
                         f.write("{0!s} -> {1!s}\n".format(nums[i].tolist(),[trunc(n) if n>0.0001 else trunc(0.00000000000000000) for n in reconstructed_prediction[i].tolist()]))
