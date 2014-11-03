@@ -12,6 +12,7 @@ from utils import *
 
 def experiment(state, outdir_base='./'):
     rng.seed(1) #seed the numpy random generator  
+    # Initialize the output directories and files
     data.mkdir_p(outdir_base)
     outdir = outdir_base + "/" + state.dataset + "/"
     data.mkdir_p(outdir)
@@ -27,24 +28,7 @@ def experiment(state, outdir_base='./'):
     recurrent_train_convergence = outdir+"recurrent_train_convergence.csv"
     recurrent_valid_convergence = outdir+"recurrent_valid_convergence.csv"
     recurrent_test_convergence = outdir+"recurrent_test_convergence.csv"
-    with open (train_convergence_pre, 'w') as f:
-        f.write("")
-    with open (train_convergence_post, 'w') as f:
-        f.write("")
-    with open (valid_convergence_pre, 'w') as f:
-        f.write("")
-    with open (valid_convergence_post, 'w') as f:
-        f.write("")
-    with open (test_convergence_pre, 'w') as f:
-        f.write("")
-    with open (test_convergence_post, 'w') as f:
-        f.write("")
-    with open (recurrent_train_convergence, 'w') as f:
-        f.write("")
-    with open (recurrent_valid_convergence, 'w') as f:
-        f.write("")
-    with open (recurrent_test_convergence, 'w') as f:
-        f.write("")
+
     
     print
     print "----------MODEL 1, {0!s}--------------".format(state.dataset)

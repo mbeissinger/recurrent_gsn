@@ -15,6 +15,7 @@ import warnings
 
 def experiment(state, outdir_base='./'):
     rng.seed(1) #seed the numpy random generator  
+    # Initialize output directory and files
     data.mkdir_p(outdir_base)
     outdir = outdir_base + "/" + state.dataset + "/"
     data.mkdir_p(outdir)
@@ -27,18 +28,6 @@ def experiment(state, outdir_base='./'):
     valid_convergence_post = outdir+"valid_convergence_post.csv"
     test_convergence_pre = outdir+"test_convergence_pre.csv"
     test_convergence_post = outdir+"test_convergence_post.csv"
-    with open (train_convergence_pre, 'w') as f:
-        f.write("")
-    with open (train_convergence_post, 'w') as f:
-        f.write("")
-    with open (valid_convergence_pre, 'w') as f:
-        f.write("")
-    with open (valid_convergence_post, 'w') as f:
-        f.write("")
-    with open (test_convergence_pre, 'w') as f:
-        f.write("")
-    with open (test_convergence_post, 'w') as f:
-        f.write("")
     
     print
     print "----------MODEL 2, {0!s}--------------".format(state.dataset)
