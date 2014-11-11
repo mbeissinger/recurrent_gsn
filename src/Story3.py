@@ -214,10 +214,11 @@ def experiment(state, outdir_base='./'):
             print 'Hidden units {} activation for layer'.format(state.act), i
             hiddens[i]  =   hidden_activation(hiddens[i])
     
-        # post activation noise            
-        if i != 0 and add_noise:
-            print 'Adding post-activation gaussian noise for layer', i
-            hiddens[i]  =   add_gaussian_noise(hiddens[i], state.hidden_add_noise_sigma)
+        # post activation noise
+        # why is there post activation noise? Because there is already pre-activation noise, this just doubles the amount of noise between each activation of the hiddens.           
+#         if i != 0 and add_noise:
+#             print 'Adding post-activation gaussian noise for layer', i
+#             hiddens[i]  =   add_gaussian_noise(hiddens[i], state.hidden_add_noise_sigma)
     
         # build the reconstruction chain if updating the visible layer X
         if i == 0:
@@ -288,7 +289,7 @@ def experiment(state, outdir_base='./'):
             print '>>NO noise in first hidden layer'
             add_noise   =   False
     
-        # pre activation noise            
+        # pre activation noise
         if i != 0 and add_noise:
             print 'Adding pre-activation gaussian noise for layer', i
             hiddens[i]  =   add_gaussian_noise(hiddens[i], state.hidden_add_noise_sigma)
@@ -297,10 +298,11 @@ def experiment(state, outdir_base='./'):
         print 'Recurrent hidden units {} activation for layer'.format(state.act), i
         hiddens[i]  =   hidden_activation(hiddens[i])
     
-        # post activation noise            
-        if i != 0 and add_noise:
-            print 'Adding post-activation gaussian noise for layer', i
-            hiddens[i]  =   add_gaussian_noise(hiddens[i], state.hidden_add_noise_sigma)
+        # post activation noise
+        # why is there post activation noise? Because there is already pre-activation noise, this just doubles the amount of noise between each activation of the hiddens.    
+#         if i != 0 and add_noise:
+#             print 'Adding post-activation gaussian noise for layer', i
+#             hiddens[i]  =   add_gaussian_noise(hiddens[i], state.hidden_add_noise_sigma)
     
         # build the reconstruction chain if updating the visible layer X
         if i == 0:

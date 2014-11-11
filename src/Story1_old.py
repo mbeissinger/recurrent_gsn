@@ -31,7 +31,7 @@ def get_shared_bias(n, name="b", offset = 0):
     val = theano.shared(value = val, name = name)
     return val
 
-def get_shared_recurrent_weights(network_size, name="V"):
+def get_shared_regression_weights(network_size, name="V"):
     val = numpy.identity(network_size)
     val = cast32(val)
     val = theano.shared(value = val, name = name)
@@ -169,7 +169,7 @@ def experiment(state, outdir='./'):
     weights_list    =   [get_shared_weights(layer_sizes[i], layer_sizes[i+1], name="W_{0!s}_{1!s}".format(i,i+1)) for i in range(layers)] # initialize each layer to uniform sample from sqrt(6. / (n_in + n_out))
     bias_list       =   [get_shared_bias(layer_sizes[i], name='b_'+str(i)) for i in range(layers + 1)] # initialize each layer to 0's.
     # parameters for recurrent part
-    recurrent_weights_list    =   [get_shared_recurrent_weights(state.hidden_size, name="V_"+str(i+1)) for i in range(layers)] # initialize to identity matrix the size of hidden layer.
+    recurrent_weights_list    =   [get_shared_regression_weights(state.hidden_size, name="V_"+str(i+1)) for i in range(layers)] # initialize to identity matrix the size of hidden layer.
     recurrent_bias_list            =   [get_shared_bias(state.hidden_size, name='vb_'+str(i+1)) for i in range(layers)] # initialize to 0's.
 
     if state.test_model:

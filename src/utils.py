@@ -19,10 +19,8 @@ sigmoid     = lambda x : cast32(1. / (1 + numpy.exp(-x)))
 
 
 def get_shared_weights(n_in, n_out, interval=None, name="W"):
-    #val = numpy.random.normal(0, sigma_sqr, size=(n_in, n_out))
     if interval is None:
         interval = numpy.sqrt(6. / (n_in + n_out))
-                              
     val = numpy.random.uniform(-interval, interval, size=(n_in, n_out))
     val = cast32(val)
     val = theano.shared(value = val, name = name)
@@ -34,15 +32,18 @@ def get_shared_bias(n, name="b", offset = 0):
     val = theano.shared(value = val, name = name)
     return val
 
-def get_shared_hiddens(in_size, hidden_size, batch_size, i, name):
+def get_shared_hiddens(in_size, hidden_size, batch_size, i, name="H"):
     if i==0:
         val = numpy.zeros((batch_size,in_size))
     else:
         val = numpy.zeros((batch_size,hidden_size))
     return theano.shared(value=val,name=name)
 
-def get_shared_recurrent_weights(network_size, name="V"):
-    val = numpy.identity(network_size)
+def get_shared_regression_weights(hidden_size, name="V"):
+#     val = numpy.identity(hidden_size)
+    interval = numpy.sqrt(6. / (hidden_size + hidden_size))
+    val = numpy.random.uniform(-interval, interval, size=(hidden_size, hidden_size))
+    
     val = cast32(val)
     val = theano.shared(value = val, name = name)
     return val

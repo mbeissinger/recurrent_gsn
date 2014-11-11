@@ -272,7 +272,7 @@ def dataset3_indices(labels, classes=10):
     return sequence
 
 
-def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset=1, rng=None):
+def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset=1, rng=None, one_hot=False):
     if rng is None:
         rng = numpy.random
         rng.seed(1)
@@ -293,7 +293,7 @@ def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, data
     test_X.set_value(test_X.get_value(borrow=True)[test_indices])
     test_Y.set_value(test_Y.get_value(borrow=True)[test_indices])
     
-    # Find the order of MNIST data going from 0-9 repeating if the first dataset
+    # Find the order of MNIST data going from 0-9 repeating if the first dataset        
     if dataset == 1:
         train_ordered_indices = dataset1_indices(train_Y.get_value(borrow=True))
         valid_ordered_indices = dataset1_indices(valid_Y.get_value(borrow=True))
@@ -325,13 +325,14 @@ def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, data
     ###############################################################################################################
     # For testing one-hot encoding to see if it can learn sequences without having to worry about nonlinear input #
     ###############################################################################################################
-    #construct the numpy matrix of representations from y
-    train = numpy.array([[1 if i==y else 0 for i in range(10)] for y in train_Y.get_value(borrow=True)],dtype="float32")
-    train_X.set_value(train)
-    valid = numpy.array([[1 if i==y else 0 for i in range(10)] for y in valid_Y.get_value(borrow=True)],dtype="float32")
-    valid_X.set_value(valid)
-    test = numpy.array([[1 if i==y else 0 for i in range(10)] for y in test_Y.get_value(borrow=True)],dtype="float32")
-    test_X.set_value(test)
+    if one_hot:
+        #construct the numpy matrix of representations from y
+        train = numpy.array([[1 if i==y else 0 for i in range(10)] for y in train_Y.get_value(borrow=True)],dtype="float32")
+        train_X.set_value(train)
+        valid = numpy.array([[1 if i==y else 0 for i in range(10)] for y in valid_Y.get_value(borrow=True)],dtype="float32")
+        valid_X.set_value(valid)
+        test = numpy.array([[1 if i==y else 0 for i in range(10)] for y in test_Y.get_value(borrow=True)],dtype="float32")
+        test_X.set_value(test)
     
     
     
