@@ -629,7 +629,7 @@ def experiment(state, outdir_base='./'):
                 for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                     xs = [train_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                     xs, _ = fix_input_size(xs)
-                    costs = gsn_f_learn(xs)
+                    costs = gsn_f_learn(*xs)
                     train_costs.append(costs)
                 
             train_costs = numpy.mean(train_costs, 0) 
@@ -652,7 +652,7 @@ def experiment(state, outdir_base='./'):
                 for i in range(len(valid_X.get_value(borrow=True)) / batch_size):
                     xs = [valid_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                     xs, _ = fix_input_size(xs)
-                    costs = gsn_f_cost(xs)
+                    costs = gsn_f_cost(*xs)
                     valid_costs.append(costs)
                     
             valid_costs = numpy.mean(valid_costs, 0) 
@@ -675,7 +675,7 @@ def experiment(state, outdir_base='./'):
                 for i in range(len(test_X.get_value(borrow=True)) / batch_size):
                     xs = [test_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                     xs, _ = fix_input_size(xs)
-                    costs = gsn_f_cost(xs)
+                    costs = gsn_f_cost(*xs)
                     test_costs.append(costs)
                 
             test_costs = numpy.mean(test_costs, 0) 
@@ -819,7 +819,7 @@ def experiment(state, outdir_base='./'):
             for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                 xs = [train_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                 xs, _ = fix_input_size(xs)
-                costs = regression_f_learn(xs)
+                costs = regression_f_learn(*xs)
                 train_costs.append(costs)
                 
             train_costs = numpy.mean(train_costs, 0) 
@@ -837,7 +837,7 @@ def experiment(state, outdir_base='./'):
             for i in range(len(valid_X.get_value(borrow=True)) / batch_size):
                 xs = [valid_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                 xs, _ = fix_input_size(xs)
-                costs = regression_f_cost(xs)
+                costs = regression_f_cost(*xs)
                 valid_costs.append(costs)
                     
             valid_costs = numpy.mean(valid_costs, 0)
@@ -855,7 +855,7 @@ def experiment(state, outdir_base='./'):
             for i in range(len(test_X.get_value(borrow=True)) / batch_size):
                 xs = [test_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                 xs, _ = fix_input_size(xs)
-                costs = regression_f_cost(xs)
+                costs = regression_f_cost(*xs)
                 test_costs.append(costs)
                 
             test_costs = numpy.mean(test_costs, 0)
