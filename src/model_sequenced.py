@@ -531,7 +531,7 @@ def experiment(state, channel):
   
    
     
-    def save_params(n, params):
+    def save_params_to_file(n, params):
         print 'saving parameters...'
         save_path = 'params_epoch_'+str(n)+'.pkl'
         f = open(save_path, 'wb')
@@ -619,7 +619,7 @@ def experiment(state, channel):
             plot_samples(counter)
     
             #save params
-            save_params(counter, params)
+            save_params_to_file(counter, params)
      
         # ANNEAL!
         new_lr = learning_rate.get_value() * annealing

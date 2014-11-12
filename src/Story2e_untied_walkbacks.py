@@ -470,7 +470,7 @@ def experiment(state, outdir_base='./'):
 
         return numpy.vstack(visible_chain), numpy.vstack(noisy_h0_chain)
 
-    def save_params(name, n, params, iteration):
+    def save_params_to_file(name, n, params, iteration):
         print 'saving parameters...'
         save_path = outdir+name+'_params_iteration_'+str(iteration)+'_epoch_'+str(n)+'.pkl'
         f = open(save_path, 'wb')
@@ -633,7 +633,7 @@ def experiment(state, outdir_base='./'):
                 
             if counter >= n_epoch or patience >= state.early_stop_length:
                 STOP = True
-                save_params('gsn', counter, params, iteration)
+                save_params_to_file('gsn', counter, params, iteration)
     
             timing = time.time() - t
             times.append(timing)
@@ -697,7 +697,7 @@ def experiment(state, outdir_base='./'):
 #                 plot_samples(counter, iteration)
 #         
 #                 #save params
-#                 save_params('gsn', counter, params, iteration)
+#                 save_params_to_file('gsn', counter, params, iteration)
          
             # ANNEAL!
             new_lr = learning_rate.get_value() * annealing

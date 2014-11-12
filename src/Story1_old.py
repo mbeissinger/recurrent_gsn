@@ -629,7 +629,7 @@ def experiment(state, outdir='./'):
 
         return numpy.vstack(visible_chain), numpy.vstack(noisy_h0_chain)
 
-    def save_params(name, n, params, iteration):
+    def save_params_to_file(name, n, params, iteration):
         print 'saving parameters...'
         save_path = outdir+name+'_params_iteration_'+str(iteration)+'_epoch_'+str(n)+'.pkl'
         f = open(save_path, 'wb')
@@ -772,7 +772,7 @@ def experiment(state, outdir='./'):
     
             if counter >= n_epoch:
                 STOP = True
-                save_params('gsn', counter, params, iteration)
+                save_params_to_file('gsn', counter, params, iteration)
     
             timing = time.time() - t
             times.append(timing)
@@ -801,7 +801,7 @@ def experiment(state, outdir='./'):
                 plot_samples(counter, iteration)
         
                 #save params
-                save_params('gsn', counter, params, iteration)
+                save_params_to_file('gsn', counter, params, iteration)
          
             # ANNEAL!
             new_lr = learning_rate.get_value() * annealing
@@ -971,7 +971,7 @@ def experiment(state, outdir='./'):
                 number_reconstruction.save(outdir+'recurrent_number_reconstruction_iteration_'+str(iteration)+'_epoch_'+str(counter)+'.png')
              
                 #save params
-                save_params('recurrent', counter, recurrent_params, iteration)
+                save_params_to_file('recurrent', counter, recurrent_params, iteration)
          
             # ANNEAL!
             new_r_lr = recurrent_learning_rate.get_value() * annealing

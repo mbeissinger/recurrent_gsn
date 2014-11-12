@@ -468,8 +468,8 @@ def experiment(state, outdir_base='./'):
     # The layer update scheme
     print "Creating graph for noisy reconstruction function at checkpoints during training."
     predicted_X_chains_R, p_X_chains_R = build_sequence_graph(Xs_recon, noiseflag=False)
-    predictions_R = [pchain[-1] for pchain in predicted_X_chains_R]
-    reconstructions_R = [pchain[-1] for pchain in p_X_chains_R]
+    predictions_R = [chain[-1] for chain in predicted_X_chains_R]
+    reconstructions_R = [chain[-1] for chain in p_X_chains_R]
     f_recon = theano.function(inputs = Xs_recon, outputs = predictions_R + reconstructions_R)
 
 
@@ -563,14 +563,22 @@ def experiment(state, outdir_base='./'):
     #############################
     # Save the model parameters #
     #############################
-    def save_params(name, n, gsn_params, iteration):
+    def save_params_to_file(name, n, gsn_params, iteration):
         print 'saving parameters...'
         save_path = outdir+name+'_params_iteration_'+str(iteration)+'_epoch_'+str(n)+'.pkl'
         f = open(save_path, 'wb')
         try:
             cPickle.dump(gsn_params, f, protocol=cPickle.HIGHEST_PROTOCOL)
         finally:
-            f.close() 
+            f.close()
+            
+    def save_params(params):
+        values = [param.get_value(borrow=True) for param in params]
+        return values
+    
+    def restore_params(params, values):
+        for i in range(len(params)):
+            params[i].set_value(values[i])
 
 
     ################
@@ -591,6 +599,7 @@ def experiment(state, outdir_base='./'):
             learning_rate.set_value(cast32(state.learning_rate))  # learning rate
         times = []
         best_cost = float('inf')
+        best_params = None
         patience = 0
             
         print 'learning rate:',learning_rate.get_value()
@@ -692,12 +701,16 @@ def experiment(state, outdir_base='./'):
             if cost < best_cost*state.early_stop_threshold:
                 patience = 0
                 best_cost = cost
+                # save the parameters that made it the best
+                best_params = save_params(gsn_params)
             else:
                 patience += 1
     
             if counter >= n_epoch or patience >= state.early_stop_length:
                 STOP = True
-                save_params('gsn', counter, gsn_params, iteration)
+                if best_params is not None:
+                    restore_params(gsn_params, best_params)
+                save_params_to_file('gsn', counter, gsn_params, iteration)
                 print "next learning rate should be", learning_rate.get_value() * annealing
     
             timing = time.time() - t
@@ -747,7 +760,7 @@ def experiment(state, outdir_base='./'):
                     reconstructed_prediction.append(prediction)
                     reconstructed.append(reconstruction)
                 # Concatenate stuff
-                stacked = numpy.vstack([numpy.vstack([nums[i*10 : (i+1)*10], noisy_nums[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10]]) for i in range(10)])
+                stacked = numpy.vstack([numpy.vstack([nums[i*10 : (i+1)*10], noisy_nums[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10]]) for i in range(10)])
             
                 number_reconstruction   =   PIL.Image.fromarray(tile_raster_images(stacked, (root_N_input,root_N_input), (10,40)))
                 #epoch_number    =   reduce(lambda x,y : x + y, ['_'] * (4-len(str(counter)))) + str(counter)
@@ -757,7 +770,7 @@ def experiment(state, outdir_base='./'):
                 plot_samples(counter, iteration)
         
                 #save gsn_params
-                save_params('gsn', counter, gsn_params, iteration)
+                save_params_to_file('gsn', counter, gsn_params, iteration)
          
             # ANNEAL!
             new_lr = learning_rate.get_value() * annealing
@@ -787,7 +800,8 @@ def experiment(state, outdir_base='./'):
         batch_size  =   state.batch_size
         STOP        =   False
         counter     =   0
-        best_cost = float('inf')
+        best_cost   = float('inf')
+        best_params = None
         patience = 0
         if iteration == 0:
             regression_learning_rate.set_value(cast32(state.learning_rate))  # learning rate
@@ -872,12 +886,16 @@ def experiment(state, outdir_base='./'):
             if cost < best_cost*state.early_stop_threshold:
                 patience = 0
                 best_cost = cost
+                # keep the best params so far
+                best_params = save_params(regression_params)
             else:
                 patience += 1
                 
             if counter >= n_epoch or patience >= state.early_stop_length:
                 STOP = True
-                save_params('regression', counter, regression_params, iteration)
+                if best_params is not None:
+                    restore_params(regression_params, best_params)
+                save_params_to_file('regression', counter, regression_params, iteration)
                 print "next learning rate should be",regression_learning_rate.get_value() * annealing
     
             timing = time.time() - t
@@ -921,14 +939,14 @@ def experiment(state, outdir_base='./'):
                     reconstructed_prediction.append(prediction)
                     reconstructed.append(reconstruction)
                 # Concatenate stuff
-                stacked = numpy.vstack([numpy.vstack([nums[i*10 : (i+1)*10], noisy_nums[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10]]) for i in range(10)])
+                stacked = numpy.vstack([numpy.vstack([nums[i*10 : (i+1)*10], noisy_nums[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10]]) for i in range(10)])
             
                 number_reconstruction   =   PIL.Image.fromarray(tile_raster_images(stacked, (root_N_input,root_N_input), (10,40)))
                 #epoch_number    =   reduce(lambda x,y : x + y, ['_'] * (4-len(str(counter)))) + str(counter)
                 number_reconstruction.save(outdir+'regression_number_reconstruction_iteration_'+str(iteration)+'_epoch_'+str(counter)+'.png')
              
                 #save gsn_params
-                save_params('regression', counter, regression_params, iteration)
+                save_params_to_file('regression', counter, regression_params, iteration)
          
             # ANNEAL!
             new_r_lr = regression_learning_rate.get_value() * annealing
