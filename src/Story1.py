@@ -101,6 +101,7 @@ def experiment(state, outdir_base='./'):
     # Theano variables and RNG
     X   = T.fmatrix('X') # for use in sampling
     Xs  = [T.fmatrix(name="X_t") if i==0 else T.fmatrix(name="X_{t-"+str(i)+"}") for i in range(sequence_window_size+1)] # for use in training - need one X variable for each input in the sequence history window, and what the current one should be
+    Xs_recon  = [T.fvector(name="Xrecon_t") if i==0 else T.fvector(name="Xrecon_{t-"+str(i)+"}") for i in range(sequence_window_size+1)] # for use in training - need one X variable for each input in the sequence history window, and what the current one should be
     MRG = RNG_MRG.MRG_RandomStreams(1)
 
     # PARAMETERS : weights list and bias list.
@@ -405,6 +406,7 @@ def experiment(state, outdir_base='./'):
     
     
     print "creating functions..."
+    t = time.time()
     
     gradient_init        =   T.grad(gsn_cost_init, gsn_params)              
     gradient_buffer_init =   [theano.shared(numpy.zeros(param.get_value().shape, dtype='float32')) for param in gsn_params] 
@@ -455,7 +457,7 @@ def experiment(state, outdir_base='./'):
                                                   updates = regression_updates, 
                                                   outputs = show_regression_costs)
     
-    print "functions done."
+    print "functions done. took {0!s} seconds.".format(trunc(time.time() - t))
     print
     
     
@@ -465,10 +467,10 @@ def experiment(state, outdir_base='./'):
     # Recompile the graph without noise for reconstruction function
     # The layer update scheme
     print "Creating graph for noisy reconstruction function at checkpoints during training."
-    predicted_X_chains_R, p_X_chains_R = build_sequence_graph(Xs, noiseflag=False)
+    predicted_X_chains_R, p_X_chains_R = build_sequence_graph(Xs_recon, noiseflag=False)
     predictions_R = [pchain[-1] for pchain in predicted_X_chains_R]
     reconstructions_R = [pchain[-1] for pchain in p_X_chains_R]
-    f_recon = theano.function(inputs = Xs, outputs = [predictions_R, reconstructions_R])
+    f_recon = theano.function(inputs = Xs_recon, outputs = predictions_R + reconstructions_R)
 
 
     ############
@@ -532,10 +534,10 @@ def experiment(state, outdir_base='./'):
         for i in range(N-1):
            
             # feed the last state into the network, compute new state, and obtain visible units expectation chain 
-            net_state_out, vis_pX_chain =   sampling_wrapper(network_state[-1])
+            net_state_out, vis_pX_chain = sampling_wrapper(network_state[-1])
 
             # append to the visible chain
-            visible_chain   +=  vis_pX_chain
+            visible_chain += vis_pX_chain
 
             # append state output to the network state chain
             network_state.append(net_state_out)
@@ -723,12 +725,27 @@ def experiment(state, outdir_base='./'):
                 reconstructed_prediction = []
                 reconstructed = []
                 for i in range(100):
-                    if i < len(Xs):
-                        pass
+                    if i < len(Xs)-1:
+                        xs = [noisy_nums[i-x] for x in range(i+1)]
+                        xs.reverse()
+                        # add filler to the remaining xs's (since we haven't seen enough in the sequence yet)
+                        while len(xs) < len(Xs):
+                            xs.append(noisy_nums[i])
+                        _outs = f_recon(*xs)
+                        predictions = _outs[:len(Xs)]
+                        reconstructions = _outs[len(Xs):]
+                        prediction = predictions[i]
+                        reconstruction = reconstructions[i]
                     else:
-                        rp, r = f_recon([noisy_nums[i+x] for x in range(len(Xs)]))
-                    reconstructed_prediction.append(rp)
-                    reconstructed.append(r)
+                        xs = [noisy_nums[i-x] for x in range(len(Xs))]
+                        xs.reverse()
+                        _outs = f_recon(*xs)
+                        predictions = _outs[:len(Xs)]
+                        reconstructions = _outs[len(Xs):]
+                        prediction = predictions[-1]
+                        reconstruction = reconstructions[-1]
+                    reconstructed_prediction.append(prediction)
+                    reconstructed.append(reconstruction)
                 # Concatenate stuff
                 stacked = numpy.vstack([numpy.vstack([nums[i*10 : (i+1)*10], noisy_nums[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10]]) for i in range(10)])
             
@@ -746,58 +763,20 @@ def experiment(state, outdir_base='./'):
             new_lr = learning_rate.get_value() * annealing
             learning_rate.set_value(new_lr)
 
-    
-        # if test
-    
+        
         # 10k samples
         print 'Generating 10,000 samples'
         samples, _  =   sample_some_numbers(N=10000)
         f_samples   =   outdir+'samples.npy'
         numpy.save(f_samples, samples)
         print 'saved digits'
-    
-    
-        # parzen
-#         print 'Evaluating parzen window'
-#         import likelihood_estimation_parzen
-#         likelihood_estimation_parzen.main(0.20,'mnist') 
-    
-        # Inpainting
-        '''
-        print 'Inpainting'
-        test_X  =   test_X.get_value()
-    
-        numpy.random.seed(2)
-        test_idx    =   numpy.arange(len(test_Y.get_value(borrow=True)))
-    
-        for Iter in range(10):
-    
-            numpy.random.shuffle(test_idx)
-            test_X = test_X[test_idx]
-            test_Y = test_Y[test_idx]
-    
-            digit_idx = [(test_Y==i).argmax() for i in range(10)]
-            inpaint_list = []
-    
-            for idx in digit_idx:
-                DIGIT = test_X[idx:idx+1]
-                V_inpaint, H_inpaint = inpainting(DIGIT)
-                inpaint_list.append(V_inpaint)
-    
-            INPAINTING  =   numpy.vstack(inpaint_list)
-    
-            plot_inpainting =   PIL.Image.fromarray(tile_raster_images(INPAINTING, (root_N_input,root_N_input), (10,50)))
-    
-            fname   =   'inpainting_'+str(Iter)+'_iteration_'+str(iteration)+'.png'
-            #fname   =   os.path.join(state.model_path, fname)
-    
-            plot_inpainting.save(fname)
-    '''        
+      
             
             
-            
-            
-    def train_recurrent(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y):
+    #######################
+    # REGRESSION TRAINING #
+    #######################        
+    def train_regression(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y):
         print '-------------------------------------------'
         print 'TRAINING RECURRENT REGRESSION FOR ITERATION',iteration
         with open(logfile,'a') as f:
@@ -820,10 +799,6 @@ def experiment(state, outdir_base='./'):
         print 'valid X size:',str(valid_X.shape.eval())
         print 'test X size:',str(test_X.shape.eval())
     
-        train_costs =   []
-        valid_costs =   []
-        test_costs  =   []
-    
         if state.test_model:
             # If testing, do not train and go directly to generating samples, parzen window estimation, and inpainting
             print 'Testing : skip training'
@@ -840,53 +815,60 @@ def experiment(state, outdir_base='./'):
             data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset, rng)
     
             #train
-            train_cost = []
+            train_costs = []
             for i in range(len(train_X.get_value(borrow=True)) / batch_size):
-                x = train_X.get_value()[i * batch_size : (i+1) * batch_size]
-                x1 = train_X.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
-                [x,x1], _ = fix_input_size([x,x1])
-                train_cost.append(regression_f_learn(x, x1))
+                xs = [train_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
+                xs, _ = fix_input_size(xs)
+                costs = regression_f_learn(xs)
+                train_costs.append(costs)
                 
-            train_cost = numpy.mean(train_cost) 
-            train_costs.append(train_cost)
-            print 'rTrain : ',trunc(train_cost), '\t',
+            train_costs = numpy.mean(train_costs, 0) 
+            print 'rTrain : ',[trunc(cost) for cost in train_costs], '\t',
             with open(logfile,'a') as f:
-                f.write("rTrain : {0!s}\t".format(trunc(train_cost)))
-            with open(recurrent_train_convergence,'a') as f:
-                f.write("{0!s},".format(train_cost))
+                f.write("rTrain : {0!s}\t".format([trunc(cost) for cost in train_costs]))
+            with open(regression_train_convergence,'a') as f:
+                for cost in train_costs:
+                    f.write("{0!s},".format(cost))
+                f.write("\n")
+    
     
             #valid
-            valid_cost  =   []
+            valid_costs  =  []
             for i in range(len(valid_X.get_value(borrow=True)) / batch_size):
-                x = valid_X.get_value()[i * batch_size : (i+1) * batch_size]
-                x1 = valid_X.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
-                [x,x1], _ = fix_input_size([x,x1])
-                valid_cost.append(regression_f_cost(x, x1))
-            valid_cost = numpy.mean(valid_cost)
-            valid_costs.append(valid_cost)
-            print 'rValid : ', trunc(valid_cost), '\t',
+                xs = [valid_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
+                xs, _ = fix_input_size(xs)
+                costs = regression_f_cost(xs)
+                valid_costs.append(costs)
+                    
+            valid_costs = numpy.mean(valid_costs, 0)
+            print 'rValid : ', [trunc(cost) for cost in valid_costs], '\t',
             with open(logfile,'a') as f:
-                f.write("rValid : {0!s}\t".format(trunc(valid_cost)))
-            with open(recurrent_valid_convergence,'a') as f:
-                f.write("{0!s},".format(valid_cost))
+                f.write("rValid : {0!s}\t".format([trunc(cost) for cost in valid_costs]))
+            with open(regression_valid_convergence,'a') as f:
+                for cost in valid_costs:
+                    f.write("{0!s},".format(cost))
+                f.write("\n")
+
     
             #test
-            test_cost  =   []
+            test_costs  =   []
             for i in range(len(test_X.get_value(borrow=True)) / batch_size):
-                x = test_X.get_value()[i * batch_size : (i+1) * batch_size]
-                x1 = test_X.get_value()[(i * batch_size) + 1 : ((i+1) * batch_size) + 1]
-                [x,x1], _ = fix_input_size([x,x1])
-                test_cost.append(regression_f_cost(x, x1))
-            test_cost = numpy.mean(test_cost)
-            test_costs.append(test_cost)
-            print 'rTest  : ', trunc(test_cost), '\t',
+                xs = [test_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
+                xs, _ = fix_input_size(xs)
+                costs = regression_f_cost(xs)
+                test_costs.append(costs)
+                
+            test_costs = numpy.mean(test_costs, 0)
+            print 'rTest  : ', [trunc(cost) for cost in test_costs], '\t',
             with open(logfile,'a') as f:
-                f.write("rTest : {0!s}\t".format(trunc(test_cost)))
-            with open(recurrent_test_convergence,'a') as f:
-                f.write("{0!s},".format(test_cost))
+                f.write("rTest : {0!s}\t".format([trunc(cost) for cost in test_costs]))
+            with open(regression_test_convergence,'a') as f:
+                for cost in test_costs:
+                    f.write("{0!s},".format(cost))
+                f.write("\n")
     
             #check for early stopping
-            cost = train_cost
+            cost = numpy.sum(train_costs)
             if cost < best_cost*state.early_stop_threshold:
                 patience = 0
                 best_cost = cost
@@ -895,7 +877,7 @@ def experiment(state, outdir_base='./'):
                 
             if counter >= n_epoch or patience >= state.early_stop_length:
                 STOP = True
-                save_params('recurrent', counter, regression_params, iteration)
+                save_params('regression', counter, regression_params, iteration)
                 print "next learning rate should be",regression_learning_rate.get_value() * annealing
     
             timing = time.time() - t
@@ -904,12 +886,6 @@ def experiment(state, outdir_base='./'):
             print 'time : ', trunc(timing),
             
             print 'remaining: ', trunc((n_epoch - counter) * numpy.mean(times) / 60 / 60), 'hrs'
-                            
-            with open(logfile,'a') as f:
-                f.write("MeanVB : {0!s}\t".format(str([trunc(vb.get_value().mean()) for vb in regression_bias_list])))
-            
-            with open(logfile,'a') as f:
-                f.write("V : {0!s}\t".format(str([trunc(abs(v.get_value(borrow=True)).mean()) for v in regression_weights_list])))
                 
             with open(logfile,'a') as f:
                 f.write("Time : {0!s} seconds\n".format(trunc(timing)))
@@ -920,16 +896,39 @@ def experiment(state, outdir_base='./'):
                 nums = test_X.get_value()[range(100)]
                 noisy_nums = f_noise(test_X.get_value()[range(100)])
                 
-                reconstructed, reconstructed_prediction   =   f_recon(noisy_nums) 
+                reconstructed_prediction = []
+                reconstructed = []
+                for i in range(100):
+                    if i < len(Xs)-1:
+                        xs = [noisy_nums[i-x] for x in range(i+1)]
+                        xs.reverse()
+                        # add filler to the remaining xs's (since we haven't seen enough in the sequence yet)
+                        while len(xs) < len(Xs):
+                            xs.append(noisy_nums[i])
+                        _outs = f_recon(*xs)
+                        predictions = _outs[:len(Xs)]
+                        reconstructions = _outs[len(Xs):]
+                        prediction = predictions[i]
+                        reconstruction = reconstructions[i]
+                    else:
+                        xs = [noisy_nums[i-x] for x in range(len(Xs))]
+                        xs.reverse()
+                        _outs = f_recon(*xs)
+                        predictions = _outs[:len(Xs)]
+                        reconstructions = _outs[len(Xs):]
+                        prediction = predictions[-1]
+                        reconstruction = reconstructions[-1]
+                    reconstructed_prediction.append(prediction)
+                    reconstructed.append(reconstruction)
                 # Concatenate stuff
                 stacked = numpy.vstack([numpy.vstack([nums[i*10 : (i+1)*10], noisy_nums[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10]]) for i in range(10)])
             
                 number_reconstruction   =   PIL.Image.fromarray(tile_raster_images(stacked, (root_N_input,root_N_input), (10,40)))
                 #epoch_number    =   reduce(lambda x,y : x + y, ['_'] * (4-len(str(counter)))) + str(counter)
-                number_reconstruction.save(outdir+'recurrent_number_reconstruction_iteration_'+str(iteration)+'_epoch_'+str(counter)+'.png')
+                number_reconstruction.save(outdir+'regression_number_reconstruction_iteration_'+str(iteration)+'_epoch_'+str(counter)+'.png')
              
                 #save gsn_params
-                save_params('recurrent', counter, regression_params, iteration)
+                save_params('regression', counter, regression_params, iteration)
          
             # ANNEAL!
             new_r_lr = regression_learning_rate.get_value() * annealing
@@ -944,7 +943,7 @@ def experiment(state, outdir_base='./'):
     
     for iteration in range(state.max_iterations):
         train_GSN(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
-        train_recurrent(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+        train_regression(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
         
           
         

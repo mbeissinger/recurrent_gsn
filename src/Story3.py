@@ -901,7 +901,7 @@ def experiment(state, outdir_base='./'):
             
             
             
-    def train_recurrent(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y):
+    def train_regression(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y):
         print '-------------------------------------------'
         print 'TRAINING RECURRENT REGRESSION FOR ITERATION',iteration
         with open(logfile,'a') as f:
@@ -1089,5 +1089,5 @@ def experiment(state, outdir_base='./'):
     #####################
     for iter in range(state.max_iterations):
         train_GSN(iter, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)        
-        train_recurrent(iter, train_X, train_Y, valid_X, valid_Y, test_X, test_Y) 
+        train_regression(iter, train_X, train_Y, valid_X, valid_Y, test_X, test_Y) 
 
