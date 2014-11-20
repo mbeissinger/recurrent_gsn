@@ -1,5 +1,6 @@
 import numpy, os, cPickle
 import numpy.random as rng
+import random as R
 import theano
 import theano.tensor as T
 import theano.sandbox.rng_mrg as RNG_MRG
@@ -9,9 +10,11 @@ from image_tiler import tile_raster_images
 import time
 import data_tools as data
 from utils import cast32, trunc, logit, get_shared_weights, get_shared_bias, get_shared_regression_weights, add_gaussian_noise, salt_and_pepper, load_from_config, fix_input_size
+from numpy import nan
 
 def experiment(state, outdir_base='./'):
-    rng.seed(1) #seed the numpy random generator  
+    rng.seed(1) #seed the numpy random generator
+    R.seed(1) #seed the other random generator (for reconstruction function indices)
     # Initialize the output directories and files
     data.mkdir_p(outdir_base)
     outdir = outdir_base + "/" + state.dataset + "/"
@@ -102,6 +105,7 @@ def experiment(state, outdir_base='./'):
     X   = T.fmatrix('X') # for use in sampling
     Xs  = [T.fmatrix(name="X_t") if i==0 else T.fmatrix(name="X_{t-"+str(i)+"}") for i in range(sequence_window_size+1)] # for use in training - need one X variable for each input in the sequence history window, and what the current one should be
     Xs_recon  = [T.fvector(name="Xrecon_t") if i==0 else T.fvector(name="Xrecon_{t-"+str(i)+"}") for i in range(sequence_window_size+1)] # for use in training - need one X variable for each input in the sequence history window, and what the current one should be
+    #sequence_graph_output_index = T.lscalar("i")
     MRG = RNG_MRG.MRG_RandomStreams(1)
 
     # PARAMETERS : weights list and bias list.
@@ -114,27 +118,14 @@ def experiment(state, outdir_base='./'):
     #need initial biases (tau) as well for when there aren't sequence_window_size hiddens in the history.
     tau_list                = [[get_shared_bias(state.hidden_size, name='tau_{t-'+str(window+1)+"}_layer"+str(layer)) for layer in range(layers+1) if (layer%2) != 0] for window in range(sequence_window_size)]
 
-#     if state.test_model:
-#         # Load the parameters of the last epoch
-#         # maybe if the path is given, load these specific attributes 
-#         param_files     =   filter(lambda x:'gsn_params' in x, os.listdir('.'))
-#         max_epoch_idx   =   numpy.argmax([int(x.split('_')[-1].split('.')[0]) for x in param_files])
-#         params_to_load  =   param_files[max_epoch_idx]
-#         PARAMS = cPickle.load(open(params_to_load,'r'))
-#         [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[:len(weights_list)], weights_list)]
-#         [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[len(weights_list):], bias_list)]
-#         
-#     if state.continue_training:
-#         # Load the parameters of the last GSN
-#         params_to_load = 'gsn_params.pkl'
-#         PARAMS = cPickle.load(open(params_to_load,'r'))
-#         [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[:len(weights_list)], weights_list)]
-#         [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[len(weights_list):], bias_list)]
-#         # Load the parameters of the last recurrent
-# #         params_to_load = 'regression_params.pkl'
-# #         PARAMS = cPickle.load(open(params_to_load,'r'))
-# #         [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[:len(weights_list)], weights_list)]
-# #         [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[len(weights_list):], bias_list)]
+
+    ###########################################################
+    # load initial parameters of gsn to speed up my debugging #
+    ###########################################################
+    params_to_load = 'gsn_params.pkl'
+    PARAMS = cPickle.load(open(params_to_load,'r'))
+    [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[:len(weights_list)], weights_list)]
+    [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[len(weights_list):], bias_list)]
 
  
     ''' F PROP '''
@@ -276,11 +267,13 @@ def experiment(state, outdir_base='./'):
                     # otherwise, no history for necessary spot, so use the tau
                     sequence_terms.append(tau_list[history_index][regression_index])
                     terms_used.append(tau_list[history_index][regression_index])
-                    
-            sequence_terms.append(regression_bias_list[regression_index])
-            terms_used.append(regression_bias_list[regression_index])
-            print "REGRESSION for hidden layer {0!s} using:".format(hidden_index), terms_used
-            hiddens[hidden_index] = numpy.sum(sequence_terms)
+            
+            if len(sequence_terms) > 0:
+                sequence_terms.append(regression_bias_list[regression_index])
+                terms_used.append(regression_bias_list[regression_index])
+                print "REGRESSION for hidden layer {0!s} using:".format(hidden_index), terms_used
+                hiddens[hidden_index] = numpy.sum(sequence_terms)
+                
     
     def build_gsn_graph(x, noiseflag):
         p_X_chain = []
@@ -292,7 +285,6 @@ def experiment(state, outdir_base='./'):
         hiddens = [X_init]
         for w in weights_list:
             hiddens.append(T.zeros_like(T.dot(hiddens[-1], w)))
-            
         # The layer update scheme
         print "Building the gsn graph :", walkbacks,"updates"
         for i in range(walkbacks):
@@ -308,45 +300,54 @@ def experiment(state, outdir_base='./'):
         sequence_history = []
         # The layer update scheme
         print "Building the regression graph :", len(Xs),"updates"
-        ''' hidden layer init '''
-        hiddens = [T.zeros_like(xs[0])]
-        for w in weights_list:
-            # init with zeros
-            hiddens.append(T.zeros_like(T.dot(hiddens[-1], w)))        
-        for x in xs:
-            print "Performing regression step!"
-            perform_regression_step(hiddens, sequence_history) # do the regression!
-            print ""
+        for x_index in range(len(xs)):
+            x = xs[x_index]                
             # Predict what the current X should be
-            pred_X_chain = []
-            pred_hiddens = hiddens
+            ''' hidden layer init '''
+            pred_hiddens = [T.zeros_like(x)]
+            for w in weights_list:
+                # init with zeros
+                pred_hiddens.append(T.zeros_like(T.dot(pred_hiddens[-1], w)))
+            print "Performing regression step!"
+            perform_regression_step(pred_hiddens, sequence_history) # do the regression!
+            print ""
+
+            predicted_X_chain = []
             for i in range(walkbacks):
                 print "Prediction Walkback {!s}/{!s}".format(i+1,walkbacks)
-                update_layers_reverse(pred_hiddens, pred_X_chain, noisy=noiseflag)
-            # Append the predicted X
-            predicted_X_chains.append(pred_X_chain)
-            
-            # Now use the actual X as hiddens[0]
-            # Need to advance the regression by 1 update
-            print "moving hiddens forward one half update."
-            update_even_layers(hiddens, [], noisy=noiseflag)
-            print
+                update_layers_reverse(pred_hiddens, predicted_X_chain, noisy=False) # no noise in the prediction because x_prediction can't be recovered from x anyway
+            predicted_X_chains.append(predicted_X_chain)
+                
+            # Now do the actual GSN step and add it to the sequence history
             # corrupt x if noisy
             if noiseflag:
                 X_init = salt_and_pepper(x, state.input_salt_and_pepper)
             else:
                 X_init = x
+            ''' hidden layer init '''
+            hiddens = [T.zeros_like(x)]
+            for w in weights_list:
+                # init with zeros
+                hiddens.append(T.zeros_like(T.dot(hiddens[-1], w)))
+#             # substitute some of the zero layers for what was predicted - need to advance the prediction by 1 layer so it is the evens
+#             update_even_layers(pred_hiddens,[],noisy=False)
+#             for i in [layer for layer in range(len(hiddens)) if (layer%2 == 0)]:
+#                 hiddens[i] = pred_hiddens[i]
             hiddens[0] = X_init
-            p_X_chain = []
-            for i in range(walkbacks):
-                print "Actual walkback {!s}/{!s}".format(i+1,walkbacks)
-                update_layers(hiddens, p_X_chain, noisy=noiseflag)
-            # Append the p_X_chain
-            p_X_chains.append(p_X_chain)
             
+            chain = []
+            for i in range(walkbacks):
+                print "GSN walkback {!s}/{!s}".format(i+1,walkbacks)
+                update_layers(hiddens, chain, noisy=noiseflag)
+            # Append the p_X_chain
+            p_X_chains.append(chain)
             # Append the odd layers of the hiddens to the sequence history
             sequence_history.append([hiddens[layer] for layer in range(len(hiddens)) if (layer%2) != 0])
+            
         
+        # select the prediction and reconstruction from the lists
+#         prediction_chain = T.stacklists(predicted_X_chains)[sequence_graph_output_index]
+#         reconstruction_chain = T.stacklists(p_X_chains)[sequence_graph_output_index]
         return predicted_X_chains, p_X_chains
             
         
@@ -355,8 +356,10 @@ def experiment(state, outdir_base='./'):
     ##############################################
     print
     print "Building GSN graphs"
-    p_X_chain = build_gsn_graph(X, noiseflag=True)
-    _, p_X_chains = build_sequence_graph(Xs, noiseflag=True)
+    p_X_chain_init = build_gsn_graph(X, noiseflag=True)
+    predicted_X_chain_gsns, p_X_chains = build_sequence_graph(Xs, noiseflag=True)
+    predicted_X_chain_gsn = predicted_X_chain_gsns[-1]
+    p_X_chain = p_X_chains[-1]
     
     ###############################################
     # Build the training graph for the regression #
@@ -364,7 +367,8 @@ def experiment(state, outdir_base='./'):
     print
     print "Building regression graph"
     # no noise! noise is only used as regularization for GSN stage
-    predicted_X_chains, _ = build_sequence_graph(Xs, noiseflag=False)
+    predicted_X_chains_regression, _ = build_sequence_graph(Xs, noiseflag=False)
+    predicted_X_chain = predicted_X_chains_regression[-1]
 
 
     ######################
@@ -372,13 +376,14 @@ def experiment(state, outdir_base='./'):
     ######################
     print
     print 'Cost w.r.t p(X|...) at every step in the graph for the TGSN'
-    gsn_costs_init     = [T.mean(T.nnet.binary_crossentropy(rX, X)) for rX in p_X_chain]
+    gsn_costs_init     = [T.mean(T.nnet.binary_crossentropy(rX, X)) for rX in p_X_chain_init]
     show_gsn_cost_init = gsn_costs_init[-1]
     gsn_cost_init      = numpy.sum(gsn_costs_init)
     
-    gsn_costs      = [[T.mean(T.nnet.binary_crossentropy(rX, Xs[i])) for rX in p_X_chains[i]] for i in range(len(Xs))]
-    show_gsn_costs = [costs[-1] for costs in gsn_costs]
-    gsn_cost       = numpy.sum([numpy.sum(costs) for costs in gsn_costs])
+    #gsn_costs     = T.mean(T.mean(T.nnet.binary_crossentropy(p_X_chain, T.stacklists(Xs)[sequence_graph_output_index]),2),1)
+    gsn_costs     = [T.mean(T.nnet.binary_crossentropy(rX, Xs[-1])) for rX in predicted_X_chain_gsn]
+    show_gsn_cost = gsn_costs[-1]
+    gsn_cost      = T.sum(gsn_costs)
     
     gsn_params = weights_list + bias_list    
     print "gsn params:",gsn_params
@@ -388,19 +393,22 @@ def experiment(state, outdir_base='./'):
     #regression_regularization_cost = T.sum([T.sum(recurrent_weights ** 2) for recurrent_weights in regression_weights_list])
     regression_regularization_cost = 0
     #regression_cost = T.log(T.sum(T.pow((predicted_network - encoded_network),2)) + regression_regularization_cost)
-    regression_costs = [[T.mean(T.nnet.binary_crossentropy(rX, Xs[i])) for rX in predicted_X_chains[i]] for i in range(len(Xs))]
-    show_regression_costs = [costs[-1] for costs in regression_costs]
-    regression_cost = numpy.sum(regression_costs) + state.regularize_weight * regression_regularization_cost
+    #regression_costs     = T.mean(T.mean(T.nnet.binary_crossentropy(predicted_X_chain, T.stacklists(Xs)[sequence_graph_output_index]),2),1)
+    regression_costs     = [T.mean(T.nnet.binary_crossentropy(rX, Xs[-1])) for rX in predicted_X_chain]
+    show_regression_cost = regression_costs[-1]
+    regression_cost      = T.sum(regression_costs) + state.regularize_weight * regression_regularization_cost
     
     #only using the odd layers update -> even-indexed parameters in the list because it starts at v1
-    # need to flatten the regression and tau lists -> couldn't immediately find the python method so here is the implementation
+    # need to flatten the regression list -> couldn't immediately find the python method so here is the implementation
     regression_weights_flattened = []
     for weights in regression_weights_list:
         regression_weights_flattened.extend(weights)
     tau_flattened = []
     for tau in tau_list:
         tau_flattened.extend(tau)
-    regression_params = regression_weights_flattened + regression_bias_list + tau_flattened
+        
+    regression_params = regression_weights_flattened + regression_bias_list #+ tau_flattened
+    
     print "regression params:", regression_params    
     
     
@@ -434,12 +442,12 @@ def experiment(state, outdir_base='./'):
         
     
     gsn_f_cost           =   theano.function(inputs  = Xs, 
-                                         outputs = show_gsn_costs)
+                                         outputs = show_gsn_cost)
 
 
     gsn_f_learn          =   theano.function(inputs  = Xs, 
                                          updates = updates, 
-                                         outputs = show_gsn_costs)
+                                         outputs = show_gsn_cost)
       
     
     regression_gradient        =   T.grad(regression_cost, regression_params)
@@ -451,11 +459,15 @@ def experiment(state, outdir_base='./'):
     regression_updates         =   OrderedDict(regression_param_updates + regression_gradient_buffer_updates)
     
     regression_f_cost          =   theano.function(inputs = Xs, 
-                                                   outputs = show_regression_costs)
+                                                   outputs = show_regression_cost)
         
     regression_f_learn         =   theano.function(inputs  = Xs, 
                                                   updates = regression_updates, 
-                                                  outputs = show_regression_costs)
+                                                  outputs = show_regression_cost)
+    
+    #check = [T.sum(predicted_X_chain>1),T.sum(predicted_X_chain<0),T.sum((T.stacklists(Xs)[sequence_graph_output_index])>1),T.sum((T.stacklists(Xs)[sequence_graph_output_index])<0)]
+    #check = regression_gradient
+    #f_check = theano.function(inputs  = Xs+[sequence_graph_output_index], outputs = check, on_unused_input='warn')
     
     print "functions done. took {0!s} seconds.".format(trunc(time.time() - t))
     print
@@ -468,9 +480,13 @@ def experiment(state, outdir_base='./'):
     # The layer update scheme
     print "Creating graph for noisy reconstruction function at checkpoints during training."
     predicted_X_chains_R, p_X_chains_R = build_sequence_graph(Xs_recon, noiseflag=False)
-    predictions_R = [chain[-1] for chain in predicted_X_chains_R]
-    reconstructions_R = [chain[-1] for chain in p_X_chains_R]
-    f_recon = theano.function(inputs = Xs_recon, outputs = predictions_R + reconstructions_R)
+    predicted_X_chain_R = predicted_X_chains_R[-1]
+    p_X_chain_R = p_X_chains_R[-1]
+    f_recon = theano.function(inputs = Xs_recon, outputs = [predicted_X_chain_R[-1], p_X_chain_R[-1]])
+    
+    # Now do the same but for the GSN in the initial run
+    p_X_chain_R = build_gsn_graph(X, noiseflag=False)
+    f_recon_init = theano.function(inputs=[X], outputs = p_X_chain_R[-1])
 
 
     ############
@@ -564,6 +580,7 @@ def experiment(state, outdir_base='./'):
     # Save the model parameters #
     #############################
     def save_params_to_file(name, n, gsn_params, iteration):
+        pass
         print 'saving parameters...'
         save_path = outdir+name+'_params_iteration_'+str(iteration)+'_epoch_'+str(n)+'.pkl'
         f = open(save_path, 'wb')
@@ -638,16 +655,16 @@ def experiment(state, outdir_base='./'):
                 for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                     xs = [train_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                     xs, _ = fix_input_size(xs)
-                    costs = gsn_f_learn(*xs)
-                    train_costs.append(costs)
+                    _ins = xs #+ [sequence_window_size]
+                    cost = gsn_f_learn(*_ins)
+                    train_costs.append(cost)
                 
-            train_costs = numpy.mean(train_costs, 0) 
-            print 'Train : ',[trunc(cost) for cost in train_costs], '\t',
+            train_costs = numpy.mean(train_costs) 
+            print 'Train : ',trunc(train_costs), '\t',
             with open(logfile,'a') as f:
-                f.write("Train : {0!s}\t".format([trunc(cost) for cost in train_costs]))
+                f.write("Train : {0!s}\t".format(trunc(train_costs)))
             with open(train_convergence,'a') as f:
-                for cost in train_costs:
-                    f.write("{0!s},".format(cost))
+                f.write("{0!s},".format(train_costs))
                 f.write("\n")
     
             #valid
@@ -661,16 +678,16 @@ def experiment(state, outdir_base='./'):
                 for i in range(len(valid_X.get_value(borrow=True)) / batch_size):
                     xs = [valid_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                     xs, _ = fix_input_size(xs)
-                    costs = gsn_f_cost(*xs)
+                    _ins = xs #+ [sequence_window_size]
+                    costs = gsn_f_cost(*_ins)
                     valid_costs.append(costs)
                     
-            valid_costs = numpy.mean(valid_costs, 0) 
-            print 'Valid : ', [trunc(cost) for cost in valid_costs], '\t',
+            valid_costs = numpy.mean(valid_costs) 
+            print 'Valid : ',trunc(valid_costs), '\t',
             with open(logfile,'a') as f:
-                f.write("Valid : {0!s}\t".format([trunc(cost) for cost in valid_costs]))
+                f.write("Valid : {0!s}\t".format(trunc(valid_costs)))
             with open(valid_convergence,'a') as f:
-                for cost in valid_costs:
-                    f.write("{0!s},".format(cost))
+                f.write("{0!s},".format(valid_costs))
                 f.write("\n")
     
             #test
@@ -684,20 +701,20 @@ def experiment(state, outdir_base='./'):
                 for i in range(len(test_X.get_value(borrow=True)) / batch_size):
                     xs = [test_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                     xs, _ = fix_input_size(xs)
-                    costs = gsn_f_cost(*xs)
+                    _ins = xs #+ [sequence_window_size]
+                    costs = gsn_f_cost(*_ins)
                     test_costs.append(costs)
                 
-            test_costs = numpy.mean(test_costs, 0) 
-            print 'Test  : ', [trunc(cost) for cost in test_costs], '\t',
+            test_costs = numpy.mean(test_costs) 
+            print 'Test : ',trunc(test_costs), '\t',
             with open(logfile,'a') as f:
-                f.write("Test : {0!s}\t".format([trunc(cost) for cost in test_costs]))
+                f.write("Test : {0!s}\t".format(trunc(test_costs)))
             with open(test_convergence,'a') as f:
-                for cost in test_costs:
-                    f.write("{0!s},".format(cost))
+                f.write("{0!s},".format(test_costs))
                 f.write("\n")
                 
             #check for early stopping
-            cost = numpy.sum(train_costs)
+            cost = numpy.sum(valid_costs)
             if cost < best_cost*state.early_stop_threshold:
                 patience = 0
                 best_cost = cost
@@ -730,39 +747,43 @@ def experiment(state, outdir_base='./'):
                 f.write("Time : {0!s} seconds\n".format(trunc(timing)))
     
             if (counter % state.save_frequency) == 0 or STOP is True:
-                # Checking reconstruction
-                # grab 100 numbers in the sequence from the test set
-                nums = test_X.get_value()[range(100)]
-                noisy_nums = f_noise(test_X.get_value()[range(100)])
-                
-                reconstructed_prediction = []
-                reconstructed = []
-                for i in range(100):
-                    if i < len(Xs)-1:
-                        xs = [noisy_nums[i-x] for x in range(i+1)]
-                        xs.reverse()
-                        # add filler to the remaining xs's (since we haven't seen enough in the sequence yet)
-                        while len(xs) < len(Xs):
-                            xs.append(noisy_nums[i])
-                        _outs = f_recon(*xs)
-                        predictions = _outs[:len(Xs)]
-                        reconstructions = _outs[len(Xs):]
-                        prediction = predictions[i]
-                        reconstruction = reconstructions[i]
-                    else:
-                        xs = [noisy_nums[i-x] for x in range(len(Xs))]
-                        xs.reverse()
-                        _outs = f_recon(*xs)
-                        predictions = _outs[:len(Xs)]
-                        reconstructions = _outs[len(Xs):]
-                        prediction = predictions[-1]
-                        reconstruction = reconstructions[-1]
-                    reconstructed_prediction.append(prediction)
-                    reconstructed.append(reconstruction)
-                # Concatenate stuff
-                stacked = numpy.vstack([numpy.vstack([nums[i*10 : (i+1)*10], noisy_nums[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10]]) for i in range(10)])
-            
-                number_reconstruction   =   PIL.Image.fromarray(tile_raster_images(stacked, (root_N_input,root_N_input), (10,40)))
+                n_examples = 100
+                if iteration == 0:
+                    random_idx = numpy.array(R.sample(range(len(test_X.get_value())), n_examples))
+                    numbers = test_X.get_value()[random_idx]
+                    noisy_numbers = f_noise(test_X.get_value()[random_idx])
+                    reconstructed = f_recon_init(noisy_numbers) 
+                    # Concatenate stuff
+                    stacked = numpy.vstack([numpy.vstack([numbers[i*10 : (i+1)*10], noisy_numbers[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10]]) for i in range(10)])
+                    number_reconstruction = PIL.Image.fromarray(tile_raster_images(stacked, (root_N_input,root_N_input), (10,30)))
+                else:
+                    n_examples = n_examples + sequence_window_size
+                    # Checking reconstruction
+                    # grab 100 numbers in the sequence from the test set
+                    nums = test_X.get_value()[range(n_examples)]
+                    noisy_nums = f_noise(test_X.get_value()[range(n_examples)])
+                    
+                    reconstructed_prediction = []
+                    reconstructed = []
+                    for i in range(n_examples):
+                        if i >= sequence_window_size:
+                            xs = [noisy_nums[i-x] for x in range(len(Xs))]
+                            xs.reverse()
+                            _ins = xs #+ [sequence_window_size]
+                            _outs = f_recon(*_ins)
+                            prediction = _outs[0]
+                            reconstruction = _outs[1]
+                            reconstructed_prediction.append(prediction)
+                            reconstructed.append(reconstruction)
+                    nums = nums[sequence_window_size:]
+                    noisy_nums = noisy_nums[sequence_window_size:]
+                    reconstructed_prediction = numpy.array(reconstructed_prediction)
+                    reconstructed = numpy.array(reconstructed)
+                    
+                    # Concatenate stuff
+                    stacked = numpy.vstack([numpy.vstack([nums[i*10 : (i+1)*10], noisy_nums[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10]]) for i in range(10)])
+                    number_reconstruction = PIL.Image.fromarray(tile_raster_images(stacked, (root_N_input,root_N_input), (10,40)))
+                    
                 #epoch_number    =   reduce(lambda x,y : x + y, ['_'] * (4-len(str(counter)))) + str(counter)
                 number_reconstruction.save(outdir+'gsn_number_reconstruction_iteration_'+str(iteration)+'_epoch_'+str(counter)+'.png')
         
@@ -791,9 +812,9 @@ def experiment(state, outdir_base='./'):
     #######################        
     def train_regression(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y):
         print '-------------------------------------------'
-        print 'TRAINING RECURRENT REGRESSION FOR ITERATION',iteration
+        print 'TRAINING REGRESSION FOR ITERATION',iteration
         with open(logfile,'a') as f:
-            f.write("\n\n--------------------------\nTRAINING RECURRENT REGRESSION FOR ITERATION {0!s}\n".format(iteration))
+            f.write("\n\n--------------------------\nTRAINING REGRESSION FOR ITERATION {0!s}\n".format(iteration))
         
         # TRAINING
         n_epoch     =   state.n_epoch
@@ -833,16 +854,18 @@ def experiment(state, outdir_base='./'):
             for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                 xs = [train_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                 xs, _ = fix_input_size(xs)
-                costs = regression_f_learn(*xs)
-                train_costs.append(costs)
+                _ins = xs #+ [sequence_window_size]
+                cost = regression_f_learn(*_ins)
+                #print trunc(cost)
+                #print [numpy.asarray(a) for a in f_check(*_ins)]
+                train_costs.append(cost)
                 
-            train_costs = numpy.mean(train_costs, 0) 
-            print 'rTrain : ',[trunc(cost) for cost in train_costs], '\t',
+            train_costs = numpy.mean(train_costs) 
+            print 'rTrain : ',trunc(train_costs), '\t',
             with open(logfile,'a') as f:
-                f.write("rTrain : {0!s}\t".format([trunc(cost) for cost in train_costs]))
+                f.write("rTrain : {0!s}\t".format(trunc(train_costs)))
             with open(regression_train_convergence,'a') as f:
-                for cost in train_costs:
-                    f.write("{0!s},".format(cost))
+                f.write("{0!s},".format(train_costs))
                 f.write("\n")
     
     
@@ -851,16 +874,16 @@ def experiment(state, outdir_base='./'):
             for i in range(len(valid_X.get_value(borrow=True)) / batch_size):
                 xs = [valid_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                 xs, _ = fix_input_size(xs)
-                costs = regression_f_cost(*xs)
-                valid_costs.append(costs)
+                _ins = xs #+ [sequence_window_size]
+                cost = regression_f_cost(*_ins)
+                valid_costs.append(cost)
                     
-            valid_costs = numpy.mean(valid_costs, 0)
-            print 'rValid : ', [trunc(cost) for cost in valid_costs], '\t',
+            valid_costs = numpy.mean(valid_costs)
+            print 'rValid : ', trunc(valid_costs), '\t',
             with open(logfile,'a') as f:
-                f.write("rValid : {0!s}\t".format([trunc(cost) for cost in valid_costs]))
+                f.write("rValid : {0!s}\t".format(trunc(valid_costs)))
             with open(regression_valid_convergence,'a') as f:
-                for cost in valid_costs:
-                    f.write("{0!s},".format(cost))
+                f.write("{0!s},".format(valid_costs))
                 f.write("\n")
 
     
@@ -869,20 +892,20 @@ def experiment(state, outdir_base='./'):
             for i in range(len(test_X.get_value(borrow=True)) / batch_size):
                 xs = [test_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                 xs, _ = fix_input_size(xs)
-                costs = regression_f_cost(*xs)
-                test_costs.append(costs)
+                _ins = xs #+ [sequence_window_size]
+                cost = regression_f_cost(*_ins)
+                test_costs.append(cost)
                 
-            test_costs = numpy.mean(test_costs, 0)
-            print 'rTest  : ', [trunc(cost) for cost in test_costs], '\t',
+            test_costs = numpy.mean(test_costs)
+            print 'rTest  : ', trunc(test_costs), '\t',
             with open(logfile,'a') as f:
-                f.write("rTest : {0!s}\t".format([trunc(cost) for cost in test_costs]))
+                f.write("rTest : {0!s}\t".format(trunc(test_costs)))
             with open(regression_test_convergence,'a') as f:
-                for cost in test_costs:
-                    f.write("{0!s},".format(cost))
+                f.write("{0!s},".format(test_costs))
                 f.write("\n")
     
             #check for early stopping
-            cost = numpy.sum(train_costs)
+            cost = numpy.sum(valid_costs)
             if cost < best_cost*state.early_stop_threshold:
                 patience = 0
                 best_cost = cost
@@ -909,35 +932,29 @@ def experiment(state, outdir_base='./'):
                 f.write("Time : {0!s} seconds\n".format(trunc(timing)))
     
             if (counter % state.save_frequency) == 0 or STOP is True: 
+                n_examples = 100+sequence_window_size
                 # Checking reconstruction
                 # grab 100 numbers in the sequence from the test set
-                nums = test_X.get_value()[range(100)]
-                noisy_nums = f_noise(test_X.get_value()[range(100)])
+                nums = test_X.get_value()[range(n_examples)]
+                noisy_nums = f_noise(test_X.get_value()[range(n_examples)])
                 
                 reconstructed_prediction = []
                 reconstructed = []
-                for i in range(100):
-                    if i < len(Xs)-1:
-                        xs = [noisy_nums[i-x] for x in range(i+1)]
-                        xs.reverse()
-                        # add filler to the remaining xs's (since we haven't seen enough in the sequence yet)
-                        while len(xs) < len(Xs):
-                            xs.append(noisy_nums[i])
-                        _outs = f_recon(*xs)
-                        predictions = _outs[:len(Xs)]
-                        reconstructions = _outs[len(Xs):]
-                        prediction = predictions[i]
-                        reconstruction = reconstructions[i]
-                    else:
+                for i in range(n_examples):
+                    if i >= sequence_window_size:
                         xs = [noisy_nums[i-x] for x in range(len(Xs))]
                         xs.reverse()
-                        _outs = f_recon(*xs)
-                        predictions = _outs[:len(Xs)]
-                        reconstructions = _outs[len(Xs):]
-                        prediction = predictions[-1]
-                        reconstruction = reconstructions[-1]
-                    reconstructed_prediction.append(prediction)
-                    reconstructed.append(reconstruction)
+                        _ins = xs #+ [sequence_window_size]
+                        _outs = f_recon(*_ins)
+                        prediction = _outs[0]
+                        reconstruction = _outs[1]
+                        reconstructed_prediction.append(prediction)
+                        reconstructed.append(reconstruction)
+                nums = nums[sequence_window_size:]
+                noisy_nums = noisy_nums[sequence_window_size:]
+                reconstructed_prediction = numpy.array(reconstructed_prediction)
+                reconstructed = numpy.array(reconstructed)
+                
                 # Concatenate stuff
                 stacked = numpy.vstack([numpy.vstack([nums[i*10 : (i+1)*10], noisy_nums[i*10 : (i+1)*10], reconstructed_prediction[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10]]) for i in range(10)])
             
@@ -960,8 +977,9 @@ def experiment(state, outdir_base='./'):
     #####################
     
     for iteration in range(state.max_iterations):
-        train_GSN(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+        #train_GSN(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
         train_regression(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+        train_GSN(iteration+1, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
         
           
         
