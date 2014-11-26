@@ -10,7 +10,6 @@ from image_tiler import tile_raster_images
 import time
 import data_tools as data
 from utils import cast32, trunc, logit, get_shared_weights, get_shared_bias, get_shared_regression_weights, add_gaussian_noise, salt_and_pepper, load_from_config, fix_input_size
-from numpy import nan
 
 def experiment(state, outdir_base='./'):
     rng.seed(1) #seed the numpy random generator
@@ -119,13 +118,13 @@ def experiment(state, outdir_base='./'):
     tau_list                = [[get_shared_bias(state.hidden_size, name='tau_{t-'+str(window+1)+"}_layer"+str(layer)) for layer in range(layers+1) if (layer%2) != 0] for window in range(sequence_window_size)]
 
 
-    ###########################################################
-    # load initial parameters of gsn to speed up my debugging #
-    ###########################################################
-    params_to_load = 'gsn_params.pkl'
-    PARAMS = cPickle.load(open(params_to_load,'r'))
-    [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[:len(weights_list)], weights_list)]
-    [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[len(weights_list):], bias_list)]
+#     ###########################################################
+#     # load initial parameters of gsn to speed up my debugging #
+#     ###########################################################
+#     params_to_load = 'gsn_params.pkl'
+#     PARAMS = cPickle.load(open(params_to_load,'r'))
+#     [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[:len(weights_list)], weights_list)]
+#     [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[len(weights_list):], bias_list)]
 
  
     ''' F PROP '''
@@ -977,9 +976,8 @@ def experiment(state, outdir_base='./'):
     #####################
     
     for iteration in range(state.max_iterations):
-        #train_GSN(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+        train_GSN(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
         train_regression(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
-        train_GSN(iteration+1, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
         
           
         

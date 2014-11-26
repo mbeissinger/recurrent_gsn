@@ -55,8 +55,7 @@ def experiment(state, outdir_base='./'):
 
 
     print state
-    # Load the data, train = train+valid, and shuffle train
-    # Targets are not used (will be misaligned after shuffling train
+    # Load the data, train = train+valid, and sequence
     artificial = False
     if state.dataset == 'MNIST_1' or state.dataset == 'MNIST_2' or state.dataset == 'MNIST_3':
         (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = data.load_mnist(state.data_path)
