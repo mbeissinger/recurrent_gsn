@@ -374,13 +374,18 @@ def experiment(state, outdir_base='./'):
     # COST AND GRADIENTS #
     ######################
     print
+#     cost_function = lambda x,y: T.mean(T.nnet.binary_crossentropy(x,y))
+#     print "Using binary cross-entropy cost!"
+    cost_function = lambda x,y: T.mean(T.sqr(x-y))
+    print "Using square error cost!"
+    
     print 'Cost w.r.t p(X|...) at every step in the graph for the TGSN'
-    gsn_costs_init     = [T.mean(T.nnet.binary_crossentropy(rX, X)) for rX in p_X_chain_init]
+    gsn_costs_init     = [cost_function(rX, X) for rX in p_X_chain_init]
     show_gsn_cost_init = gsn_costs_init[-1]
     gsn_cost_init      = numpy.sum(gsn_costs_init)
     
     #gsn_costs     = T.mean(T.mean(T.nnet.binary_crossentropy(p_X_chain, T.stacklists(Xs)[sequence_graph_output_index]),2),1)
-    gsn_costs     = [T.mean(T.nnet.binary_crossentropy(rX, Xs[-1])) for rX in predicted_X_chain_gsn]
+    gsn_costs     = [cost_function(rX, Xs[-1]) for rX in predicted_X_chain_gsn]
     show_gsn_cost = gsn_costs[-1]
     gsn_cost      = T.sum(gsn_costs)
     
@@ -391,9 +396,7 @@ def experiment(state, outdir_base='./'):
     #l2 regularization
     #regression_regularization_cost = T.sum([T.sum(recurrent_weights ** 2) for recurrent_weights in regression_weights_list])
     regression_regularization_cost = 0
-    #regression_cost = T.log(T.sum(T.pow((predicted_network - encoded_network),2)) + regression_regularization_cost)
-    #regression_costs     = T.mean(T.mean(T.nnet.binary_crossentropy(predicted_X_chain, T.stacklists(Xs)[sequence_graph_output_index]),2),1)
-    regression_costs     = [T.mean(T.nnet.binary_crossentropy(rX, Xs[-1])) for rX in predicted_X_chain]
+    regression_costs     = [cost_function(rX, Xs[-1]) for rX in predicted_X_chain]
     show_regression_cost = regression_costs[-1]
     regression_cost      = T.sum(regression_costs) + state.regularize_weight * regression_regularization_cost
     
@@ -440,13 +443,13 @@ def experiment(state, outdir_base='./'):
     updates         =   OrderedDict(param_updates + gradient_buffer_updates)
         
     
-    gsn_f_cost           =   theano.function(inputs  = Xs, 
-                                         outputs = show_gsn_cost)
+    gsn_f_cost      =   theano.function(inputs  = Xs, 
+                                      outputs = show_gsn_cost)
 
 
-    gsn_f_learn          =   theano.function(inputs  = Xs, 
-                                         updates = updates, 
-                                         outputs = show_gsn_cost)
+    gsn_f_learn     =   theano.function(inputs  = Xs, 
+                                        updates = updates, 
+                                        outputs = show_gsn_cost)
       
     
     regression_gradient        =   T.grad(regression_cost, regression_params)
@@ -464,9 +467,6 @@ def experiment(state, outdir_base='./'):
                                                   updates = regression_updates, 
                                                   outputs = show_regression_cost)
     
-    #check = [T.sum(predicted_X_chain>1),T.sum(predicted_X_chain<0),T.sum((T.stacklists(Xs)[sequence_graph_output_index])>1),T.sum((T.stacklists(Xs)[sequence_graph_output_index])<0)]
-    #check = regression_gradient
-    #f_check = theano.function(inputs  = Xs+[sequence_graph_output_index], outputs = check, on_unused_input='warn')
     
     print "functions done. took {0!s} seconds.".format(trunc(time.time() - t))
     print

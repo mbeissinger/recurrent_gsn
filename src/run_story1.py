@@ -11,7 +11,7 @@ def main():
     parser.add_argument('--hidden_size', type=int, default=1500)
     parser.add_argument('--hidden_act', type=str, default='tanh')
     parser.add_argument('--visible_act', type=str, default='sigmoid')
-    parser.add_argument('--sequence_window_size', type=int, default=4)
+    parser.add_argument('--sequence_window_size', type=int, default=2)
     
     # training
     parser.add_argument('--n_epoch', type=int, default=100)
@@ -48,7 +48,7 @@ def main():
     # RUN STORY 1
     Story1.experiment(args, '../outputs/model_1/')
     args.dataset = "MNIST_2"
-    #Story1.experiment(args, '../outputs/model_1/')
+    Story1.experiment(args, '../outputs/model_1/')
     args.dataset = "MNIST_3"
     Story1.experiment(args, '../outputs/model_1/')
     
