@@ -9,13 +9,11 @@ import theano.tensor as T
 import theano.sandbox.rng_mrg as RNG_MRG
 
 
-
 cast32      = lambda x : numpy.cast['float32'](x)
 trunc       = lambda x : str(x)[:8]
 logit       = lambda p : numpy.log(p / (1 - p) )
 binarize    = lambda x : cast32(x >= 0.5)
 sigmoid     = lambda x : cast32(1. / (1 + numpy.exp(-x)))
-
 
 
 def get_shared_weights(n_in, n_out, interval=None, name="W"):
@@ -113,4 +111,13 @@ def load_from_config(config_filename):
 def init_empty_file(filename):
     with open(filename, 'w') as f:
         f.write("")
+        
+def make_time_units_string(time):
+    # Show the compile time with appropriate easy-to-read units.
+    if time < 60:
+        return str(trunc(time))+" seconds"
+    elif time < 3600:
+        return str(trunc(time/60))+" minutes"
+    else:
+        return str(trunc(time/3600))+" hours"
     

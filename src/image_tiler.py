@@ -1,20 +1,19 @@
-""" This file contains different utility functions that are not connected
+""" 
+This file contains different utility functions that are not connected
 in anyway to the networks presented in the tutorials, but rather help in
 processing the outputs into a more understandable way.
 
 For example ``tile_raster_images`` helps in generating a easy to grasp
 image from a set of samples or weights.
 
+Written by Li Yao (University of Montreal)
+https://github.com/yaoli/GSN
 """
 
 
 import numpy, os, cPickle
 from PIL import Image
-
-def load_mnist():
-    path = '.'
-    data = cPickle.load(open(os.path.join(path,'mnist.pkl'), 'r'))
-    return data
+import data_tools as data
 
 def scale_to_unit_interval(ndar, eps=1e-8):
     """ Scales all values in the ndarray ndar to be between 0 and 1 """
@@ -141,7 +140,7 @@ def tile_raster_images(X, img_shape, tile_shape, tile_spacing=(0, 0),
         return out_array
 
 def visualize_mnist():
-    (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = load_mnist()
+    (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = data.load_mnist('../data')
     design_matrix = train_X
     images = design_matrix[0:2500, :]
     channel_length = 28 * 28
