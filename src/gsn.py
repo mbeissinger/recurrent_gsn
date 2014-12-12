@@ -54,7 +54,8 @@ defaults = {"layers": 3,
             "hidden_activation": lambda x: T.tanh(x),
             "cost_function": lambda x,y: T.mean(T.nnet.binary_crossentropy(x,y)),
             "output_path": '../outputs/gsn/',
-            "is_image": True}
+            "is_image": True,
+            "vis_init": False}
 
 
 class GSN:
@@ -103,6 +104,7 @@ class GSN:
         self.hidden_add_noise_sigma = theano.shared(cast32(args.get('hidden_add_noise_sigma', defaults["hidden_add_noise_sigma"])))
         self.input_salt_and_pepper  = theano.shared(cast32(args.get('input_salt_and_pepper', defaults["input_salt_and_pepper"])))
         self.input_sampling         = args.get('input_sampling', defaults["input_sampling"])
+        self.vis_init               = args.get('vis_init', defaults['vis_init'])
         
         self.layer_sizes = [self.N_input] + [args.get('hidden_size', defaults['hidden_size'])] * self.layers # layer sizes, from h0 to hK (h0 is the visible layer)
         
@@ -356,7 +358,7 @@ class GSN:
     
             log.maybeAppend(self.logger, 'time: '+make_time_units_string(timing))
             
-            log.maybeLog('remaining: '+make_time_units_string((self.n_epoch - counter) * numpy.mean(times)))
+            log.maybeLog(self.logger, 'remaining: '+make_time_units_string((self.n_epoch - counter) * numpy.mean(times)))
         
             if (counter % self.save_frequency) == 0 or STOP is True:
                 if self.is_image:
