@@ -106,6 +106,9 @@ class GSN:
         
         self.layer_sizes = [self.N_input] + [args.get('hidden_size', defaults['hidden_size'])] * self.layers # layer sizes, from h0 to hK (h0 is the visible layer)
         
+        self.f_recon = None
+        self.f_noise = None
+        
         # Activation functions!
         if args.get('hidden_activation') is not None:
             log.maybeLog(self.logger, 'Using specified activation for hiddens')
