@@ -65,7 +65,7 @@ class GSN:
     def __init__(self, train_X=None, valid_X=None, test_X=None, args=None, logger=None):
         # Output logger
         self.logger = logger
-        self.outdir = args.get("output_path", defaults["outdir"])
+        self.outdir = args.get("output_path", defaults["output_path"])
         # Input data
         self.train_X = train_X
         self.valid_X = valid_X
