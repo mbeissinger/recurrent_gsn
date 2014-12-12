@@ -123,6 +123,22 @@ def shared_dataset(data_xy, borrow=True):
     return shared_x, T.cast(shared_y, 'int32')
 
 
+def shuffle_data(X, Y=None, rng=None):
+    if X is None:
+        pass
+    if rng is None:
+        rng = numpy.random
+        rng.seed(1)
+    #shuffle the dataset, making sure to keep X and Y together
+    train_indices = range(len(X.get_value(borrow=True)))
+    rng.shuffle(train_indices)
+    
+    X.set_value(X.get_value(borrow=True)[train_indices], borrow=True)
+    if Y is not None:
+        Y.set_value(Y.get_value(borrow=True)[train_indices], borrow=True)
+
+    
+
         
 def dataset1_indices(labels, classes=10):
     #Creates an ordering of indices for this MNIST label series (normally expressed as y in dataset) that makes the numbers go in order 0-9....

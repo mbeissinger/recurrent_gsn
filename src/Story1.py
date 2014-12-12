@@ -94,7 +94,7 @@ def experiment(state, outdir_base='./'):
         logger.log('test set size:',len(test_Y.eval()))
         logger.log('Sequencing done.\n')
     
-    # varaibles from the dataset that are used for initialization and image reconstruction
+    # variables from the dataset that are used for initialization and image reconstruction
     N_input =   train_X.eval().shape[1]
     root_N_input = numpy.sqrt(N_input)
     
@@ -387,12 +387,11 @@ def experiment(state, outdir_base='./'):
     ######################
     # COST AND GRADIENTS #
     ######################
-    print
     if state.cost_funct == 'binary_crossentropy':
-        logger.log('Using binary cross-entropy cost!')
+        logger.log('\nUsing binary cross-entropy cost!')
         cost_function = lambda x,y: T.mean(T.nnet.binary_crossentropy(x,y))
     elif state.cost_funct == 'square':
-        logger.log("Using square error cost!")
+        logger.log("\nUsing square error cost!")
         #cost_function = lambda x,y: T.log(T.mean(T.sqr(x-y)))
         cost_function = lambda x,y: T.log(T.sum(T.pow((x-y),2)))
     else:

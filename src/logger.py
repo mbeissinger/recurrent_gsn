@@ -42,3 +42,15 @@ class Logger(object):
         with open(self.logfile,'a') as f:
             f.write(text)
         print text[:-1]
+        
+def maybeLog(logger, text):
+    if logger is not None:
+        logger.log(text)
+    else:
+        print text
+        
+def maybeAppend(logger, text):
+    if logger is not None:
+        logger.append(text)
+    else:
+        print text,
