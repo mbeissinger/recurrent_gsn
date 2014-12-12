@@ -9,7 +9,7 @@ import time
 
 import theano
 from theano import tensor as T
-from model import load_mnist
+from data_tools import load_mnist
 
 def local_contrast_normalization(patches):
     patches = patches.reshape((patches.shape[0], -1))

@@ -48,13 +48,16 @@ def shared_dataset(data_xy, borrow=True):
     # lets ous get around this issue
     return shared_x, T.cast(shared_y, 'int32')
 
+def download_gzip_file(origin, destination_path, filename):
+    print 'Downloading data from %s' % origin
+    gzip_file = os.path.join(destination_path, filename)
+    urllib.urlretrieve(origin, gzip_file)
 
 #downloads the mnist data to specified file
 def download_mnist(path):
     origin = 'http://www.iro.umontreal.ca/~lisa/deep/data/mnist/mnist.pkl.gz'
-    gzip_file = os.path.join(path,'mnist.pkl.gz')
-    print 'Downloading data from %s' % origin
-    urllib.urlretrieve(origin, gzip_file)
+    filename = 'mnist.pkl.gz'
+    download_gzip_file(origin, path, filename)
 
 def load_mnist(path):
     ''' Loads the mnist dataset

@@ -9,7 +9,8 @@ from collections import OrderedDict
 from image_tiler import tile_raster_images
 import time
 import data_tools as data
-from utils import cast32, trunc, logit, get_shared_weights, get_shared_bias, get_shared_regression_weights, add_gaussian_noise, salt_and_pepper, load_from_config, fix_input_size
+from logger import Logger
+from utils import cast32, trunc, logit, get_shared_weights, get_shared_bias, get_shared_regression_weights, add_gaussian_noise, salt_and_pepper, load_from_config, fix_input_size, init_empty_file
 
 def experiment(state, outdir_base='./'):
     rng.seed(1) #seed the numpy random generator
@@ -18,6 +19,7 @@ def experiment(state, outdir_base='./'):
     data.mkdir_p(outdir_base)
     outdir = outdir_base + "/" + state.dataset + "/"
     data.mkdir_p(outdir)
+    logger = Logger(outdir)
     logfile = outdir+"log.txt"
     with open(logfile,'w') as f:
         f.write("MODEL 1, {0!s}\n\n".format(state.dataset))
@@ -27,6 +29,12 @@ def experiment(state, outdir_base='./'):
     regression_train_convergence = outdir+"regression_train_convergence.csv"
     regression_valid_convergence = outdir+"regression_valid_convergence.csv"
     regression_test_convergence = outdir+"regression_test_convergence.csv"
+    init_empty_file(train_convergence)
+    init_empty_file(valid_convergence)
+    init_empty_file(test_convergence)
+    init_empty_file(regression_train_convergence)
+    init_empty_file(regression_valid_convergence)
+    init_empty_file(regression_test_convergence)
 
     print
     print "----------MODEL 1, {0!s}--------------".format(state.dataset)
@@ -53,6 +61,10 @@ def experiment(state, outdir_base='./'):
 
 
     print state
+    
+    ####################################################
+    # Load the data, train = train+valid, and sequence #
+    ####################################################
     artificial = False #internal flag to see if the dataset is one of my artificially-sequenced MNIST varieties.
     if state.dataset == 'MNIST_1' or state.dataset == 'MNIST_2' or state.dataset == 'MNIST_3':
         (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = data.load_mnist(state.data_path)
@@ -107,7 +119,9 @@ def experiment(state, outdir_base='./'):
     #sequence_graph_output_index = T.lscalar("i")
     MRG = RNG_MRG.MRG_RandomStreams(1)
 
-    # PARAMETERS : weights list and bias list.
+    ##############
+    # PARAMETERS #
+    ##############
     # initialize a list of weights and biases based on layer_sizes for the GSN
     weights_list = [get_shared_weights(layer_sizes[layer], layer_sizes[layer+1], name="W_{0!s}_{1!s}".format(layer,layer+1)) for layer in range(layers)] # initialize each layer to uniform sample from sqrt(6. / (n_in + n_out))
     bias_list    = [get_shared_bias(layer_sizes[layer], name='b_'+str(layer)) for layer in range(layers + 1)] # initialize each layer to 0's.
@@ -118,16 +132,22 @@ def experiment(state, outdir_base='./'):
     tau_list                = [[get_shared_bias(state.hidden_size, name='tau_{t-'+str(window+1)+"}_layer"+str(layer)) for layer in range(layers+1) if (layer%2) != 0] for window in range(sequence_window_size)]
 
 
-#     ###########################################################
-#     # load initial parameters of gsn to speed up my debugging #
-#     ###########################################################
-#     params_to_load = 'gsn_params.pkl'
-#     PARAMS = cPickle.load(open(params_to_load,'r'))
-#     [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[:len(weights_list)], weights_list)]
-#     [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(PARAMS[len(weights_list):], bias_list)]
+    ###########################################################
+    # load initial parameters of gsn to speed up my debugging #
+    ###########################################################
+    params_to_load = 'gsn_params.pkl'
+    initialized_gsn = False
+    if os.path.isfile(params_to_load):
+        logger.log("\nLoading existing GSN parameters")
+        loaded_params = cPickle.load(open(params_to_load,'r'))
+        [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[:len(weights_list)], weights_list)]
+        [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(weights_list):], bias_list)]
+        initialized_gsn = True
 
  
-    ''' F PROP '''
+    ########################
+    # ACTIVATION FUNCTIONS #
+    ########################
     if state.hidden_act == 'sigmoid':
         print 'Using sigmoid activation for hiddens'
         hidden_activation = T.nnet.sigmoid
@@ -374,10 +394,16 @@ def experiment(state, outdir_base='./'):
     # COST AND GRADIENTS #
     ######################
     print
-#     cost_function = lambda x,y: T.mean(T.nnet.binary_crossentropy(x,y))
-#     print "Using binary cross-entropy cost!"
-    cost_function = lambda x,y: T.mean(T.sqr(x-y))
-    print "Using square error cost!"
+    if state.cost_funct == 'binary_crossentropy':
+        print 'Using binary cross-entropy cost!'
+        cost_function = lambda x,y: T.mean(T.nnet.binary_crossentropy(x,y))
+    elif state.cost_funct == 'square':
+        print "Using square error cost!"
+        #cost_function = lambda x,y: T.log(T.mean(T.sqr(x-y)))
+        cost_function = lambda x,y: T.log(T.sum(T.pow((x-y),2)))
+    else:
+        raise AssertionError("Did not recognize cost function {0!s}, please use binary_crossentropy or square".format(state.cost_funct))
+    
     
     print 'Cost w.r.t p(X|...) at every step in the graph for the TGSN'
     gsn_costs_init     = [cost_function(rX, X) for rX in p_X_chain_init]
@@ -632,7 +658,6 @@ def experiment(state, outdir_base='./'):
             print 'Testing : skip training'
             STOP    =   True
     
-    
         while not STOP:
             counter += 1
             t = time.time()
@@ -647,7 +672,7 @@ def experiment(state, outdir_base='./'):
             train_costs = []
             if iteration == 0:
                 for i in range(len(train_X.get_value(borrow=True)) / batch_size):
-                    x = train_X.get_value()[i * batch_size : (i+1) * batch_size]
+                    x = train_X.get_value(borrow=True)[i * batch_size : (i+1) * batch_size]
                     cost = gsn_f_learn_init(x)
                     train_costs.append([cost])
             else:
@@ -670,7 +695,7 @@ def experiment(state, outdir_base='./'):
             valid_costs  =  []
             if iteration == 0:
                 for i in range(len(valid_X.get_value(borrow=True)) / batch_size):
-                    x = valid_X.get_value()[i * batch_size : (i+1) * batch_size]
+                    x = valid_X.get_value(borrow=True)[i * batch_size : (i+1) * batch_size]
                     cost = gsn_f_cost_init(x)
                     valid_costs.append([cost])
             else:
@@ -693,7 +718,7 @@ def experiment(state, outdir_base='./'):
             test_costs  =   []
             if iteration == 0:
                 for i in range(len(test_X.get_value(borrow=True)) / batch_size):
-                    x = test_X.get_value()[i * batch_size : (i+1) * batch_size]
+                    x = test_X.get_value(borrow=True)[i * batch_size : (i+1) * batch_size]
                     cost = gsn_f_cost_init(x)
                     test_costs.append([cost])
             else:
@@ -970,15 +995,15 @@ def experiment(state, outdir_base='./'):
             
             
             
-            
     #####################
     # STORY 1 ALGORITHM #
     #####################
-    
+    # alternate training the gsn and training the regression
     for iteration in range(state.max_iterations):
-        train_GSN(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
-        train_regression(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+        if iteration is 0 and initialized_gsn is False:
+            train_regression(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+        else:
+            train_GSN(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+            train_regression(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
         
-          
-        
-        
+         

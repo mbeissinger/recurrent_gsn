@@ -121,20 +121,26 @@ def experiment(state, outdir_base='./'):
         raise AssertionError("batch size cannot be <= 0")
  
     ''' F PROP '''
-    if state.act == 'sigmoid':
-        print 'Using sigmoid activation'
+    if state.hidden_act == 'sigmoid':
+        print 'Using sigmoid activation for hiddens'
         hidden_activation = T.nnet.sigmoid
-    elif state.act == 'rectifier':
-        print 'Using rectifier activation'
+    elif state.hidden_act == 'rectifier':
+        print 'Using rectifier activation for hiddens'
         hidden_activation = lambda x : T.maximum(cast32(0), x)
-    elif state.act == 'tanh':
-        print 'Using tanh activation'
+    elif state.hidden_act == 'tanh':
+        print 'Using hyperbolic tangent activation for hiddens'
         hidden_activation = lambda x : T.tanh(x)
-        
-#     print 'Using sigmoid activation for visible layer'
-#     visible_activation = T.nnet.sigmoid 
-    print 'Using softmax activation for visible layer'
-    visible_activation = T.nnet.softmax 
+    else:
+        raise AssertionError("Did not recognize hidden activation {0!s}, please use tanh, rectifier, or sigmoid".format(state.hidden_act))
+    
+    if state.visible_act == 'sigmoid':
+        print 'Using sigmoid activation for visible layer'
+        visible_activation = T.nnet.sigmoid
+    elif state.visible_act == 'softmax':
+        print 'Using softmax activation for visible layer'
+        visible_activation = T.nnet.softmax
+    else:
+        raise AssertionError("Did not recognize visible activation {0!s}, please use sigmoid or softmax".format(state.visible_act))
   
         
     def update_layers(hiddens, p_X_chain, Xs, sequence_idx, noisy = True, sampling=True):
@@ -258,11 +264,21 @@ def experiment(state, outdir_base='./'):
         hiddens_output = H_chain[h_empty.index(False)] # set hiddens_output to the appropriate element from H_chain
         
 
-    # COST AND GRADIENTS    
+    ######################
+    # COST AND GRADIENTS #
+    ######################
     print
+    if state.cost_funct == 'binary_crossentropy':
+        print 'Using binary cross-entropy cost!'
+        cost_function = lambda x,y: T.mean(T.nnet.binary_crossentropy(x,y))
+    elif state.cost_funct == 'square':
+        print "Using square error cost!"
+        cost_function = lambda x,y: T.mean(T.sqr(x-y))
+    else:
+        raise AssertionError("Did not recognize cost function {0!s}, please use binary_crossentropy or square".format(state.cost_funct))
     print 'Cost w.r.t p(X|...) at every step in the graph'
     
-    costs = [T.mean(T.nnet.binary_crossentropy(predicted_X_chain[i], Xs[i+1])) for i in range(len(predicted_X_chain))]
+    costs = [cost_function(predicted_X_chain[i], Xs[i+1]) for i in range(len(predicted_X_chain))]
     # outputs for the functions
     show_COSTs = [costs[0]] + [costs[-1]]
             

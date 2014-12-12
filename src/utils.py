@@ -109,4 +109,8 @@ def load_from_config(config_filename):
         config_vals =   filter(lambda x:not 'jobman' in x and not '/' in x and not ':' in x and not 'experiment' in x, config_vals)
     
     return config_vals
+
+def init_empty_file(filename):
+    with open(filename, 'w') as f:
+        f.write("")
     

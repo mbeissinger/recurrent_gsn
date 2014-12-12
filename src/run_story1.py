@@ -5,20 +5,21 @@ def main():
     parser = argparse.ArgumentParser()
     # Add options here
 
-    # network
+    # network settings
     parser.add_argument('--layers', type=int, default=3) # number of hidden layers
     parser.add_argument('--walkbacks', type=int, default=5) # number of walkbacks
     parser.add_argument('--hidden_size', type=int, default=1500)
     parser.add_argument('--hidden_act', type=str, default='tanh')
     parser.add_argument('--visible_act', type=str, default='sigmoid')
-    parser.add_argument('--sequence_window_size', type=int, default=2)
+    parser.add_argument('--sequence_window_size', type=int, default=2) # how much history to consider (including the current input x)
     
     # training
+    parser.add_argument('--cost_funct', type=str, default='binary_crossentropy') # the cost function for training
     parser.add_argument('--n_epoch', type=int, default=100)
     parser.add_argument('--batch_size', type=int, default=100)
     parser.add_argument('--save_frequency', type=int, default=10) #number of epochs between parameters being saved
     parser.add_argument('--early_stop_threshold', type=float, default=0.9995) #0.9995
-    parser.add_argument('--early_stop_length', type=int, default=30)#10
+    parser.add_argument('--early_stop_length', type=int, default=30)
     parser.add_argument('--max_iterations', type=int, default=10)
     
     # noise
