@@ -20,7 +20,6 @@ import argparse
 import logger as log
 from logger import Logger
 import numpy, os, cPickle
-import warnings
 import numpy.random as rng
 import theano
 import theano.tensor as T
@@ -841,7 +840,6 @@ def main():
         [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(gsn.weights_list):], gsn.bias_list)]
     else:
         logger.log("Could not find existing GSN parameter file {}, training instead.".format(params_to_load))
-        raise Warning("Could not find existing GSN parameter file {}, training instead.".format(params_to_load))
         args.test_model = False
     
     #########################################
