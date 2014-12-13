@@ -53,11 +53,11 @@ def main():
     args = parser.parse_args()
        
     # RUN STORY 2
-    Story2.experiment(args, '../outputs/model_2/')
+    #Story2.experiment(args, '../outputs/model_2/')
     args.dataset = "MNIST_2"
-    Story2.experiment(args, '../outputs/model_2/')
+    #Story2.experiment(args, '../outputs/model_2/')
     args.dataset = "MNIST_3"
-    Story2.experiment(args, '../outputs/model_2/')
+    #Story2.experiment(args, '../outputs/model_2/')
     
 if __name__ == '__main__':
     main()
