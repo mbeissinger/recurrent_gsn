@@ -1,5 +1,5 @@
 import argparse
-import Story2_rnngsn as Story2
+import Story2_rnngsn_bias as Story2
 
 def main():
     parser = argparse.ArgumentParser()
