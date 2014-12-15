@@ -4,11 +4,11 @@ import theano.tensor as T
 import theano.sandbox.rng_mrg as RNG_MRG
 import PIL.Image
 from collections import OrderedDict
-from image_tiler import tile_raster_images
+from utils.image_tiler import tile_raster_images
 import time
-import data_tools as data
+from utils import data_tools as data
 import numpy.random as rng
-from utils import *
+from utils.utils import *
 
 
 def experiment(state, outdir_base='./'):

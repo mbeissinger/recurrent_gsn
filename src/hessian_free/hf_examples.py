@@ -6,7 +6,7 @@ import numpy, sys
 import theano
 import theano.tensor as T
 
-from hf import hf_optimizer, SequenceDataset
+from hessian_free import hf_optimizer, SequenceDataset
 
 
 def test_cg(n=500):

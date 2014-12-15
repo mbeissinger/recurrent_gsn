@@ -4,12 +4,12 @@ Created on Sep 8, 2014
 @author: markus
 '''
 import numpy
-import data_tools as data
+from utils import data_tools as data
 import theano
 import PIL.Image
-from image_tiler import tile_raster_images
+from utils.image_tiler import tile_raster_images
 import time
-from utils import trunc, fix_input_size
+from utils.utils import trunc, fix_input_size
 
 def test(n, batch_size = 106, iters = 100, xslength=6):
     (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = data.load_mnist('../data/')

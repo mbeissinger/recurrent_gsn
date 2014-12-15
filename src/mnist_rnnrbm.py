@@ -13,8 +13,8 @@ from theano.tensor.shared_randomstreams import RandomStreams
 import numpy.random as rng
 import PIL.Image
 from collections import OrderedDict
-from image_tiler import *
-import data_tools as data
+from utils.image_tiler import *
+from utils import data_tools as data
 import random as R
 
 #Don't use a python long as this don't work on 32 bits computers.

@@ -14,22 +14,23 @@ Scheduled noise is added as discussed in the paper:
 'Scheduled denoising autoencoders'
 Krzysztof J. Geras, Charles Sutton
 http://arxiv.org/abs/1406.3269
+
+Multimodal transition operator as discussed in:
+'Multimodal Transitions for Generative Stochastic Networks'
+Sherjil Ozair, Li Yao, Yoshua Bengio
+http://arxiv.org/abs/1312.5578
 '''
 
-import argparse
-import logger as log
-from logger import Logger
-import numpy, os, cPickle
-import numpy.random as rng
-import theano
+import os, cPickle, time, argparse
+import numpy, theano
 import theano.tensor as T
 import theano.sandbox.rng_mrg as RNG_MRG
 import PIL.Image
 from collections import OrderedDict
-from image_tiler import tile_raster_images
-import time
-import data_tools as data
-from utils import *
+from utils import logger as log
+from utils import data_tools as data
+from utils.image_tiler import tile_raster_images
+from utils.utils import cast32, logit, trunc, get_shared_weights, get_shared_bias, salt_and_pepper, add_gaussian_noise, make_time_units_string, load_from_config
 
 # Default values to use for some GSN parameters
 defaults = {"layers": 3,
@@ -60,7 +61,7 @@ defaults = {"layers": 3,
 
 class GSN:
     '''
-    Basic class for creating a new Generative Stochastic Network (GSN) given some training data
+    Basic class for creating a new Generative Stochastic Network (GSN)
     '''
     def __init__(self, train_X=None, valid_X=None, test_X=None, args=None, logger=None):
         # Output logger
@@ -126,7 +127,7 @@ class GSN:
             self.hidden_activation = lambda x : T.tanh(x)
         elif args.get('hidden_act') is not None:
             log.maybeLog(self.logger, "Did not recognize hidden activation {0!s}, please use tanh, rectifier, or sigmoid".format(args.get('hidden_act')))
-            raise AssertionError("Did not recognize hidden activation {0!s}, please use tanh, rectifier, or sigmoid".format(args.get('hidden_act')))
+            raise NotImplementedError("Did not recognize hidden activation {0!s}, please use tanh, rectifier, or sigmoid".format(args.get('hidden_act')))
         else:
             log.maybeLog(self.logger, "Using default activation for hiddens")
             self.hidden_activation = defaults['hidden_activation']
@@ -142,7 +143,7 @@ class GSN:
             self.visible_activation = T.nnet.softmax
         elif args.get('visible_act') is not None:
             log.maybeLog(self.logger, "Did not recognize visible activation {0!s}, please use sigmoid or softmax".format(args.get('visible_act')))
-            raise AssertionError("Did not recognize visible activation {0!s}, please use sigmoid or softmax".format(args.get('visible_act')))
+            raise NotImplementedError("Did not recognize visible activation {0!s}, please use sigmoid or softmax".format(args.get('visible_act')))
         else:
             log.maybeLog(self.logger, 'Using default activation for visible layer')
             self.visible_activation = defaults['visible_activation']
@@ -160,7 +161,7 @@ class GSN:
             self.cost_function = lambda x,y: T.log(T.sum(T.pow((x-y),2)))
         elif args.get('cost_funct') is not None:
             log.maybeLog(self.logger, "\nDid not recognize cost function {0!s}, please use binary_crossentropy or square\n".format(args.get('cost_funct')))
-            raise AssertionError("Did not recognize cost function {0!s}, please use binary_crossentropy or square".format(args.get('cost_funct')))
+            raise NotImplementedError("Did not recognize cost function {0!s}, please use binary_crossentropy or square".format(args.get('cost_funct')))
         else:
             log.maybeLog(self.logger, '\nUsing default cost function for GSN training\n')
             self.cost_function = defaults['cost_function']
@@ -792,7 +793,7 @@ def main():
     args.output_path = outdir
     
     # Create the logger
-    logger = Logger(outdir)
+    logger = log.Logger(outdir)
     logger.log("---------CREATING GSN------------\n\n")
     logger.log(args)
     

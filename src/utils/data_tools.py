@@ -1,6 +1,6 @@
 '''
 @author: Markus Beissinger
-University of Pennsylvania 2014-2015
+University of Pennsylvania, 2014-2015
 
 Based on code from Li Yao (University of Montreal)
 https://github.com/yaoli/GSN

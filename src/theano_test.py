@@ -1,8 +1,3 @@
-'''
-Created on Oct 1, 2014
-
-@author: markus
-'''
 from theano import function, config, shared, sandbox
 import theano.tensor as T
 import numpy

@@ -6,15 +6,15 @@ import theano.tensor as T
 import theano.sandbox.rng_mrg as RNG_MRG
 import PIL.Image
 from collections import OrderedDict
-from image_tiler import tile_raster_images
+from utils.image_tiler import tile_raster_images
 import time
-import data_tools as data
-from utils import *
+from utils import data_tools as data
+from utils.utils import *
 from numpy import dtype
 import warnings
-from logger import Logger
-from hf.hf import hf_optimizer as hf_optimizer
-from hf.hf import SequenceDataset as hf_sequence_dataset
+from utils.logger import Logger
+from hessian_free.hf import hf_optimizer as hf_optimizer
+from hessian_free.hf import SequenceDataset as hf_sequence_dataset
 
 
 def experiment(state, outdir_base='./'):

@@ -6,11 +6,11 @@ import theano.tensor as T
 import theano.sandbox.rng_mrg as RNG_MRG
 import PIL.Image
 from collections import OrderedDict
-from image_tiler import tile_raster_images
+from utils.image_tiler import tile_raster_images
 import time
-import data_tools as data
-from logger import Logger
-from utils import cast32, trunc, logit, get_shared_weights, get_shared_bias, get_shared_regression_weights, add_gaussian_noise, salt_and_pepper, load_from_config, fix_input_size, init_empty_file,\
+from utils import data_tools as data
+from utils.logger import Logger
+from utils.utils import cast32, trunc, logit, get_shared_weights, get_shared_bias, get_shared_regression_weights, add_gaussian_noise, salt_and_pepper, load_from_config, fix_input_size, init_empty_file,\
     make_time_units_string
 
 def experiment(state, outdir_base='./'):
