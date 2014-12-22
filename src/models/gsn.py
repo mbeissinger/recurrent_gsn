@@ -33,12 +33,12 @@ from utils.image_tiler import tile_raster_images
 from utils.utils import cast32, logit, trunc, get_shared_weights, get_shared_bias, salt_and_pepper, add_gaussian_noise, make_time_units_string, load_from_config
 
 # Default values to use for some GSN parameters
-defaults = {"layers": 3,
-            "walkbacks": 5,
+defaults = {"layers": 3, # number of hidden layers to use
+            "walkbacks": 5, # number of walkbacks (generally 2*layers) - need enough to have info from top layer propagate to visible layer
             "hidden_size": 1500,
             "learning_rate": 0.25,
             "annealing": 0.995,
-            "noise_annealing": 0.99,
+            "noise_annealing": 1.0, #no noise schedule by default
             "momentum": 0.5,
             "batch_size": 100,
             "add_noise": True,
