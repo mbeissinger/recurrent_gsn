@@ -1,5 +1,5 @@
 import argparse
-from models import rnngsn_bias as Story2
+from models import rnngsn_hiddens as Story2
 
 def main():
     parser = argparse.ArgumentParser()
@@ -17,10 +17,11 @@ def main():
     parser.add_argument('--recurrent_hidden_act', type=str, default='tanh')
     
     # training
+    parser.add_argument('--initialize_gsn', type=int, default=1) # whether or not to train a strict GSN first to initialize the weights and biases
     parser.add_argument('--cost_funct', type=str, default='binary_crossentropy') # the cost function for training
     parser.add_argument('--n_epoch', type=int, default=200)
     parser.add_argument('--gsn_batch_size', type=int, default=100)
-    parser.add_argument('--batch_size', type=int, default=15)#106 #batch size here to speed up training - doesn't work in practice unless you know the sequence length. In my case it is 10, so using 10*10+walkbacks+1 allows the continuation of the recurrent hidden variables.
+    parser.add_argument('--batch_size', type=int, default=200)
     parser.add_argument('--save_frequency', type=int, default=1) #number of epochs between parameters being saved
     parser.add_argument('--early_stop_threshold', type=float, default=0.9995) #0.9995
     parser.add_argument('--early_stop_length', type=int, default=30)

@@ -117,15 +117,17 @@ def experiment(state, outdir_base='./'):
     bias_list    = [get_shared_bias(layer_sizes[i], name='b_'+str(i)) for i in range(layers + 1)] # initialize each layer to 0's.
     
     #recurrent
-    recurrent_to_gsn_bias_weights_list = [get_shared_weights(state.recurrent_hidden_size, layer_sizes[layer], name="W_u_b{0!s}".format(layer)) for layer in range(layers+1)]
+    recurrent_to_gsn_weights_list = [get_shared_weights(state.recurrent_hidden_size, layer_sizes[layer], name="W_u_h{0!s}".format(layer)) for layer in range(layers+1) if layer%2 != 0]
     W_u_u = get_shared_weights(state.recurrent_hidden_size, state.recurrent_hidden_size, name="W_u_u")
     W_x_u = get_shared_weights(N_input, state.recurrent_hidden_size, name="W_x_u")
+    #W_h_u = get_shared_weights(state.recurrent_hidden_size, state.recurrent_hidden_size, name="W_h_u")
     recurrent_bias = get_shared_bias(state.recurrent_hidden_size, name='b_u')
     
     #lists for use with gradients
     gsn_params = weights_list + bias_list
+    #u_params   = [W_u_u, W_x_u, W_h_u, recurrent_bias]
     u_params   = [W_u_u, W_x_u, recurrent_bias]
-    params     = gsn_params + recurrent_to_gsn_bias_weights_list + u_params
+    params     = gsn_params + recurrent_to_gsn_weights_list + u_params
     
     ###########################################################
     #           load initial parameters of gsn                #
@@ -248,31 +250,63 @@ def experiment(state, outdir_base='./'):
     #  Build the training graph for the RNN-GSN  #
     ##############################################
     # If `x_t` is given, deterministic recurrence to compute the u_t. Otherwise, first generate
-    def recurrent_step(x_t, u_tm1):
-        bv_t = bias_list[0] + T.dot(u_tm1, recurrent_to_gsn_bias_weights_list[0])
-        bh_t = T.concatenate([bias_list[i+1] + T.dot(u_tm1, recurrent_to_gsn_bias_weights_list[i+1]) for i in range(layers)],axis=0)
+    def recurrent_step(x_t, u_tm1, add_noise):
+        # Make current guess for hiddens based on U
+        for i in range(layers):
+            if i%2 == 0:
+                logger.log("Using {0!s} and {1!s}".format(recurrent_to_gsn_weights_list[(i+1)/2],bias_list[i+1]))
+        h_t = T.concatenate([hidden_activation(bias_list[i+1] + T.dot(u_tm1, recurrent_to_gsn_weights_list[(i+1)/2])) for i in range(layers) if i%2 == 0],axis=0)
+        
         generate = x_t is None
         if generate:
             pass
+        
+        # Make a GSN to update U
+#         chain, hs = gsn.build_gsn(x_t, weights_list, bias_list, add_noise, state.noiseless_h1, state.hidden_add_noise_sigma, state.input_salt_and_pepper, state.input_sampling, MRG, visible_activation, hidden_activation, walkbacks, logger)
+#         htop_t = hs[-1]
+#         denoised_x_t = chain[-1]
+        # Update U
+#         ua_t = T.dot(denoised_x_t, W_x_u) + T.dot(htop_t, W_h_u) + T.dot(u_tm1, W_u_u) + recurrent_bias
         ua_t = T.dot(x_t, W_x_u) + T.dot(u_tm1, W_u_u) + recurrent_bias
         u_t = recurrent_hidden_activation(ua_t)
-        return None if generate else [ua_t, u_t, bv_t, bh_t]
+        return None if generate else [ua_t, u_t, h_t]
     
     logger.log("\nCreating recurrent step scan.")
     # For training, the deterministic recurrence is used to compute all the
     # {h_t, 1 <= t <= T} given Xs. Conditional GSNs can then be trained
     # in batches using those parameters.
     u0 = T.zeros((state.recurrent_hidden_size,))  # initial value for the RNN hidden units
-    (ua, u, bv_t, bh_t), updates_recurrent = theano.scan(fn=lambda x_t, u_tm1, *_: recurrent_step(x_t, u_tm1),
+    (ua, u, h_t), updates_recurrent = theano.scan(fn=lambda x_t, u_tm1, *_: recurrent_step(x_t, u_tm1, True),
                                                        sequences=Xs,
-                                                       outputs_info=[None, u0, None, None],
+                                                       outputs_info=[None, u0, None],
                                                        non_sequences=params)
-    # put the bias_list together from hiddens and visible biases
-    #b_list = [bv_t.flatten(2)] + [bh_t.dimshuffle((1,0,2))[i] for i in range(len(weights_list))]
-    b_list = [bv_t] + [(bh_t.T[i*state.hidden_size:(i+1)*state.hidden_size]).T for i in range(layers)]
     
-    _, cost, show_cost = gsn.build_gsn_scan(Xs, weights_list, b_list, True, state.noiseless_h1, state.hidden_add_noise_sigma, state.input_salt_and_pepper, state.input_sampling, MRG, visible_activation, hidden_activation, walkbacks, cost_function, logger)
-    x_sample_recon, _, _ = gsn.build_gsn_scan(Xs, weights_list, b_list, False, state.noiseless_h1, state.hidden_add_noise_sigma, state.input_salt_and_pepper, state.input_sampling, MRG, visible_activation, hidden_activation, walkbacks, cost_function, logger)
+    logger.log("Now for reconstruction sample")
+    (_, _, h_t_recon), updates_recurrent_recon = theano.scan(fn=lambda x_t, u_tm1, *_: recurrent_step(x_t, u_tm1, False),
+                                                       sequences=Xs,
+                                                       outputs_info=[None, u0, None],
+                                                       non_sequences=params)
+    # put together the hiddens list
+    #h_list = [h0_t] + [(h_t.T[i*state.hidden_size:(i+1)*state.hidden_size]).T for i in range(layers)]
+    #h_list_recon = [h0_t_recon] + [(h_t_recon.T[i*state.hidden_size:(i+1)*state.hidden_size]).T for i in range(layers)]
+    h_list = [T.zeros_like(Xs)]
+    for layer, w in enumerate(weights_list):
+        if layer%2 != 0:
+            h_list.append(T.zeros_like(T.dot(h_list[-1], w)))
+        else:
+            h_list.append((h_t.T[(layer/2)*state.hidden_size:(layer/2+1)*state.hidden_size]).T)
+            
+    h_list_recon = [T.zeros_like(Xs)]
+    for layer, w in enumerate(weights_list):
+        if layer%2 != 0:
+            h_list_recon.append(T.zeros_like(T.dot(h_list_recon[-1], w)))
+        else:
+            h_list_recon.append((h_t_recon.T[(layer/2)*state.hidden_size:(layer/2+1)*state.hidden_size]).T)
+    
+    #with noise
+    _, cost, show_cost = gsn.build_gsn_given_hiddens(Xs, h_list, weights_list, bias_list, True, state.noiseless_h1, state.hidden_add_noise_sigma, state.input_salt_and_pepper, state.input_sampling, MRG, visible_activation, hidden_activation, walkbacks, cost_function, logger)
+    #without noise for reconstruction
+    x_sample_recon, _, _ = gsn.build_gsn_given_hiddens(Xs, h_list_recon, weights_list, bias_list, False, state.noiseless_h1, state.hidden_add_noise_sigma, state.input_salt_and_pepper, state.input_sampling, MRG, visible_activation, hidden_activation, walkbacks, cost_function, logger)
     
     updates_train = updates_recurrent
     #updates_train.update(updates_gsn)

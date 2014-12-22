@@ -106,21 +106,24 @@ def shared_dataset(data_xy, borrow=True):
     is needed (the default behaviour if the data is not in a shared
     variable) would lead to a large decrease in performance.
     """
+    # Unpack the x and y data
     data_x, data_y = data_xy
-    shared_x = theano.shared(numpy.asarray(data_x,
-                                           dtype=theano.config.floatX),  # @UndefinedVariable
-                             borrow=borrow)
-    shared_y = theano.shared(numpy.asarray(data_y,
-                                           dtype=theano.config.floatX), # @UndefinedVariable
-                             borrow=borrow)
+#     shared_x = theano.shared(numpy.asarray(data_x,
+#                                            dtype=theano.config.floatX),  # @UndefinedVariable
+#                              borrow=borrow)
+#     shared_y = theano.shared(numpy.asarray(data_y,
+#                                            dtype=theano.config.floatX), # @UndefinedVariable
+#                              borrow=borrow)
     # When storing data on the GPU it has to be stored as floats
     # therefore we will store the labels as ``floatX`` as well
     # (``shared_y`` does exactly that). But during our computations
     # we need them as ints (we use labels as index, and if they are
     # floats it doesn't make sense) therefore instead of returning
     # ``shared_y`` we will have to cast it to int. This little hack
-    # lets ous get around this issue
-    return shared_x, T.cast(shared_y, 'int32')
+    # lets us get around this issue
+#     return shared_x, T.cast(shared_y, 'int32')
+    
+    return theano.shared(data_x, borrow=borrow), theano.shared(data_y, borrow=borrow)
 
 
 def shuffle_data(X, Y=None, rng=None):

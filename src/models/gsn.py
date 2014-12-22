@@ -15,7 +15,7 @@ Scheduled noise is added as discussed in the paper:
 Krzysztof J. Geras, Charles Sutton
 http://arxiv.org/abs/1406.3269
 
-Multimodal transition operator as discussed in:
+Multimodal transition operator (using NADE) discussed in:
 'Multimodal Transitions for Generative Stochastic Networks'
 Sherjil Ozair, Li Yao, Yoshua Bengio
 http://arxiv.org/abs/1312.5578
@@ -67,6 +67,8 @@ class GSN:
         # Output logger
         self.logger = logger
         self.outdir = args.get("output_path", defaults["output_path"])
+        if self.outdir[-1] != '/':
+            self.outdir = self.outdir+'/'
         # Input data
         self.train_X = train_X
         self.valid_X = valid_X
@@ -279,6 +281,16 @@ class GSN:
         ############
         # TRAINING #
         ############
+        
+        # Define the re-used loops for f_learn and f_cost
+        def apply_cost_function_to_dataset(function, dataset):
+            costs = []
+            for i in xrange(len(dataset.get_value(borrow=True)) / self.batch_size):
+                x = dataset.get_value(borrow=True)[i * self.batch_size : (i+1) * self.batch_size]
+                cost = function(x)
+                costs.append([cost])
+            return numpy.mean(costs)
+            
         log.maybeLog(self.logger, "-----------TRAINING GSN FOR {0!s} EPOCHS-----------".format(self.n_epoch))
         STOP        = False
         counter     = 0
@@ -300,40 +312,25 @@ class GSN:
             counter += 1
             t = time.time()
             log.maybeAppend(self.logger, [counter,'\t'])
-                
+            
             #shuffle the data
             data.shuffle_data(train_X)
             data.shuffle_data(valid_X)
             data.shuffle_data(test_X)
-                
+            
             #train
-            train_costs = []
-            for i in xrange(len(train_X.get_value(borrow=True)) / self.batch_size):
-                x = train_X.get_value(borrow=True)[i * self.batch_size : (i+1) * self.batch_size]
-                cost = f_learn(x)
-                train_costs.append([cost])
-            train_costs = numpy.mean(train_costs) 
-            log.maybeAppend(self.logger, ['Train: ',trunc(train_costs), '\t'])
+            train_costs = apply_cost_function_to_dataset(f_learn, train_X)
+            log.maybeAppend(self.logger, ['Train:',trunc(train_costs), '\t'])
     
             #valid
             if valid_X is not None:
-                valid_costs  =  []
-                for i in range(len(valid_X.get_value(borrow=True)) / self.batch_size):
-                    x = valid_X.get_value(borrow=True)[i * self.batch_size : (i+1) * self.batch_size]
-                    cost = f_cost(x)
-                    valid_costs.append([cost])
-                valid_costs = numpy.mean(valid_costs) 
-                log.maybeAppend(self.logger, ['Valid: ',trunc(valid_costs), '\t'])
+                valid_costs = apply_cost_function_to_dataset(f_cost, valid_X)
+                log.maybeAppend(self.logger, ['Valid:',trunc(valid_costs), '\t'])
     
             #test
             if test_X is not None:
-                test_costs  =   []
-                for i in range(len(test_X.get_value(borrow=True)) / self.batch_size):
-                    x = test_X.get_value(borrow=True)[i * self.batch_size : (i+1) * self.batch_size]
-                    cost = f_cost(x)
-                    test_costs.append([cost])
-                test_costs = numpy.mean(test_costs) 
-                log.maybeAppend(self.logger, ['Test: ',trunc(test_costs), '\t'])
+                test_costs = apply_cost_function_to_dataset(f_cost, test_X)
+                log.maybeAppend(self.logger, ['Test:',trunc(test_costs), '\t'])
                 
             #check for early stopping
             if valid_X is not None:
@@ -357,7 +354,7 @@ class GSN:
             timing = time.time() - t
             times.append(timing)
     
-            log.maybeAppend(self.logger, 'time: '+make_time_units_string(timing))
+            log.maybeAppend(self.logger, 'time: '+make_time_units_string(timing)+'\t')
             
             log.maybeLog(self.logger, 'remaining: '+make_time_units_string((self.n_epoch - counter) * numpy.mean(times)))
         
@@ -474,6 +471,31 @@ def update_layers(hiddens,
     # update the even layers
     update_even_layers(hiddens, weights_list, bias_list, p_X_chain, add_noise, noiseless_h1, hidden_add_noise_sigma, input_salt_and_pepper, input_sampling, MRG, visible_activation, hidden_activation, logger)
     log.maybeLog(logger, 'done full update.\n')
+    
+def update_layers_scan_step(hiddens_t,
+                            weights_list,
+                            bias_list,
+                            add_noise              = defaults["add_noise"],
+                            noiseless_h1           = defaults["noiseless_h1"],
+                            hidden_add_noise_sigma = defaults["hidden_add_noise_sigma"],
+                            input_salt_and_pepper  = defaults["input_salt_and_pepper"],
+                            input_sampling         = defaults["input_sampling"],
+                            MRG                    = defaults["MRG"],
+                            visible_activation     = defaults["visible_activation"],
+                            hidden_activation      = defaults["hidden_activation"],
+                            logger = None):
+    p_X_chain = []
+    log.maybeLog(logger, "One full update step for layers.")
+    # One update over the odd layers + one update over the even layers
+    log.maybeLog(logger, 'odd layer updates')
+    # update the odd layers
+    update_odd_layers(hiddens_t, weights_list, bias_list, add_noise, noiseless_h1, hidden_add_noise_sigma, input_salt_and_pepper, input_sampling, MRG, visible_activation, hidden_activation, logger)
+    log.maybeLog(logger, 'even layer updates')
+    # update the even layers
+    update_even_layers(hiddens_t, weights_list, bias_list, p_X_chain, add_noise, noiseless_h1, hidden_add_noise_sigma, input_salt_and_pepper, input_sampling, MRG, visible_activation, hidden_activation, logger)
+    log.maybeLog(logger, 'done full update.\n')
+    # return the generated sample, the sampled next input, and hiddens
+    return p_X_chain[0], hiddens_t
         
     
 def update_layers_reverse(hiddens,
@@ -640,33 +662,45 @@ def build_gsn(X,
               walkbacks              = defaults["walkbacks"],
               logger = None):
     """
-    Construct a GSN for k walkbacks on the input X.
+    Construct a GSN (unimodal transition operator) for k walkbacks on the input X.
     Returns the list of predicted X's after k walkbacks and the resulting layer values.
 
     @type  X: Theano symbolic variable
     @param X: The variable representing the visible input.
+    
     @type  weights_list: List(matrix)
     @param weights_list: The list of weights to use between layers.
+    
     @type  bias_list: List(vector)
     @param bias_list: The list of biases to use for each layer.
+    
     @type  add_noise: Boolean
     @param add_noise: Whether or not to add noise in the computational graph.
+    
     @type  noiseless_h1: Boolean
     @param noiseless_h1: Whether or not to add noise in the first hidden layer.
+    
     @type  hidden_add_noise_sigma: Float
     @param hidden_add_noise_sigma: The sigma value for the hidden noise function.
+    
     @type  input_salt_and_pepper: Float
     @param input_salt_and_pepper: The amount of masking noise to use.
+    
     @type  input_sampling: Boolean
     @param input_sampling: Whether to sample from each walkback prediction (like Gibbs).
+    
     @type  MRG: Theano random generator
     @param MRG: Random generator.
+    
     @type  visible_activation: Function
     @param visible_activation: The visible layer X activation function.
+    
     @type  hidden_activation: Function
     @param hidden_activation: The hidden layer activation function.
+    
     @type  walkbacks: Integer
     @param walkbacks: The k number of walkbacks to use for the GSN.
+    
     @type  logger: Logger
     @param logger: The output log to use.
     
@@ -692,7 +726,8 @@ def build_gsn(X,
     return p_X_chain, hiddens
 
 
-def build_gsn_given_hiddens(hiddens,
+def build_gsn_given_hiddens(X,
+                            hiddens,
                             weights_list,
                             bias_list,
                             add_noise              = defaults["add_noise"],
@@ -704,15 +739,65 @@ def build_gsn_given_hiddens(hiddens,
                             visible_activation     = defaults["visible_activation"],
                             hidden_activation      = defaults["hidden_activation"],
                             walkbacks              = defaults["walkbacks"],
+                            cost_function          = defaults["cost_function"],
                             logger = None):
+    
+    log.maybeLog(logger, ["Building the GSN graph given hiddens with", walkbacks,"walkbacks"])
     p_X_chain = []
-    # The layer update scheme
-    log.maybeLog(logger, ["Building the GSN graph with reverse layer updates :", walkbacks,"updates"])
     for i in range(walkbacks):
-        log.maybeLog(logger, "GSN Walkback {!s}/{!s}".format(i+1,walkbacks))
+        log.maybeLog(logger, "GSN (prediction) Walkback {!s}/{!s}".format(i+1,walkbacks))
         update_layers_reverse(hiddens, weights_list, bias_list, p_X_chain, add_noise, noiseless_h1, hidden_add_noise_sigma, input_salt_and_pepper, input_sampling, MRG, visible_activation, hidden_activation, logger)
         
-    return p_X_chain, hiddens
+
+    x_sample = p_X_chain[-1]
+    
+    costs     = [cost_function(rX, X) for rX in p_X_chain]
+    show_cost = costs[-1] # for logging to show progress
+    cost      = numpy.sum(costs)
+    
+    return x_sample, cost, show_cost
+
+
+def build_gsn_scan(X,
+                   weights_list,
+                   bias_list,
+                   add_noise              = defaults["add_noise"],
+                   noiseless_h1           = defaults["noiseless_h1"],
+                   hidden_add_noise_sigma = defaults["hidden_add_noise_sigma"],
+                   input_salt_and_pepper  = defaults["input_salt_and_pepper"],
+                   input_sampling         = defaults["input_sampling"],
+                   MRG                    = defaults["MRG"],
+                   visible_activation     = defaults["visible_activation"],
+                   hidden_activation      = defaults["hidden_activation"],
+                   walkbacks              = defaults["walkbacks"],
+                   cost_function          = defaults["cost_function"],
+                   logger = None):
+    
+    # Whether or not to corrupt the visible input X
+    if add_noise:
+        X_init = salt_and_pepper(X, input_salt_and_pepper)
+    else:
+        X_init = X
+    # init hiddens with zeros
+    hiddens_0 = [X_init]
+    for w in weights_list:
+        hiddens_0.append(T.zeros_like(T.dot(hiddens_0[-1], w)))
+    
+    log.maybeLog(logger, ["Building the GSN graph with", walkbacks,"walkbacks"])
+    p_X_chain = []
+    for i in range(walkbacks):
+        log.maybeLog(logger, "GSN (after scan) Walkback {!s}/{!s}".format(i+1,walkbacks))
+        update_layers(hiddens_0, weights_list, bias_list, p_X_chain, add_noise, noiseless_h1, hidden_add_noise_sigma, input_salt_and_pepper, input_sampling, MRG, visible_activation, hidden_activation, logger)
+        
+
+    x_sample = p_X_chain[-1]
+    
+    costs     = [cost_function(rX, X) for rX in p_X_chain]
+    show_cost = costs[-1] # for logging to show progress
+    cost      = numpy.sum(costs)
+    
+    return x_sample, cost, show_cost#, updates
+    
 
 
 
@@ -721,6 +806,8 @@ def build_gsn_given_hiddens(hiddens,
 #############################
 def save_params_to_file(epoch, gsn_params, outdir, logger=None):
     logger.log('saving parameters...')
+    if outdir[-1] != '/':
+        outdir = outdir + '/'
     save_path = outdir+'gsn_params_epoch_'+str(epoch)+'.pkl'
     f = open(save_path, 'wb')
     try:

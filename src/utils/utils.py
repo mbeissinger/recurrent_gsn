@@ -1,7 +1,9 @@
 '''
-Created on Aug 18, 2014
+@author: Markus Beissinger
+University of Pennsylvania, 2014-2015
 
-@author: Markus
+Based on code from Li Yao (University of Montreal)
+https://github.com/yaoli/GSN
 '''
 import numpy
 import theano
@@ -77,7 +79,6 @@ def salt_and_pepper(IN, p = 0.2, MRG=None):
     if MRG is None:
         MRG = RNG_MRG.MRG_RandomStreams(1)
     # salt and pepper noise
-    print 'DAE uses salt and pepper noise'
     a = MRG.binomial(size=IN.shape, n=1,
                           p = 1 - p,
                           dtype='float32')
@@ -89,6 +90,7 @@ def salt_and_pepper(IN, p = 0.2, MRG=None):
 
 
 def fix_input_size(xs, hiddens=None):
+    # Make the dimensions of all X's in xs be the same. (with xs being a list of 2-dimensional matrices)
     sizes = [x.shape[0] for x in xs]
     min_size = numpy.min(sizes)
     xs = [x[:min_size] for x in xs]
@@ -113,11 +115,13 @@ def init_empty_file(filename):
         f.write("")
         
 def make_time_units_string(time):
-    # Show the compile time with appropriate easy-to-read units.
-    if time < 60:
-        return str(trunc(time))+" seconds"
+    # Show the time with appropriate easy-to-read units.
+    if time < 0:
+        return trunc(time*1000)+" milliseconds"
+    elif time < 60:
+        return trunc(time)+" seconds"
     elif time < 3600:
-        return str(trunc(time/60))+" minutes"
+        return trunc(time/60)+" minutes"
     else:
-        return str(trunc(time/3600))+" hours"
+        return trunc(time/3600)+" hours"
     
