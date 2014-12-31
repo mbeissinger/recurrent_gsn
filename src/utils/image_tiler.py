@@ -11,7 +11,7 @@ https://github.com/yaoli/GSN
 """
 
 
-import numpy, os, cPickle
+import numpy, os
 from PIL import Image
 import data_tools as data
 

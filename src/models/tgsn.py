@@ -2,23 +2,10 @@
 @author: Markus Beissinger
 University of Pennsylvania, 2014-2015
 
-Based on code from Li Yao (University of Montreal)
-https://github.com/yaoli/GSN
+This class produces the TGSN model discussed in the paper: (thesis)
 
-These scripts produce the model trained on MNIST discussed in the paper:
-'Deep Generative Stochastic Networks Trainable by Backprop'
-Yoshua Bengio, Eric Thibodeau-Laufer
-http://arxiv.org/abs/1306.1091
-
-Scheduled noise is added as discussed in the paper:
-'Scheduled denoising autoencoders'
-Krzysztof J. Geras, Charles Sutton
-http://arxiv.org/abs/1406.3269
-
-Multimodal transition operator (using NADE) discussed in:
-'Multimodal Transitions for Generative Stochastic Networks'
-Sherjil Ozair, Li Yao, Yoshua Bengio
-http://arxiv.org/abs/1312.5578
+Inspired by Ilya Sutskever's TRBM:
+http://www.cs.utoronto.ca/~ilya/MS_thesis/ms_body.pdf
 '''
 
 import os, cPickle, time, argparse
@@ -65,9 +52,9 @@ defaults = {# gsn parameters
             "vis_init": False}
 
 
-class GSN:
+class TGSN:
     '''
-    Class for creating a new Generative Stochastic Network (GSN)
+    Class for creating a new Temporal Generative Stochastic Network (TGSN)
     '''
     def __init__(self, train_X=None, valid_X=None, test_X=None, args=None, logger=None):
         # Output logger

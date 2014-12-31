@@ -510,13 +510,13 @@ def experiment(state, outdir_base='./'):
     #############################
     def save_params_to_file(name, n, gsn_params):
         pass
-        print 'saving parameters...'
-        save_path = outdir+name+'_params_epoch_'+str(n)+'.pkl'
-        f = open(save_path, 'wb')
-        try:
-            cPickle.dump(gsn_params, f, protocol=cPickle.HIGHEST_PROTOCOL)
-        finally:
-            f.close()
+#         print 'saving parameters...'
+#         save_path = outdir+name+'_params_epoch_'+str(n)+'.pkl'
+#         f = open(save_path, 'wb')
+#         try:
+#             cPickle.dump(gsn_params, f, protocol=cPickle.HIGHEST_PROTOCOL)
+#         finally:
+#             f.close()
             
     def save_params(params):
         values = [param.get_value(borrow=True) for param in params]

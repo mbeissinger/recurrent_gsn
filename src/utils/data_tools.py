@@ -301,24 +301,24 @@ def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, data
     if rng is None:
         rng = numpy.random
         rng.seed(1)
+        
+    def set_xy_indices(x, y, indices):
+        x.set_value(x.get_value(borrow=True)[indices])
+        y.set_value(y.get_value(borrow=True)[indices])
+        
+    def shuffle_xy(x, y):
+        if x is not None and y is not None:
+            indices = range(len(y.get_value(borrow=True)))
+            rng.shuffle(indices)
+            set_xy_indices(x, y, indices)
+        
     #shuffle the datasets
-    train_indices = range(len(train_Y.get_value(borrow=True)))
-    rng.shuffle(train_indices)
-    valid_indices = range(len(valid_Y.get_value(borrow=True)))
-    rng.shuffle(valid_indices)
-    test_indices = range(len(test_Y.get_value(borrow=True)))
-    rng.shuffle(test_indices)
+    shuffle_xy(train_X, train_Y)
+    shuffle_xy(valid_X, valid_Y)
+    shuffle_xy(test_X, test_Y)
     
-    train_X.set_value(train_X.get_value(borrow=True)[train_indices])
-    train_Y.set_value(train_Y.get_value(borrow=True)[train_indices])
-    
-    valid_X.set_value(valid_X.get_value(borrow=True)[valid_indices])
-    valid_Y.set_value(valid_Y.get_value(borrow=True)[valid_indices])
-    
-    test_X.set_value(test_X.get_value(borrow=True)[test_indices])
-    test_Y.set_value(test_Y.get_value(borrow=True)[test_indices])
-    
-    # Find the order of MNIST data going from 0-9 repeating if the first dataset        
+    # Find the order of MNIST data going from 0-9 repeating if the first dataset
+    order_i = True
     if dataset == 1:
         train_ordered_indices = dataset1_indices(train_Y.get_value(borrow=True))
         valid_ordered_indices = dataset1_indices(valid_Y.get_value(borrow=True))
@@ -332,19 +332,13 @@ def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, data
         valid_ordered_indices = dataset3_indices(valid_Y.get_value(borrow=True))
         test_ordered_indices = dataset3_indices(test_Y.get_value(borrow=True))
     else:
-        train_ordered_indices = train_indices
-        valid_ordered_indices = valid_indices
-        test_ordered_indices = test_indices
+        order_i = False
     
     # Put the data sets in order
-    train_X.set_value(train_X.get_value(borrow=True)[train_ordered_indices])
-    train_Y.set_value(train_Y.get_value(borrow=True)[train_ordered_indices])
-    
-    valid_X.set_value(valid_X.get_value(borrow=True)[valid_ordered_indices])
-    valid_Y.set_value(valid_Y.get_value(borrow=True)[valid_ordered_indices])
-    
-    test_X.set_value(test_X.get_value(borrow=True)[test_ordered_indices])
-    test_Y.set_value(test_Y.get_value(borrow=True)[test_ordered_indices])
+    if order_i:
+        set_xy_indices(train_X, train_Y, train_ordered_indices)
+        set_xy_indices(valid_X, valid_Y, valid_ordered_indices)
+        set_xy_indices(test_X, test_Y, test_ordered_indices)
     
     
     ###############################################################################################################
