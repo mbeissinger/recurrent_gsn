@@ -27,15 +27,17 @@ def experiment(state, outdir_base='./'):
     data.mkdir_p(outdir)
     logger = Logger(outdir)
     logger.log("----------MODEL 2, {0!s}-----------\n".format(state.dataset))
-    gsn_train_convergence = outdir+"gsn_train_convergence.csv"
-    gsn_valid_convergence = outdir+"gsn_valid_convergence.csv"
-    gsn_test_convergence  = outdir+"gsn_test_convergence.csv"
+    if state.initialize_gsn:
+        gsn_train_convergence = outdir+"gsn_train_convergence.csv"
+        gsn_valid_convergence = outdir+"gsn_valid_convergence.csv"
+        gsn_test_convergence  = outdir+"gsn_test_convergence.csv"
     train_convergence = outdir+"train_convergence.csv"
     valid_convergence = outdir+"valid_convergence.csv"
     test_convergence  = outdir+"test_convergence.csv"
-    init_empty_file(gsn_train_convergence)
-    init_empty_file(gsn_valid_convergence)
-    init_empty_file(gsn_test_convergence)
+    if state.initialize_gsn:
+        init_empty_file(gsn_train_convergence)
+        init_empty_file(gsn_valid_convergence)
+        init_empty_file(gsn_test_convergence)
     init_empty_file(train_convergence)
     init_empty_file(valid_convergence)
     init_empty_file(test_convergence)

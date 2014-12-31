@@ -17,7 +17,7 @@ def main():
     parser.add_argument('--recurrent_hidden_act', type=str, default='tanh')
     
     # training
-    parser.add_argument('--initialize_gsn', type=int, default=0) # whether or not to train a strict GSN first to initialize the weights and biases
+    parser.add_argument('--initialize_gsn', type=int, default=1) # whether or not to train a strict GSN first to initialize the weights and biases
     parser.add_argument('--cost_funct', type=str, default='binary_crossentropy') # the cost function for training
     parser.add_argument('--n_epoch', type=int, default=500)
     parser.add_argument('--gsn_batch_size', type=int, default=100)

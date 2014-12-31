@@ -5,7 +5,7 @@ University of Pennsylvania, 2014-2015
 This class produces the model discussed in the paper: (my rnn-gsn paper)
 
 Inspired by code for the RNN-RBM:
-http://deeplearning/net/rnnrbm (or something like that I'll fix the link)
+http://deeplearning.net/tutorial/rnnrbm.html
 
 '''
 
