@@ -340,15 +340,6 @@ class GSN:
         ############
         # TRAINING #
         ############
-        # Define the re-used loops for f_learn and f_cost
-        def apply_cost_function_to_dataset(function, dataset):
-            costs = []
-            for i in xrange(len(dataset.get_value(borrow=True)) / self.batch_size):
-                x = dataset.get_value(borrow=True)[i * self.batch_size : (i+1) * self.batch_size]
-                cost = function(x)
-                costs.append([cost])
-            return numpy.mean(costs)
-            
         log.maybeLog(self.logger, "-----------TRAINING GSN FOR {0!s} EPOCHS-----------".format(self.n_epoch))
         STOP        = False
         counter     = 0
@@ -379,17 +370,17 @@ class GSN:
             data.shuffle_data(test_X)
             
             #train
-            train_costs = apply_cost_function_to_dataset(self.f_learn, train_X)
+            train_costs = data.apply_cost_function_to_dataset(self.f_learn, train_X, self.batch_size)
             log.maybeAppend(self.logger, ['Train:',trunc(train_costs), '\t'])
     
             #valid
             if valid_X is not None:
-                valid_costs = apply_cost_function_to_dataset(self.f_cost, valid_X)
+                valid_costs = data.apply_cost_function_to_dataset(self.f_cost, valid_X, self.batch_size)
                 log.maybeAppend(self.logger, ['Valid:',trunc(valid_costs), '\t'])
     
             #test
             if test_X is not None:
-                test_costs = apply_cost_function_to_dataset(self.f_cost, test_X)
+                test_costs = data.apply_cost_function_to_dataset(self.f_cost, test_X, self.batch_size)
                 log.maybeAppend(self.logger, ['Test:',trunc(test_costs), '\t'])
                 
             #check for early stopping

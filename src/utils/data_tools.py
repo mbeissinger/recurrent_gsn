@@ -15,6 +15,14 @@ from utils import cast32
 import urllib
 import scipy.io as io
 
+# Define the re-used loops for f_learn and f_cost
+def apply_cost_function_to_dataset(function, dataset, batch_size=1):
+    costs = []
+    for i in xrange(len(dataset.get_value(borrow=True)) / batch_size):
+        xs = dataset.get_value(borrow=True)[i * batch_size : (i+1) * batch_size]
+        cost = function(xs)
+        costs.append([cost])
+    return numpy.mean(costs)
 
 #create a filesystem path if it doesn't exist.
 def mkdir_p(path):

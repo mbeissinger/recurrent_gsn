@@ -2,10 +2,7 @@
 @author: Markus Beissinger
 University of Pennsylvania, 2014-2015
 
-This class produces the model discussed in the paper: (my rnn-gsn paper)
-
-Inspired by code for the RNN-RBM:
-http://deeplearning.net/tutorial/rnnrbm.html
+This class produces the model discussed in the paper: (my sen paper)
 
 '''
 
@@ -30,9 +27,9 @@ from utils.utils import cast32, logit, trunc, get_shared_weights, get_shared_bia
 from numpy import ceil, sqrt
 
 
-# Default values to use for some RNN-GSN parameters
+# Default values to use for SEN parameters
 defaults = {# gsn parameters
-            "layers": 3, # number of hidden layers to use
+            "gsn_layers": 3, # number of hidden layers to use
             "walkbacks": 5, # number of walkbacks (generally 2*layers) - need enough to have info from top layer propagate to visible layer
             "hidden_size": 1500,
             "hidden_activation": lambda x: T.tanh(x),
@@ -42,6 +39,8 @@ defaults = {# gsn parameters
             # recurrent parameters
             "recurrent_hidden_size": 1500,
             "recurrent_hidden_activation": lambda x: T.tanh(x),
+            # sen parameters
+            
             # training parameters
             "initialize_gsn": True,
             "cost_function": lambda x,y: T.mean(T.nnet.binary_crossentropy(x,y)),
@@ -65,12 +64,12 @@ defaults = {# gsn parameters
             # data parameters
             "is_image": True,
             "vis_init": False,
-            "output_path": '../outputs/rnn_gsn/'}
+            "output_path": '../outputs/sen/'}
 
 
-class RNN_GSN():
+class SEN():
     '''
-    Class for creating a new Recurrent Generative Stochastic Network (RNN-GSN)
+    Class for creating a new Sequence Encoder Network (SEN)
     '''
     def __init__(self, train_X=None, train_Y=None, valid_X=None, valid_Y=None, test_X=None, test_Y=None, args=None, logger=None):
         # Output logger
@@ -103,7 +102,7 @@ class RNN_GSN():
         #######################################
         # Network and training specifications #
         #######################################
-        self.layers          = args.get('layers', defaults['layers']) # number hidden layers
+        self.gsn_layers      = args.get('gsn_layers', defaults['gsn_layers']) # number hidden layers
         self.walkbacks       = args.get('walkbacks', defaults['walkbacks']) # number of walkbacks
         self.learning_rate   = theano.shared(cast32(args.get('learning_rate', defaults['learning_rate'])))  # learning rate
         self.init_learn_rate = cast32(args.get('learning_rate', defaults['learning_rate']))
@@ -580,10 +579,7 @@ class RNN_GSN():
                     number_reconstruction = PIL.Image.fromarray(tile_raster_images(stacked, (self.root_N_input,self.root_N_input), (10,30)))
                         
                     number_reconstruction.save(self.outdir+'rnngsn_number_reconstruction_epoch_'+str(counter)+'.png')
-            
-                    #sample_numbers(counter, 'seven')
-                    plot_samples(counter, 'rnngsn')
-            
+                    
                     #save params
                     save_params_to_file('all', counter, self.params)
              
@@ -592,12 +588,7 @@ class RNN_GSN():
                 self.learning_rate.set_value(new_lr)
     
             
-            # 10k samples
-            print 'Generating 10,000 samples'
-            samples, _  =   sample_some_numbers(N=10000)
-            f_samples   =   self.outdir+'samples.npy'
-            numpy.save(f_samples, samples)
-            print 'saved digits'
+
     
     
     
@@ -606,74 +597,6 @@ class RNN_GSN():
     
     
     
-    
-    
-    
-    
-    
-    
-    
-    def sample(self, initial, n_samples=400):
-        def sample_some_numbers_single_layer(n_samples):
-            x0 = initial
-            samples = [x0]
-            x = self.f_noise(x0)
-            for _ in xrange(n_samples-1):
-                x = self.f_sample(x)
-                samples.append(x)
-                x = rng.binomial(n=1, p=x, size=x.shape).astype('float32')
-                x = self.f_noise(x)
-                
-            return numpy.vstack(samples)
-                
-        def sampling_wrapper(NSI):
-            # * is the "splat" operator: It takes a list as input, and expands it into actual positional arguments in the function call.
-            out = self.f_sample(*NSI)
-            NSO = out[:len(self.network_state_output)]
-            vis_pX_chain = out[len(self.network_state_output):]
-            return NSO, vis_pX_chain
-    
-        def sample_some_numbers(n_samples):
-            # The network's initial state
-            init_vis       = initial
-    
-            noisy_init_vis = self.f_noise(init_vis)
-    
-            network_state  = [[noisy_init_vis] + [numpy.zeros((1,len(b.get_value())), dtype='float32') for b in self.bias_list[1:]]]
-    
-            visible_chain  = [init_vis]
-    
-            noisy_h0_chain = [noisy_init_vis]
-    
-            for _ in xrange(n_samples-1):
-               
-                # feed the last state into the network, compute new state, and obtain visible units expectation chain 
-                net_state_out, vis_pX_chain = sampling_wrapper(network_state[-1])
-    
-                # append to the visible chain
-                visible_chain += vis_pX_chain
-    
-                # append state output to the network state chain
-                network_state.append(net_state_out)
-                
-                noisy_h0_chain.append(net_state_out[0])
-    
-            return numpy.vstack(visible_chain)#, numpy.vstack(noisy_h0_chain)
-        
-        if self.layers == 1:
-            return sample_some_numbers_single_layer(n_samples)
-        else:
-            return sample_some_numbers(n_samples)
-        
-    def plot_samples(self, epoch_number="", leading_text="", n_samples=400):
-        to_sample = time.time()
-        initial = self.test_X.get_value()[:1]
-        V = self.sample(initial, n_samples)
-        img_samples = PIL.Image.fromarray(tile_raster_images(V, (self.root_N_input,self.root_N_input), (ceil(sqrt(n_samples)), ceil(sqrt(n_samples)))))
-        
-        fname = self.outdir+leading_text+'samples_epoch_'+str(epoch_number)+'.png'
-        img_samples.save(fname) 
-        log.maybeLog(self.logger, 'Took ' + str(time.time() - to_sample) + ' to sample '+n_samples+' numbers')
                 
     
     
