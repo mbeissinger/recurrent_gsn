@@ -582,7 +582,7 @@ class RNN_GSN():
                     number_reconstruction.save(self.outdir+'rnngsn_number_reconstruction_epoch_'+str(counter)+'.png')
             
                     #sample_numbers(counter, 'seven')
-                    plot_samples(counter, 'rnngsn')
+#                     plot_samples(counter, 'rnngsn')
             
                     #save params
                     save_params_to_file('all', counter, self.params)
@@ -593,11 +593,11 @@ class RNN_GSN():
     
             
             # 10k samples
-            print 'Generating 10,000 samples'
-            samples, _  =   sample_some_numbers(N=10000)
-            f_samples   =   self.outdir+'samples.npy'
-            numpy.save(f_samples, samples)
-            print 'saved digits'
+#             print 'Generating 10,000 samples'
+#             samples, _  =   sample_some_numbers(N=10000)
+#             f_samples   =   self.outdir+'samples.npy'
+#             numpy.save(f_samples, samples)
+#             print 'saved digits'
     
     
     

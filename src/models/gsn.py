@@ -933,21 +933,21 @@ def main():
     
     # training
     parser.add_argument('--cost_funct', type=str, default='binary_crossentropy') # the cost function for training
-    parser.add_argument('--n_epoch', type=int, default=200)
+    parser.add_argument('--n_epoch', type=int, default=500)
     parser.add_argument('--batch_size', type=int, default=100)
     parser.add_argument('--save_frequency', type=int, default=10) #number of epochs between parameters being saved
-    parser.add_argument('--early_stop_threshold', type=float, default=0.9995)
+    parser.add_argument('--early_stop_threshold', type=float, default=0.9996)
     parser.add_argument('--early_stop_length', type=int, default=30) #the patience number of epochs
     
     # noise
-    parser.add_argument('--hidden_add_noise_sigma', type=float, default=2)
-    parser.add_argument('--input_salt_and_pepper', type=float, default=0.4) #default=0.4
+    parser.add_argument('--hidden_add_noise_sigma', type=float, default=4) #default=2
+    parser.add_argument('--input_salt_and_pepper', type=float, default=0.8) #default=0.4
     
     # hyper parameters
     parser.add_argument('--learning_rate', type=float, default=0.25)
     parser.add_argument('--momentum', type=float, default=0.5)
     parser.add_argument('--annealing', type=float, default=0.995)
-    parser.add_argument('--noise_annealing', type=float, default=0.99)
+    parser.add_argument('--noise_annealing', type=float, default=0.98)
     
     # data
     parser.add_argument('--dataset', type=str, default='MNIST')

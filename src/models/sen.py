@@ -42,7 +42,7 @@ defaults = {# gsn parameters
             # sen parameters
             
             # training parameters
-            "initialize_gsn": True,
+            "load_params": False,
             "cost_function": lambda x,y: T.mean(T.nnet.binary_crossentropy(x,y)),
             "n_epoch": 1000,
             "gsn_batch_size": 100,
@@ -121,11 +121,12 @@ class SEN():
         self.input_salt_and_pepper  = theano.shared(cast32(args.get('input_salt_and_pepper', defaults["input_salt_and_pepper"])))
         self.input_sampling         = args.get('input_sampling', defaults["input_sampling"])
         self.vis_init               = args.get('vis_init', defaults['vis_init'])
-        self.initialize_gsn         = args.get('initialize_gsn', defaults['initialize_gsn'])
+        self.load_params            = args.get('load_params', defaults['load_params'])
         self.hessian_free           = args.get('hessian_free', defaults['hessian_free'])
         
-        self.layer_sizes = [self.N_input] + [args.get('hidden_size', defaults['hidden_size'])] * self.layers # layer sizes, from h0 to hK (h0 is the visible layer)
+        self.layer_sizes = [self.N_input] + [args.get('hidden_size', defaults['hidden_size'])] * self.gsn_layers # layer sizes, from h0 to hK (h0 is the visible layer)
         self.recurrent_hidden_size = args.get('recurrent_hidden_size', defaults['recurrent_hidden_size'])
+        self.top_layer_sizes = [self.recurrent_hidden_size] + [args.get('hidden_size', defaults['hidden_size'])] * self.gsn_layers # layer sizes, from h0 to hK (h0 is the visible layer)
         
         self.f_recon = None
         self.f_noise = None
@@ -208,48 +209,89 @@ class SEN():
         # Theano variables and RNG #
         ############################
         self.X = T.fmatrix('X') #single (batch) for training gsn
-        self.Xs = T.fmatrix('Xs') #sequence for training rnn-gsn
+        self.Xs = T.fmatrix('Xs') #sequence for training rnn
         self.MRG = RNG_MRG.MRG_RandomStreams(1)
         
         ###############
         # Parameters! #
         ###############
-        #gsn
-        self.weights_list = [get_shared_weights(self.layer_sizes[i], self.layer_sizes[i+1], name="W_{0!s}_{1!s}".format(i,i+1)) for i in range(self.layers)] # initialize each layer to uniform sample from sqrt(6. / (n_in + n_out))
-        self.bias_list    = [get_shared_bias(self.layer_sizes[i], name='b_'+str(i)) for i in range(self.layers + 1)] # initialize each layer to 0's.
+        #visible gsn
+        self.weights_list = [get_shared_weights(self.layer_sizes[i], self.layer_sizes[i+1], name="W_{0!s}_{1!s}".format(i,i+1)) for i in range(self.gsn_layers)] # initialize each layer to uniform sample from sqrt(6. / (n_in + n_out))
+        self.bias_list    = [get_shared_bias(self.layer_sizes[i], name='b_'+str(i)) for i in range(self.gsn_layers + 1)] # initialize each layer to 0's.
         
         #recurrent
-        self.recurrent_to_gsn_weights_list = [get_shared_weights(self.recurrent_hidden_size, self.layer_sizes[layer], name="W_u_h{0!s}".format(layer)) for layer in range(self.layers+1) if layer%2 != 0]
+        self.recurrent_to_gsn_weights_list = [get_shared_weights(self.recurrent_hidden_size, self.layer_sizes[layer], name="W_u_h{0!s}".format(layer)) for layer in range(self.gsn_layers+1) if layer%2 != 0]
         self.W_u_u = get_shared_weights(self.recurrent_hidden_size, self.recurrent_hidden_size, name="W_u_u")
         self.W_x_u = get_shared_weights(self.N_input, self.recurrent_hidden_size, name="W_x_u")
         self.recurrent_bias = get_shared_bias(self.recurrent_hidden_size, name='b_u')
         
+        #top layer gsn
+        self.top_weights_list = [get_shared_weights(self.top_layer_sizes[i], self.top_layer_sizes[i+1], name="Wtop_{0!s}_{1!s}".format(i,i+1)) for i in range(self.gsn_layers)] # initialize each layer to uniform sample from sqrt(6. / (n_in + n_out))
+        self.top_bias_list    = [get_shared_bias(self.top_layer_sizes[i], name='btop_'+str(i)) for i in range(self.gsn_layers + 1)] # initialize each layer to 0's.
+        
         #lists for use with gradients
         self.gsn_params = self.weights_list + self.bias_list
         self.u_params   = [self.W_u_u, self.W_x_u, self.recurrent_bias]
-        self.params     = self.gsn_params + self.recurrent_to_gsn_weights_list + self.u_params
+        self.top_params = self.top_weights_list + self.top_bias_list
+        self.params     = self.gsn_params + self.recurrent_to_gsn_weights_list + self.u_params + self.top_params
         
-        ###########################################################
-        #           load initial parameters of gsn                #
-        ###########################################################
-        self.train_gsn_first = False
-        if self.initialize_gsn:
+        ###################################################
+        #          load initial parameters                #
+        ###################################################
+        if self.load_params:
             params_to_load = 'gsn_params.pkl'
-            if not os.path.isfile(params_to_load):
-                self.train_gsn_first = True 
-            else:
-                log.maybeLog(self.logger, "\nLoading existing GSN parameters\n")
-                loaded_params = cPickle.load(open(params_to_load,'r'))
-                [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[:len(self.weights_list)], self.weights_list)]
-                [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(self.weights_list):], self.bias_list)]
+            log.maybeLog(self.logger, "\nLoading existing GSN parameters\n")
+            loaded_params = cPickle.load(open(params_to_load,'r'))
+            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[:len(self.weights_list)], self.weights_list)]
+            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(self.weights_list):], self.bias_list)]
+            
+            params_to_load = 'rnn_params.pkl'
+            log.maybeLog(self.logger, "\nLoading existing RNN parameters\n")
+            loaded_params = cPickle.load(open(params_to_load,'r'))
+            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[:len(self.recurrent_to_gsn_weights_list)], self.recurrent_to_gsn_weights_list)]
+            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(self.recurrent_to_gsn_weights_list):len(self.recurrent_to_gsn_weights_list)+1], self.W_u_u)]
+            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(self.recurrent_to_gsn_weights_list)+1:len(self.recurrent_to_gsn_weights_list)+2], self.W_x_u)]
+            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(self.recurrent_to_gsn_weights_list)+2:], self.recurrent_bias)]
+            
+            params_to_load = 'top_gsn_params.pkl'
+            log.maybeLog(self.logger, "\nLoading existing top level GSN parameters\n")
+            loaded_params = cPickle.load(open(params_to_load,'r'))
+            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[:len(self.top_weights_list)], self.top_weights_list)]
+            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(self.top_weights_list):], self.top_bias_list)]
                 
-        if self.initialize_gsn:
-            self.gsn_args = {'weights_list':       self.weights_list,
-                             'bias_list':          self.bias_list,
+        self.gsn_args = {'weights_list':       self.weights_list,
+                         'bias_list':          self.bias_list,
+                         'hidden_activation':  self.hidden_activation,
+                         'visible_activation': self.visible_activation,
+                         'cost_function':      self.cost_function,
+                         'layers':             self.gsn_layers,
+                         'walkbacks':          self.walkbacks,
+                         'hidden_size':        args.get('hidden_size', defaults['hidden_size']),
+                         'learning_rate':      args.get('learning_rate', defaults['learning_rate']),
+                         'momentum':           args.get('momentum', defaults['momentum']),
+                         'annealing':          self.annealing,
+                         'noise_annealing':    self.noise_annealing,
+                         'batch_size':         self.gsn_batch_size,
+                         'n_epoch':            self.n_epoch,
+                         'early_stop_threshold':   self.early_stop_threshold,
+                         'early_stop_length':      self.early_stop_length,
+                         'save_frequency':         self.save_frequency,
+                         'noiseless_h1':           self.noiseless_h1,
+                         'hidden_add_noise_sigma': args.get('hidden_add_noise_sigma', defaults['hidden_add_noise_sigma']),
+                         'input_salt_and_pepper':  args.get('input_salt_and_pepper', defaults['input_salt_and_pepper']),
+                         'input_sampling':      self.input_sampling,
+                         'vis_init':            self.vis_init,
+                         'output_path':         self.outdir+'gsn/',
+                         'is_image':            self.is_image,
+                         'input_size':          self.N_input
+                         }
+        
+        self.top_gsn_args = {'weights_list':       self.top_weights_list,
+                             'bias_list':          self.top_bias_list,
                              'hidden_activation':  self.hidden_activation,
-                             'visible_activation': self.visible_activation,
+                             'visible_activation': self.recurrent_hidden_activation,
                              'cost_function':      self.cost_function,
-                             'layers':             self.layers,
+                             'layers':             self.gsn_layers,
                              'walkbacks':          self.walkbacks,
                              'hidden_size':        args.get('hidden_size', defaults['hidden_size']),
                              'learning_rate':      args.get('learning_rate', defaults['learning_rate']),
@@ -266,9 +308,9 @@ class SEN():
                              'input_salt_and_pepper':  args.get('input_salt_and_pepper', defaults['input_salt_and_pepper']),
                              'input_sampling':      self.input_sampling,
                              'vis_init':            self.vis_init,
-                             'output_path':         self.outdir+'gsn/',
-                             'is_image':            self.is_image,
-                             'input_size':          self.N_input
+                             'output_path':         self.outdir+'top_gsn/',
+                             'is_image':            False,
+                             'input_size':          self.recurrent_hidden_size
                              }
             
         ############
@@ -276,7 +318,7 @@ class SEN():
         ############
         # the input to the sampling function
         X_sample = T.fmatrix("X_sampling")
-        self.network_state_input = [X_sample] + [T.fmatrix("H_sampling_"+str(i+1)) for i in range(self.layers)]
+        self.network_state_input = [X_sample] + [T.fmatrix("H_sampling_"+str(i+1)) for i in range(self.gsn_layers)]
        
         # "Output" state of the network (noisy)
         # initialized with input, then we apply updates
@@ -306,10 +348,10 @@ class SEN():
         # If `x_t` is given, deterministic recurrence to compute the u_t. Otherwise, first generate
         def recurrent_step(x_t, u_tm1, add_noise):
             # Make current guess for hiddens based on U
-            for i in range(self.layers):
+            for i in range(self.gsn_layers):
                 if i%2 == 0:
                     log.maybeLog(self.logger, "Using {0!s} and {1!s}".format(self.recurrent_to_gsn_weights_list[(i+1)/2],self.bias_list[i+1]))
-            h_t = T.concatenate([self.hidden_activation(self.bias_list[i+1] + T.dot(u_tm1, self.recurrent_to_gsn_weights_list[(i+1)/2])) for i in range(self.layers) if i%2 == 0],axis=0)
+            h_t = T.concatenate([self.hidden_activation(self.bias_list[i+1] + T.dot(u_tm1, self.recurrent_to_gsn_weights_list[(i+1)/2])) for i in range(self.gsn_layers) if i%2 == 0],axis=0)
             
             generate = x_t is None
             if generate:
@@ -409,7 +451,7 @@ class SEN():
                                        name='rnngsn_f_noise')
         # Sampling functions
         log.maybeLog(self.logger, "Creating sampling function...")
-        if self.layers == 1: 
+        if self.gsn_layers == 1: 
             self.f_sample = theano.function(inputs = [X_sample],
                                             outputs = visible_pX_chain[-1],
                                             name='rnngsn_f_sample_single_layer')
