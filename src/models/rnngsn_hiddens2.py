@@ -395,7 +395,7 @@ def experiment(state, outdir_base='./'):
     # Recompile the graph without noise for reconstruction function
     # The layer update scheme
     logger.log("Creating graph for noisy reconstruction function at checkpoints during training.")
-    f_recon = theano.function(inputs=[Xs], outputs=x_sample_recon[-1])
+    f_recon = theano.function(inputs=[Xs], outputs=x_sample_recon[-1], updates=updates_recurrent_recon)
     
     # Now do the same but for the GSN in the initial run
     if train_gsn_first:

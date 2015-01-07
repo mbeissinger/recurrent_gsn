@@ -353,6 +353,11 @@ class SEN():
                     log.maybeLog(self.logger, "Using {0!s} and {1!s}".format(self.recurrent_to_gsn_weights_list[(i+1)/2],self.bias_list[i+1]))
             h_t = T.concatenate([self.hidden_activation(self.bias_list[i+1] + T.dot(u_tm1, self.recurrent_to_gsn_weights_list[(i+1)/2])) for i in range(self.gsn_layers) if i%2 == 0],axis=0)
             
+            # Make a GSN to update U
+            _, hs = gsn.build_gsn(x_t, self.weights_list, self.bias_list, add_noise, self.noiseless_h1, self.hidden_add_noise_sigma, self.input_salt_and_pepper, self.input_sampling, self.MRG, self.visible_activation, self.hidden_activation, self.walkbacks, self.logger)
+            htop_t = hs[-1]
+            ins_t = htop_t
+            
             ua_t = T.dot(ins_t, self.W_ins_u) + T.dot(u_tm1, self.W_u_u) + self.recurrent_bias
             u_t = self.recurrent_hidden_activation(ua_t)
             return [ua_t, u_t, h_t]
@@ -433,6 +438,7 @@ class SEN():
         log.maybeLog(self.logger, "Creating graph for noisy reconstruction function at checkpoints during training.")
         self.f_recon = theano.function(inputs=[self.Xs],
                                        outputs=x_sample_recon[-1],
+                                       updates=updates_recurrent_recon,
                                        name='rnngsn_f_recon')
         
         # a function to add salt and pepper noise
