@@ -324,7 +324,7 @@ class GSN:
     def train(self, train_X=None, valid_X=None, test_X=None, continue_training=False):
         log.maybeLog(self.logger, "\nTraining---------\n")
         if train_X is None:
-            log.maybeLog(self.logger, "Training using data given during initialization of GSN.\n")
+            log.maybeLog(self.logger, "Training using data given during initialization of GSN class.\n")
             train_X = self.train_X
             if train_X is None:
                 log.maybeLog(self.logger, "\nPlease provide a training dataset!\n")

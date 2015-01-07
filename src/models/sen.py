@@ -222,7 +222,7 @@ class SEN():
         #recurrent
         self.recurrent_to_gsn_weights_list = [get_shared_weights(self.recurrent_hidden_size, self.layer_sizes[layer], name="W_u_h{0!s}".format(layer)) for layer in range(self.gsn_layers+1) if layer%2 != 0]
         self.W_u_u = get_shared_weights(self.recurrent_hidden_size, self.recurrent_hidden_size, name="W_u_u")
-        self.W_x_u = get_shared_weights(self.N_input, self.recurrent_hidden_size, name="W_x_u")
+        self.W_ins_u = get_shared_weights(args.get('hidden_size', defaults['hidden_size']), self.recurrent_hidden_size, name="W_ins_u")
         self.recurrent_bias = get_shared_bias(self.recurrent_hidden_size, name='b_u')
         
         #top layer gsn
@@ -231,7 +231,7 @@ class SEN():
         
         #lists for use with gradients
         self.gsn_params = self.weights_list + self.bias_list
-        self.u_params   = [self.W_u_u, self.W_x_u, self.recurrent_bias]
+        self.u_params   = [self.W_u_u, self.W_ins_u, self.recurrent_bias]
         self.top_params = self.top_weights_list + self.top_bias_list
         self.params     = self.gsn_params + self.recurrent_to_gsn_weights_list + self.u_params + self.top_params
         
@@ -250,7 +250,7 @@ class SEN():
             loaded_params = cPickle.load(open(params_to_load,'r'))
             [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[:len(self.recurrent_to_gsn_weights_list)], self.recurrent_to_gsn_weights_list)]
             [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(self.recurrent_to_gsn_weights_list):len(self.recurrent_to_gsn_weights_list)+1], self.W_u_u)]
-            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(self.recurrent_to_gsn_weights_list)+1:len(self.recurrent_to_gsn_weights_list)+2], self.W_x_u)]
+            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(self.recurrent_to_gsn_weights_list)+1:len(self.recurrent_to_gsn_weights_list)+2], self.W_ins_u)]
             [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(self.recurrent_to_gsn_weights_list)+2:], self.recurrent_bias)]
             
             params_to_load = 'top_gsn_params.pkl'
@@ -343,7 +343,7 @@ class SEN():
     
                
         ##############################################
-        #      Build the graphs for the RNN-GSN      #
+        #        Build the graphs for the SEN        #
         ##############################################
         # If `x_t` is given, deterministic recurrence to compute the u_t. Otherwise, first generate
         def recurrent_step(x_t, u_tm1, add_noise):
@@ -353,19 +353,9 @@ class SEN():
                     log.maybeLog(self.logger, "Using {0!s} and {1!s}".format(self.recurrent_to_gsn_weights_list[(i+1)/2],self.bias_list[i+1]))
             h_t = T.concatenate([self.hidden_activation(self.bias_list[i+1] + T.dot(u_tm1, self.recurrent_to_gsn_weights_list[(i+1)/2])) for i in range(self.gsn_layers) if i%2 == 0],axis=0)
             
-            generate = x_t is None
-            if generate:
-                pass
-            
-            # Make a GSN to update U
-    #         chain, hs = gsn.build_gsn(x_t, weights_list, bias_list, add_noise, state.noiseless_h1, state.hidden_add_noise_sigma, state.input_salt_and_pepper, state.input_sampling, MRG, visible_activation, hidden_activation, walkbacks, logger)
-    #         htop_t = hs[-1]
-    #         denoised_x_t = chain[-1]
-            # Update U
-    #         ua_t = T.dot(denoised_x_t, W_x_u) + T.dot(htop_t, W_h_u) + T.dot(u_tm1, W_u_u) + recurrent_bias
-            ua_t = T.dot(x_t, self.W_x_u) + T.dot(u_tm1, self.W_u_u) + self.recurrent_bias
+            ua_t = T.dot(ins_t, self.W_ins_u) + T.dot(u_tm1, self.W_u_u) + self.recurrent_bias
             u_t = self.recurrent_hidden_activation(ua_t)
-            return None if generate else [ua_t, u_t, h_t]
+            return [ua_t, u_t, h_t]
         
         log.maybeLog(self.logger, "\nCreating recurrent step scan.")
         # For training, the deterministic recurrence is used to compute all the

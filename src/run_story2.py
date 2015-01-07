@@ -1,5 +1,5 @@
 import argparse
-from models import rnngsn_hiddens as Story2
+from models import rnngsn_hiddens2 as Story2
 
 def main():
     parser = argparse.ArgumentParser()
