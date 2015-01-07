@@ -29,10 +29,10 @@ import numpy.random as rng
 from numpy import ceil, sqrt
 import PIL.Image
 from collections import OrderedDict
-from utils import logger as log
-from utils import data_tools as data
-from utils.image_tiler import tile_raster_images
-from utils.utils import cast32, logit, trunc, get_shared_weights, get_shared_bias, salt_and_pepper, add_gaussian_noise, make_time_units_string, load_from_config
+from ..utils import logger as log
+from ..utils import data_tools as data
+from ..utils.image_tiler import tile_raster_images
+from ..utils.utils import cast32, logit, trunc, get_shared_weights, get_shared_bias, salt_and_pepper, add_gaussian_noise, make_time_units_string, load_from_config
 
 # Default values to use for some GSN parameters
 defaults = {# gsn parameters
