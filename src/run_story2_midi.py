@@ -68,6 +68,8 @@ def create_rnngsn(args):
     valid_X = [theano.shared(v, borrow=True) for v in valid]
     test_X  = [theano.shared(t, borrow=True) for t in test]
     
+    args.is_image = False
+    
     args.output_path = args.outdir_base + args.dataset
     
     logger = log.Logger(args.output_path)
