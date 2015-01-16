@@ -59,13 +59,14 @@ def get_activation_function(name):
         raise NotImplementedError("Did not recognize activation {0!s}, please use tanh, rectifier, or sigmoid".format(name))
 
 def get_cost_function(name):
+    eps = 1e-6
     if name == 'binary_crossentropy':
         return lambda x,y: T.mean(T.nnet.binary_crossentropy(x,y))
     elif name == 'square':
         #return lambda x,y: T.log(T.mean(T.sqr(x-y)))
         return lambda x,y: T.log(T.sum(T.pow((x-y),2)))
     elif name == 'pseudo_log':
-        return lambda x,y: T.sum(T.xlogx.xlogy0(x, y) + T.xlogx.xlogy0(1-x, 1-y)) / x.shape[0]
+        return lambda y,x: T.sum(T.xlogx.xlogy0(x+eps, y+eps) + T.xlogx.xlogy0(1-x+eps, 1-y+eps)) / x.shape[0]
     else:
         raise NotImplementedError("Did not recognize cost function {0!s}, please use binary_crossentropy, square, or pseudo_log".format(name))
 
