@@ -32,7 +32,7 @@ from collections import OrderedDict
 from utils import logger as log
 from utils import data_tools as data
 from utils.image_tiler import tile_raster_images
-from utils.utils import cast32, logit, trunc, get_shared_weights, get_shared_bias, salt_and_pepper, add_gaussian_noise, make_time_units_string, load_from_config
+from utils.utils import cast32, logit, trunc, get_shared_weights, get_shared_bias, salt_and_pepper, add_gaussian_noise, make_time_units_string, load_from_config, get_activation_function, get_cost_function, raise_data_to_list
 
 # Default values to use for some GSN parameters
 defaults = {# gsn parameters
@@ -75,10 +75,10 @@ class GSN:
         self.outdir = args.get("output_path", defaults["output_path"])
         if self.outdir[-1] != '/':
             self.outdir = self.outdir+'/'
-        # Input data
-        self.train_X = train_X
-        self.valid_X = valid_X
-        self.test_X  = test_X
+        # Input data - make sure it is a list of shared datasets
+        self.train_X = raise_data_to_list(train_X)
+        self.valid_X = raise_data_to_list(valid_X)
+        self.test_X  = raise_data_to_list(test_X)
         
         # variables from the dataset that are used for initialization and image reconstruction
         if train_X is None:
@@ -86,7 +86,7 @@ class GSN:
             if args.get("input_size") is None:
                 raise AssertionError("Please either specify input_size in the arguments or provide an example train_X for input dimensionality.")
         else:
-            self.N_input = train_X.eval().shape[1]
+            self.N_input = train_X[0].eval().shape[1]
         self.root_N_input = numpy.sqrt(self.N_input)
         
         self.is_image = args.get('is_image', defaults['is_image'])
@@ -121,58 +121,37 @@ class GSN:
         self.f_recon = None
         self.f_noise = None
         
-        # Activation functions!
+        # Activation functions!            
         if args.get('hidden_activation') is not None:
             log.maybeLog(self.logger, 'Using specified activation for hiddens')
             self.hidden_activation = args.get('hidden_activation')
-        elif args.get('hidden_act') == 'sigmoid':
-            log.maybeLog(self.logger, 'Using sigmoid activation for hiddens')
-            self.hidden_activation = T.nnet.sigmoid
-        elif args.get('hidden_act') == 'rectifier':
-            log.maybeLog(self.logger, 'Using rectifier activation for hiddens')
-            self.hidden_activation = lambda x : T.maximum(cast32(0), x)
-        elif args.get('hidden_act') == 'tanh':
-            log.maybeLog(self.logger, 'Using hyperbolic tangent activation for hiddens')
-            self.hidden_activation = lambda x : T.tanh(x)
         elif args.get('hidden_act') is not None:
-            log.maybeLog(self.logger, "Did not recognize hidden activation {0!s}, please use tanh, rectifier, or sigmoid".format(args.get('hidden_act')))
-            raise NotImplementedError("Did not recognize hidden activation {0!s}, please use tanh, rectifier, or sigmoid".format(args.get('hidden_act')))
+            self.hidden_activation = get_activation_function(args.get('hidden_act'))
+            log.maybeLog(self.logger, 'Using {0!s} activation for hiddens'.format(args.get('hidden_act')))
         else:
             log.maybeLog(self.logger, "Using default activation for hiddens")
             self.hidden_activation = defaults['hidden_activation']
+            
         # Visible layer activation
         if args.get('visible_activation') is not None:
             log.maybeLog(self.logger, 'Using specified activation for visible layer')
             self.visible_activation = args.get('visible_activation')
-        elif args.get('visible_act') == 'sigmoid':
-            log.maybeLog(self.logger, 'Using sigmoid activation for visible layer')
-            self.visible_activation = T.nnet.sigmoid
-        elif args.get('visible_act') == 'softmax':
-            log.maybeLog(self.logger, 'Using softmax activation for visible layer')
-            self.visible_activation = T.nnet.softmax
         elif args.get('visible_act') is not None:
-            log.maybeLog(self.logger, "Did not recognize visible activation {0!s}, please use sigmoid or softmax".format(args.get('visible_act')))
-            raise NotImplementedError("Did not recognize visible activation {0!s}, please use sigmoid or softmax".format(args.get('visible_act')))
+            self.visible_activation = get_activation_function(args.get('visible_act'))
+            log.maybeLog(self.logger, 'Using {0!s} activation for visible layer'.format(args.get('visible_act')))
         else:
             log.maybeLog(self.logger, 'Using default activation for visible layer')
             self.visible_activation = defaults['visible_activation']
             
         # Cost function!
         if args.get('cost_function') is not None:
-            log.maybeLog(self.logger, '\nUsing specified cost function for GSN training\n')
+            log.maybeLog(self.logger, '\nUsing specified cost function for training\n')
             self.cost_function = args.get('cost_function')
-        elif args.get('cost_funct') == 'binary_crossentropy':
-            log.maybeLog(self.logger, '\nUsing binary cross-entropy cost!\n')
-            self.cost_function = lambda x,y: T.mean(T.nnet.binary_crossentropy(x,y))
-        elif args.get('cost_funct') == 'square':
-            log.maybeLog(self.logger, "\nUsing square error cost!\n")
-            #cost_function = lambda x,y: T.log(T.mean(T.sqr(x-y)))
-            self.cost_function = lambda x,y: T.log(T.sum(T.pow((x-y),2)))
         elif args.get('cost_funct') is not None:
-            log.maybeLog(self.logger, "\nDid not recognize cost function {0!s}, please use binary_crossentropy or square\n".format(args.get('cost_funct')))
-            raise NotImplementedError("Did not recognize cost function {0!s}, please use binary_crossentropy or square".format(args.get('cost_funct')))
+            self.cost_function = get_cost_function(args.get('cost_funct'))
+            log.maybeLog(self.logger, 'Using {0!s} for cost function'.format(args.get('cost_funct')))
         else:
-            log.maybeLog(self.logger, '\nUsing default cost function for GSN training\n')
+            log.maybeLog(self.logger, '\nUsing default cost function for training\n')
             self.cost_function = defaults['cost_function']
         
         ############################
@@ -336,6 +315,12 @@ class GSN:
         if test_X is None:
             test_X  = self.test_X
             
+        # Input data - make sure it is a list of shared datasets
+        train_X = raise_data_to_list(train_X)
+        valid_X = raise_data_to_list(valid_X)
+        test_X  = raise_data_to_list(test_X)
+        
+            
         
         ############
         # TRAINING #
@@ -350,14 +335,14 @@ class GSN:
         best_params = None
         patience    = 0
                     
-        log.maybeLog(self.logger, ['train X size:',str(train_X.shape.eval())])
+        log.maybeLog(self.logger, ['train X size:',str(train_X[0].shape.eval())])
         if valid_X is not None:
-            log.maybeLog(self.logger, ['valid X size:',str(valid_X.shape.eval())])
+            log.maybeLog(self.logger, ['valid X size:',str(valid_X[0].shape.eval())])
         if test_X is not None:
-            log.maybeLog(self.logger, ['test X size:',str(test_X.shape.eval())])
+            log.maybeLog(self.logger, ['test X size:',str(test_X[0].shape.eval())])
         
         if self.vis_init:
-            self.bias_list[0].set_value(logit(numpy.clip(0.9,0.001,train_X.get_value().mean(axis=0))))
+            self.bias_list[0].set_value(logit(numpy.clip(0.9,0.001,train_X[0].get_value().mean(axis=0))))
     
         while not STOP:
             counter += 1
@@ -365,23 +350,29 @@ class GSN:
             log.maybeAppend(self.logger, [counter,'\t'])
             
             #shuffle the data
-            data.shuffle_data(train_X)
-            data.shuffle_data(valid_X)
-            data.shuffle_data(test_X)
+            [data.shuffle_data(ts) for ts in train_X]
+            [data.shuffle_data(vs) for vs in valid_X]
+            [data.shuffle_data(ts) for ts in test_X]
             
             #train
-            train_costs = data.apply_cost_function_to_dataset(self.f_learn, train_X, self.batch_size)
-            log.maybeAppend(self.logger, ['Train:',trunc(train_costs), '\t'])
+            train_costs = []
+            for train_data in train_X:
+                train_costs.extend(data.apply_cost_function_to_dataset(self.f_learn, train_data, self.batch_size))
+            log.maybeAppend(self.logger, ['Train:',trunc(numpy.mean(train_costs)), '\t'])
     
             #valid
             if valid_X is not None:
-                valid_costs = data.apply_cost_function_to_dataset(self.f_cost, valid_X, self.batch_size)
-                log.maybeAppend(self.logger, ['Valid:',trunc(valid_costs), '\t'])
+                valid_costs = []
+                for valid_data in valid_X:
+                    valid_costs.extend(data.apply_cost_function_to_dataset(self.f_cost, valid_data, self.batch_size))
+                log.maybeAppend(self.logger, ['Valid:',trunc(numpy.mean(valid_costs)), '\t'])
     
             #test
             if test_X is not None:
-                test_costs = data.apply_cost_function_to_dataset(self.f_cost, test_X, self.batch_size)
-                log.maybeAppend(self.logger, ['Test:',trunc(test_costs), '\t'])
+                test_costs = []
+                for test_data in test_X:
+                    test_costs.extend(data.apply_cost_function_to_dataset(self.f_cost, test_data, self.batch_size))
+                log.maybeAppend(self.logger, ['Test:',trunc(numpy.mean(test_costs)), '\t'])
                 
             #check for early stopping
             if valid_X is not None:
@@ -412,8 +403,8 @@ class GSN:
             if (counter % self.save_frequency) == 0 or STOP is True:
                 if self.is_image:
                     n_examples = 100
-                    tests = test_X.get_value()[0:n_examples]
-                    noisy_tests = self.f_noise(test_X.get_value()[0:n_examples])
+                    tests = test_X[0].get_value()[0:n_examples]
+                    noisy_tests = self.f_noise(test_X[0].get_value()[0:n_examples])
                     _, reconstructed = self.f_recon(noisy_tests) 
                     # Concatenate stuff if it is an image
                     stacked = numpy.vstack([numpy.vstack([tests[i*10 : (i+1)*10], noisy_tests[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10]]) for i in range(10)])
@@ -442,19 +433,21 @@ class GSN:
         log.maybeLog(self.logger, "\nTesting---------\n")
         if test_X is None:
             log.maybeLog(self.logger, "Testing using data given during initialization of GSN.\n")
-            test_X  = self.test_X
+            test_X = self.test_X
             if test_X is None:
                 log.maybeLog(self.logger, "\nPlease provide a test dataset!\n")
                 raise AssertionError("Please provide a test dataset")
         else:
             log.maybeLog(self.logger, "Testing using data provided to test function.\n")
             
+        test_X = raise_data_to_list(test_X)
+            
         ###########
         # TESTING #
         ###########
         n_examples = 100
-        tests = test_X.get_value()[0:n_examples]
-        noisy_tests = self.f_noise(test_X.get_value()[0:n_examples])
+        tests = test_X[0].get_value()[0:n_examples]
+        noisy_tests = self.f_noise(test_X[0].get_value()[0:n_examples])
         cost, reconstructed = self.f_recon(noisy_tests) 
         # Concatenate stuff if it is an image
         if self.is_image:

@@ -26,7 +26,7 @@ from hessian_free.hf import SequenceDataset as hf_sequence_dataset
 import gsn
 import utils.logger as log
 from utils.image_tiler import tile_raster_images
-from utils.utils import cast32, logit, trunc, get_shared_weights, get_shared_bias, salt_and_pepper, add_gaussian_noise, make_time_units_string, load_from_config
+from utils.utils import cast32, logit, trunc, get_shared_weights, get_shared_bias, salt_and_pepper, add_gaussian_noise, make_time_units_string, load_from_config, get_activation_function, get_cost_function, raise_data_to_list
 from numpy import ceil, sqrt
 
 
@@ -78,13 +78,14 @@ class RNN_GSN():
         self.outdir = args.get("output_path", defaults["output_path"])
         if self.outdir[-1] != '/':
             self.outdir = self.outdir+'/'
-        # Input data
-        self.train_X = train_X
-        self.train_Y = train_Y
-        self.valid_X = valid_X
-        self.valid_Y = valid_Y
-        self.test_X  = test_X
-        self.test_Y  = test_Y
+ 
+        # Input data - make sure it is a list of shared datasets
+        self.train_X = raise_data_to_list(train_X)
+        self.train_Y = raise_data_to_list(train_Y)
+        self.valid_X = raise_data_to_list(valid_X)
+        self.valid_Y = raise_data_to_list(valid_Y)
+        self.test_X  = raise_data_to_list(test_X)
+        self.test_Y = raise_data_to_list(test_Y)
         
         # variables from the dataset that are used for initialization and image reconstruction
         if train_X is None:
@@ -92,7 +93,7 @@ class RNN_GSN():
             if args.get("input_size") is None:
                 raise AssertionError("Please either specify input_size in the arguments or provide an example train_X for input dimensionality.")
         else:
-            self.N_input = train_X.eval().shape[1]
+            self.N_input = train_X[0].eval().shape[1]
         self.root_N_input = numpy.sqrt(self.N_input)
         
         self.is_image = args.get('is_image', defaults['is_image'])
@@ -125,7 +126,8 @@ class RNN_GSN():
         self.initialize_gsn         = args.get('initialize_gsn', defaults['initialize_gsn'])
         self.hessian_free           = args.get('hessian_free', defaults['hessian_free'])
         
-        self.layer_sizes = [self.N_input] + [args.get('hidden_size', defaults['hidden_size'])] * self.layers # layer sizes, from h0 to hK (h0 is the visible layer)
+        self.hidden_size = args.get('hidden_size', defaults['hidden_size'])
+        self.layer_sizes = [self.N_input] + [self.hidden_size] * self.layers # layer sizes, from h0 to hK (h0 is the visible layer)
         self.recurrent_hidden_size = args.get('recurrent_hidden_size', defaults['recurrent_hidden_size'])
         
         self.f_recon = None
@@ -136,53 +138,31 @@ class RNN_GSN():
         if args.get('hidden_activation') is not None:
             log.maybeLog(self.logger, 'Using specified activation for GSN hiddens')
             self.hidden_activation = args.get('hidden_activation')
-        elif args.get('hidden_act') == 'sigmoid':
-            log.maybeLog(self.logger, 'Using sigmoid activation for GSN hiddens')
-            self.hidden_activation = T.nnet.sigmoid
-        elif args.get('hidden_act') == 'rectifier':
-            log.maybeLog(self.logger, 'Using rectifier activation for GSN hiddens')
-            self.hidden_activation = lambda x : T.maximum(cast32(0), x)
-        elif args.get('hidden_act') == 'tanh':
-            log.maybeLog(self.logger, 'Using hyperbolic tangent activation for GSN hiddens')
-            self.hidden_activation = lambda x : T.tanh(x)
         elif args.get('hidden_act') is not None:
-            log.maybeLog(self.logger, "Did not recognize hidden activation {0!s}, please use tanh, rectifier, or sigmoid for GSN hiddens".format(args.get('hidden_act')))
-            raise NotImplementedError("Did not recognize hidden activation {0!s}, please use tanh, rectifier, or sigmoid for GSN hiddens".format(args.get('hidden_act')))
+            self.hidden_activation = get_activation_function(args.get('hidden_act'))
+            log.maybeLog(self.logger, 'Using {0!s} activation for GSN hiddens'.format(args.get('hidden_act')))
         else:
             log.maybeLog(self.logger, "Using default activation for GSN hiddens")
             self.hidden_activation = defaults['hidden_activation']
+            
         # For the RNN:
         if args.get('recurrent_hidden_activation') is not None:
             log.maybeLog(self.logger, 'Using specified activation for RNN hiddens')
             self.recurrent_hidden_activation = args.get('recurrent_hidden_activation')
-        elif args.get('recurrent_hidden_act') == 'sigmoid':
-            log.maybeLog(self.logger, 'Using sigmoid activation for RNN hiddens')
-            self.recurrent_hidden_activation = T.nnet.sigmoid
-        elif args.get('recurrent_hidden_act') == 'rectifier':
-            log.maybeLog(self.logger, 'Using rectifier activation for RNN hiddens')
-            self.recurrent_hidden_activation = lambda x : T.maximum(cast32(0), x)
-        elif args.get('recurrent_hidden_act') == 'tanh':
-            log.maybeLog(self.logger, 'Using hyperbolic tangent activation for RNN hiddens')
-            self.recurrent_hidden_activation = lambda x : T.tanh(x)
         elif args.get('recurrent_hidden_act') is not None:
-            log.maybeLog(self.logger, "Did not recognize hidden activation {0!s}, please use tanh, rectifier, or sigmoid for RNN hiddens".format(args.get('hidden_act')))
-            raise NotImplementedError("Did not recognize hidden activation {0!s}, please use tanh, rectifier, or sigmoid for RNN hiddens".format(args.get('hidden_act')))
+            self.recurrent_hidden_activation = get_activation_function(args.get('recurrent_hidden_act'))
+            log.maybeLog(self.logger, 'Using {0!s} activation for RNN hiddens'.format(args.get('recurrent_hidden_act')))
         else:
             log.maybeLog(self.logger, "Using default activation for RNN hiddens")
             self.recurrent_hidden_activation = defaults['recurrent_hidden_activation']
+            
         # Visible layer activation
         if args.get('visible_activation') is not None:
             log.maybeLog(self.logger, 'Using specified activation for visible layer')
             self.visible_activation = args.get('visible_activation')
-        elif args.get('visible_act') == 'sigmoid':
-            log.maybeLog(self.logger, 'Using sigmoid activation for visible layer')
-            self.visible_activation = T.nnet.sigmoid
-        elif args.get('visible_act') == 'softmax':
-            log.maybeLog(self.logger, 'Using softmax activation for visible layer')
-            self.visible_activation = T.nnet.softmax
         elif args.get('visible_act') is not None:
-            log.maybeLog(self.logger, "Did not recognize visible activation {0!s}, please use sigmoid or softmax".format(args.get('visible_act')))
-            raise NotImplementedError("Did not recognize visible activation {0!s}, please use sigmoid or softmax".format(args.get('visible_act')))
+            self.visible_activation = get_activation_function(args.get('visible_act'))
+            log.maybeLog(self.logger, 'Using {0!s} activation for visible layer'.format(args.get('visible_act')))
         else:
             log.maybeLog(self.logger, 'Using default activation for visible layer')
             self.visible_activation = defaults['visible_activation']
@@ -191,16 +171,9 @@ class RNN_GSN():
         if args.get('cost_function') is not None:
             log.maybeLog(self.logger, '\nUsing specified cost function for GSN training\n')
             self.cost_function = args.get('cost_function')
-        elif args.get('cost_funct') == 'binary_crossentropy':
-            log.maybeLog(self.logger, '\nUsing binary cross-entropy cost!\n')
-            self.cost_function = lambda x,y: T.mean(T.nnet.binary_crossentropy(x,y))
-        elif args.get('cost_funct') == 'square':
-            log.maybeLog(self.logger, "\nUsing square error cost!\n")
-            #cost_function = lambda x,y: T.log(T.mean(T.sqr(x-y)))
-            self.cost_function = lambda x,y: T.log(T.sum(T.pow((x-y),2)))
         elif args.get('cost_funct') is not None:
-            log.maybeLog(self.logger, "\nDid not recognize cost function {0!s}, please use binary_crossentropy or square\n".format(args.get('cost_funct')))
-            raise NotImplementedError("Did not recognize cost function {0!s}, please use binary_crossentropy or square".format(args.get('cost_funct')))
+            self.cost_function = get_cost_function(args.get('cost_funct'))
+            log.maybeLog(self.logger, 'Using {0!s} for cost function'.format(args.get('cost_funct')))
         else:
             log.maybeLog(self.logger, '\nUsing default cost function for GSN training\n')
             self.cost_function = defaults['cost_function']
@@ -252,7 +225,7 @@ class RNN_GSN():
                              'cost_function':      self.cost_function,
                              'layers':             self.layers,
                              'walkbacks':          self.walkbacks,
-                             'hidden_size':        args.get('hidden_size', defaults['hidden_size']),
+                             'hidden_size':        self.hidden_size,
                              'learning_rate':      args.get('learning_rate', defaults['learning_rate']),
                              'momentum':           args.get('momentum', defaults['momentum']),
                              'annealing':          self.annealing,
@@ -415,14 +388,11 @@ class RNN_GSN():
                                             outputs = visible_pX_chain[-1],
                                             name='rnngsn_f_sample_single_layer')
         else:
-            # WHY IS THERE A WARNING????
-            # because the first odd layers are not used -> directly computed FROM THE EVEN layers
-            # unused input = warn
             self.f_sample = theano.function(inputs = self.network_state_input,
                                             outputs = self.network_state_output + visible_pX_chain,
                                             on_unused_input='warn',
                                             name='rnngsn_f_sample')
-         
+        
     
         log.maybeLog(self.logger, "Done compiling all functions.")
         compilation_time = time.time() - start_functions_time
@@ -448,6 +418,14 @@ class RNN_GSN():
         if test_X is None:
             test_X  = self.test_X
             test_Y  = self.test_Y
+            
+        # Input data - make sure it is a list of shared datasets
+        train_X = raise_data_to_list(train_X)
+        train_Y = raise_data_to_list(train_Y)
+        valid_X = raise_data_to_list(valid_X)
+        valid_Y = raise_data_to_list(valid_Y)
+        test_X  = raise_data_to_list(test_X)
+        test_Y = raise_data_to_list(test_Y)
             
         ##########################################################
         # Train the GSN first to get good weights initialization #
@@ -507,11 +485,11 @@ class RNN_GSN():
             best_params = None
             patience = 0
                         
-            log.maybeLog(self.logger, ['train X size:',str(train_X.shape.eval())])
+            log.maybeLog(self.logger, ['train X size:',str(train_X[0].shape.eval())])
             if valid_X is not None:
-                log.maybeLog(self.logger, ['valid X size:',str(valid_X.shape.eval())])
+                log.maybeLog(self.logger, ['valid X size:',str(valid_X[0].shape.eval())])
             if test_X is not None:
-                log.maybeLog(self.logger, ['test X size:',str(test_X.shape.eval())])
+                log.maybeLog(self.logger, ['test X size:',str(test_X[0].shape.eval())])
             
             if self.vis_init:
                 self.bias_list[0].set_value(logit(numpy.clip(0.9,0.001,train_X.get_value().mean(axis=0))))
@@ -522,28 +500,36 @@ class RNN_GSN():
                 log.maybeAppend(self.logger, [counter,'\t'])
                     
                 if is_artificial:
-                    data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, artificial_sequence, rng)
+                    data.sequence_mnist_data(train_X[0], train_Y[0], valid_X[0], valid_Y[0], test_X[0], test_Y[0], artificial_sequence, rng)
                      
                 #train
-                train_costs = data.apply_cost_function_to_dataset(self.f_learn, train_X, self.batch_size)
-                # record it
-                log.maybeAppend(self.logger, ['Train:',trunc(train_costs),'\t'])
+                train_costs = []
+                for train_data in train_X:
+                    train_costs.extend(data.apply_cost_function_to_dataset(self.f_learn, train_data, self.batch_size))
+                log.maybeAppend(self.logger, ['Train:',trunc(numpy.mean(train_costs)),'\t'])
          
          
                 #valid
-                valid_costs = data.apply_cost_function_to_dataset(self.f_cost, valid_X, self.batch_size)
-                # record it
-                log.maybeAppend(self.logger, ['Valid:',trunc(valid_costs), '\t'])
+                if valid_X is not None:
+                    valid_costs = []
+                    for valid_data in valid_X:
+                        valid_costs.extend(data.apply_cost_function_to_dataset(self.f_cost, valid_data, self.batch_size))
+                    log.maybeAppend(self.logger, ['Valid:',trunc(numpy.mean(valid_costs)), '\t'])
          
          
                 #test
-                test_costs = data.apply_cost_function_to_dataset(self.f_cost, test_X, self.batch_size)
-                # record it 
-                log.maybeAppend(self.logger, ['Test:',trunc(test_costs), '\t'])
-                 
+                if test_X is not None:
+                    test_costs = []
+                    for test_data in test_X:
+                        test_costs.extend(data.apply_cost_function_to_dataset(self.f_cost, test_data, self.batch_size))
+                    log.maybeAppend(self.logger, ['Test:',trunc(numpy.mean(test_costs)), '\t'])
+                
                  
                 #check for early stopping
-                cost = numpy.sum(valid_costs)
+                if valid_X is not None:
+                    cost = numpy.sum(valid_costs)
+                else:
+                    cost = numpy.sum(train_costs)
                 if cost < best_cost*self.early_stop_threshold:
                     patience = 0
                     best_cost = cost
@@ -566,23 +552,24 @@ class RNN_GSN():
                 log.maybeLog(self.logger, 'remaining: '+make_time_units_string((self.n_epoch - counter) * numpy.mean(times)))
         
                 if (counter % self.save_frequency) == 0 or STOP is True:
-                    n_examples = 100
-                    nums = test_X.get_value(borrow=True)[range(n_examples)]
-                    noisy_nums = self.f_noise(test_X.get_value(borrow=True)[range(n_examples)])
-                    reconstructions = []
-                    for i in xrange(0, len(noisy_nums)):
-                        recon = self.f_recon(noisy_nums[max(0,(i+1)-self.batch_size):i+1])
-                        reconstructions.append(recon)
-                    reconstructed = numpy.array(reconstructions)
-
-                    # Concatenate stuff
-                    stacked = numpy.vstack([numpy.vstack([nums[i*10 : (i+1)*10], noisy_nums[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10]]) for i in range(10)])
-                    number_reconstruction = PIL.Image.fromarray(tile_raster_images(stacked, (self.root_N_input,self.root_N_input), (10,30)))
-                        
-                    number_reconstruction.save(self.outdir+'rnngsn_number_reconstruction_epoch_'+str(counter)+'.png')
+                    if (self.is_image):
+                        n_examples = 100
+                        xs_test = test_X[0].get_value(borrow=True)[range(n_examples)]
+                        noisy_xs_test = self.f_noise(test_X[0].get_value(borrow=True)[range(n_examples)])
+                        reconstructions = []
+                        for i in xrange(0, len(noisy_xs_test)):
+                            recon = self.f_recon(noisy_xs_test[max(0,(i+1)-self.batch_size):i+1])
+                            reconstructions.append(recon)
+                        reconstructed = numpy.array(reconstructions)
+    
+                        # Concatenate stuff
+                        stacked = numpy.vstack([numpy.vstack([xs_test[i*10 : (i+1)*10], noisy_xs_test[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10]]) for i in range(10)])
+                        number_reconstruction = PIL.Image.fromarray(tile_raster_images(stacked, (self.root_N_input,self.root_N_input), (10,30)))
+                            
+                        number_reconstruction.save(self.outdir+'rnngsn_reconstruction_epoch_'+str(counter)+'.png')
             
-                    #sample_numbers(counter, 'seven')
-#                     plot_samples(counter, 'rnngsn')
+                        #sample_numbers(counter, 'seven')
+#                         plot_samples(counter, 'rnngsn')
             
                     #save params
                     save_params_to_file('all', counter, self.params)

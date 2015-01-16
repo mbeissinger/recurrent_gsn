@@ -8,12 +8,10 @@ https://github.com/yaoli/GSN
 import numpy
 import theano
 import theano.tensor as T
-import os, cPickle
-import gzip
-import errno
+import os, cPickle, gzip, errno, urllib, glob, zipfile
 from utils import cast32
-import urllib
 import scipy.io as io
+from midi.utils import midiread
 
 # Define the re-used loops for f_learn and f_cost
 def apply_cost_function_to_dataset(function, dataset, batch_size=1):
@@ -22,7 +20,7 @@ def apply_cost_function_to_dataset(function, dataset, batch_size=1):
         xs = dataset.get_value(borrow=True)[i * batch_size : (i+1) * batch_size]
         cost = function(xs)
         costs.append([cost])
-    return numpy.mean(costs)
+    return costs
 
 #create a filesystem path if it doesn't exist.
 def mkdir_p(path):
@@ -33,16 +31,44 @@ def mkdir_p(path):
             pass
         else: raise
 
-def download_gzip_file(origin, destination_path, filename):
+def download_file(origin, destination_path, filename):
     print 'Downloading data from %s' % origin
     gzip_file = os.path.join(destination_path, filename)
     urllib.urlretrieve(origin, gzip_file)
+    
+def unzip(source_filename, dest_dir):
+    with zipfile.ZipFile(source_filename) as zf:
+        zf.extractall(dest_dir)
 
 #downloads the mnist data to specified file
 def download_mnist(path):
     origin = 'http://www.iro.umontreal.ca/~lisa/deep/data/mnist/mnist.pkl.gz'
     filename = 'mnist.pkl.gz'
-    download_gzip_file(origin, path, filename)
+    download_file(origin, path, filename)
+    
+def download_piano_midi_de(path):
+    origin = 'http://www-etud.iro.umontreal.ca/~boulanni/Piano-midi.de.zip'
+    filename = 'Piano-midi.de.zip'
+    download_file(origin, path, filename)
+    unzip(os.path.join(path, filename), path)
+
+def download_nottingham(path):
+    origin = 'http://www-etud.iro.umontreal.ca/~boulanni/Nottingham.zip'
+    filename = 'Nottingham.zip'
+    download_file(origin, path, filename)
+    unzip(os.path.join(path, filename), path)
+    
+def download_muse(path):
+    origin = 'http://www-etud.iro.umontreal.ca/~boulanni/MuseData.zip'
+    filename = 'MuseData.zip'
+    download_file(origin, path, filename)
+    unzip(os.path.join(path, filename), path)
+    
+def download_jsb(path):
+    origin = 'http://www-etud.iro.umontreal.ca/~boulanni/JSB%20Chorales.zip'
+    filename = 'JSB Chorales.zip'
+    download_file(origin, path, filename)
+    unzip(os.path.join(path, filename), path)
 
 def load_mnist(path):
     ''' Loads the mnist dataset
@@ -88,6 +114,83 @@ def load_mnist_binary(path):
     data[2][0] = (data[2][0] > 0.5).astype('float32')
     data = tuple([tuple(d) for d in data])
     return data
+
+def load_piano_midi_de(path):
+    mkdir_p(path)
+    d = os.path.join(path,'Piano-midi.de')
+    if not os.path.isdir(d):
+        download_piano_midi_de(path)
+    
+    train_filenames = os.path.join(path, 'Piano-midi.de', 'train', '*.mid')
+    valid_filenames = os.path.join(path, 'Piano-midi.de', 'valid', '*.mid')
+    test_filenames = os.path.join(path, 'Piano-midi.de', 'test', '*.mid')
+    train_files = glob.glob(train_filenames)
+    valid_files = glob.glob(valid_filenames)
+    test_files = glob.glob(test_filenames)
+    
+    train_datasets = [midiread(f, r=(21, 109), dt=0.3).piano_roll.astype(theano.config.floatX) for f in train_files]
+    valid_datasets = [midiread(f, r=(21, 109), dt=0.3).piano_roll.astype(theano.config.floatX) for f in valid_files]
+    test_datasets = [midiread(f, r=(21, 109), dt=0.3).piano_roll.astype(theano.config.floatX) for f in test_files]
+    
+    return train_datasets, valid_datasets, test_datasets
+    
+
+def load_nottingham(path):
+    mkdir_p(path)
+    d = os.path.join(path,'Nottingham')
+    if not os.path.isdir(d):
+        download_nottingham(path)
+    
+    train_filenames = os.path.join(path, 'Nottingham', 'train', '*.mid')
+    valid_filenames = os.path.join(path, 'Nottingham', 'valid', '*.mid')
+    test_filenames = os.path.join(path, 'Nottingham', 'test', '*.mid')
+    train_files = glob.glob(train_filenames)
+    valid_files = glob.glob(valid_filenames)
+    test_files = glob.glob(test_filenames)
+    
+    train_datasets = [midiread(f, r=(21, 109), dt=0.3).piano_roll.astype(theano.config.floatX) for f in train_files]
+    valid_datasets = [midiread(f, r=(21, 109), dt=0.3).piano_roll.astype(theano.config.floatX) for f in valid_files]
+    test_datasets = [midiread(f, r=(21, 109), dt=0.3).piano_roll.astype(theano.config.floatX) for f in test_files]
+    
+    return train_datasets, valid_datasets, test_datasets
+
+def load_muse(path):
+    mkdir_p(path)
+    d = os.path.join(path,'MuseData')
+    if not os.path.isdir(d):
+        download_muse(path)
+    
+    train_filenames = os.path.join(path, 'MuseData', 'train', '*.mid')
+    valid_filenames = os.path.join(path, 'MuseData', 'valid', '*.mid')
+    test_filenames = os.path.join(path, 'MuseData', 'test', '*.mid')
+    train_files = glob.glob(train_filenames)
+    valid_files = glob.glob(valid_filenames)
+    test_files = glob.glob(test_filenames)
+    
+    train_datasets = [midiread(f, r=(21, 109), dt=0.3).piano_roll.astype(theano.config.floatX) for f in train_files]
+    valid_datasets = [midiread(f, r=(21, 109), dt=0.3).piano_roll.astype(theano.config.floatX) for f in valid_files]
+    test_datasets = [midiread(f, r=(21, 109), dt=0.3).piano_roll.astype(theano.config.floatX) for f in test_files]
+    
+    return train_datasets, valid_datasets, test_datasets
+
+def load_jsb(path):
+    mkdir_p(path)
+    d = os.path.join(path,'JSB Chorales')
+    if not os.path.isdir(d):
+        download_jsb(path)
+    
+    train_filenames = os.path.join(path, 'JSB Chorales', 'train', '*.mid')
+    valid_filenames = os.path.join(path, 'JSB Chorales', 'valid', '*.mid')
+    test_filenames = os.path.join(path, 'JSB Chorales', 'test', '*.mid')
+    train_files = glob.glob(train_filenames)
+    valid_files = glob.glob(valid_filenames)
+    test_files = glob.glob(test_filenames)
+    
+    train_datasets = [midiread(f, r=(21, 109), dt=0.3).piano_roll.astype(theano.config.floatX) for f in train_files]
+    valid_datasets = [midiread(f, r=(21, 109), dt=0.3).piano_roll.astype(theano.config.floatX) for f in valid_files]
+    test_datasets = [midiread(f, r=(21, 109), dt=0.3).piano_roll.astype(theano.config.floatX) for f in test_files]
+    
+    return train_datasets, valid_datasets, test_datasets
     
 def load_tfd(path):
     data = io.loadmat(os.path.join(path, 'TFD_48x48.mat'))
