@@ -66,7 +66,7 @@ def get_cost_function(name):
         #return lambda x,y: T.log(T.mean(T.sqr(x-y)))
         return lambda x,y: T.log(T.sum(T.pow((x-y),2)))
     elif name == 'pseudo_log':
-        return lambda y,x: T.sum(T.xlogx.xlogy0(x+eps, y+eps) + T.xlogx.xlogy0(1-x+eps, 1-y+eps)) / x.shape[0]
+        return lambda y,x: T.sum(T.xlogx.xlogy0(x, y+eps) + T.xlogx.xlogy0(1-x, 1-y+eps)) / x.shape[0]
     else:
         raise NotImplementedError("Did not recognize cost function {0!s}, please use binary_crossentropy, square, or pseudo_log".format(name))
 
