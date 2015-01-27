@@ -26,7 +26,7 @@ from hessian_free.hf import SequenceDataset as hf_sequence_dataset
 import gsn
 import utils.logger as log
 from utils.image_tiler import tile_raster_images
-from utils.utils import cast32, logit, trunc, get_shared_weights, get_shared_bias, salt_and_pepper, add_gaussian_noise, make_time_units_string, load_from_config, get_activation_function, get_cost_function, raise_data_to_list
+from utils.utils import cast32, logit, trunc, get_shared_weights, get_shared_bias, salt_and_pepper, make_time_units_string, get_activation_function, get_cost_function, raise_to_list, closest_to_square_factors, copy_params, restore_params
 from numpy import ceil, sqrt
 
 
@@ -78,14 +78,16 @@ class RNN_GSN():
         self.outdir = args.get("output_path", defaults["output_path"])
         if self.outdir[-1] != '/':
             self.outdir = self.outdir+'/'
+            
+        data.mkdir_p(self.outdir)
  
-        # Input data - make sure it is a list of shared datasets
-        self.train_X = raise_data_to_list(train_X)
-        self.train_Y = raise_data_to_list(train_Y)
-        self.valid_X = raise_data_to_list(valid_X)
-        self.valid_Y = raise_data_to_list(valid_Y)
-        self.test_X  = raise_data_to_list(test_X)
-        self.test_Y = raise_data_to_list(test_Y)
+        # Input data - make sure it is a list of shared datasets if it isn't. THIS WILL KEEP 'NONE' AS 'NONE' no need to worry :)
+        self.train_X = raise_to_list(train_X)
+        self.train_Y = raise_to_list(train_Y)
+        self.valid_X = raise_to_list(valid_X)
+        self.valid_Y = raise_to_list(valid_Y)
+        self.test_X  = raise_to_list(test_X)
+        self.test_Y  = raise_to_list(test_Y)
         
         # variables from the dataset that are used for initialization and image reconstruction
         if train_X is None:
@@ -94,12 +96,12 @@ class RNN_GSN():
                 raise AssertionError("Please either specify input_size in the arguments or provide an example train_X for input dimensionality.")
         else:
             self.N_input = train_X[0].eval().shape[1]
-        self.root_N_input = numpy.sqrt(self.N_input)
         
         self.is_image = args.get('is_image', defaults['is_image'])
         if self.is_image:
-            self.image_width  = args.get('width', self.root_N_input)
-            self.image_height = args.get('height', self.root_N_input)
+            (_h, _w) = closest_to_square_factors(self.N_input)
+            self.image_width  = args.get('width', _w)
+            self.image_height = args.get('height', _h)
             
         #######################################
         # Network and training specifications #
@@ -420,12 +422,12 @@ class RNN_GSN():
             test_Y  = self.test_Y
             
         # Input data - make sure it is a list of shared datasets
-        train_X = raise_data_to_list(train_X)
-        train_Y = raise_data_to_list(train_Y)
-        valid_X = raise_data_to_list(valid_X)
-        valid_Y = raise_data_to_list(valid_Y)
-        test_X  = raise_data_to_list(test_X)
-        test_Y = raise_data_to_list(test_Y)
+        train_X = raise_to_list(train_X)
+        train_Y = raise_to_list(train_Y)
+        valid_X = raise_to_list(valid_X)
+        valid_Y = raise_to_list(valid_Y)
+        test_X  = raise_to_list(test_X)
+        test_Y =  raise_to_list(test_Y)
             
         ##########################################################
         # Train the GSN first to get good weights initialization #
@@ -434,27 +436,6 @@ class RNN_GSN():
             log.maybeLog(self.logger, "\n\n----------Initially training the GSN---------\n\n")
             init_gsn = gsn.GSN(train_X=train_X, valid_X=valid_X, test_X=test_X, args=self.gsn_args, logger=self.logger)
             init_gsn.train()
-    
-        #############################
-        # Save the model parameters #
-        #############################
-        def save_params_to_file(name, n, gsn_params):
-            pass
-            print 'saving parameters...'
-            save_path = self.outdir+name+'_params_epoch_'+str(n)+'.pkl'
-            f = open(save_path, 'wb')
-            try:
-                cPickle.dump(gsn_params, f, protocol=cPickle.HIGHEST_PROTOCOL)
-            finally:
-                f.close()
-                
-        def save_params(params):
-            values = [param.get_value(borrow=True) for param in params]
-            return values
-        
-        def restore_params(params, values):
-            for i in range(len(params)):
-                params[i].set_value(values[i])
     
         
         #########################################
@@ -534,7 +515,7 @@ class RNN_GSN():
                     patience = 0
                     best_cost = cost
                     # save the parameters that made it the best
-                    best_params = save_params(self.params)
+                    best_params = copy_params(self.params)
                 else:
                     patience += 1
          
@@ -542,7 +523,7 @@ class RNN_GSN():
                     STOP = True
                     if best_params is not None:
                         restore_params(self.params, best_params)
-                    save_params_to_file('all', counter, self.params)
+                    self.save_params('all', counter, self.params)
          
                 timing = time.time() - t
                 times.append(timing)
@@ -564,7 +545,7 @@ class RNN_GSN():
     
                         # Concatenate stuff
                         stacked = numpy.vstack([numpy.vstack([xs_test[i*10 : (i+1)*10], noisy_xs_test[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10]]) for i in range(10)])
-                        number_reconstruction = PIL.Image.fromarray(tile_raster_images(stacked, (self.root_N_input,self.root_N_input), (10,30)))
+                        number_reconstruction = PIL.Image.fromarray(tile_raster_images(stacked, (self.image_height, self.image_width), (10,30)))
                             
                         number_reconstruction.save(self.outdir+'rnngsn_reconstruction_epoch_'+str(counter)+'.png')
             
@@ -572,11 +553,14 @@ class RNN_GSN():
 #                         plot_samples(counter, 'rnngsn')
             
                     #save params
-                    save_params_to_file('all', counter, self.params)
+                    self.save_params('all', counter, self.params)
              
                 # ANNEAL!
                 new_lr = self.learning_rate.get_value() * self.annealing
                 self.learning_rate.set_value(new_lr)
+                
+                new_noise = self.input_salt_and_pepper.get_value() * self.noise_annealing
+                self.input_salt_and_pepper.set_value(new_noise)
     
             
             # 10k samples
@@ -656,11 +640,43 @@ class RNN_GSN():
         to_sample = time.time()
         initial = self.test_X.get_value()[:1]
         V = self.sample(initial, n_samples)
-        img_samples = PIL.Image.fromarray(tile_raster_images(V, (self.root_N_input,self.root_N_input), (ceil(sqrt(n_samples)), ceil(sqrt(n_samples)))))
+        img_samples = PIL.Image.fromarray(tile_raster_images(V, (self.image_height, self.image_width), (ceil(sqrt(n_samples)), ceil(sqrt(n_samples)))))
         
         fname = self.outdir+leading_text+'samples_epoch_'+str(epoch_number)+'.png'
         img_samples.save(fname) 
         log.maybeLog(self.logger, 'Took ' + str(time.time() - to_sample) + ' to sample '+n_samples+' numbers')
+        
+    #############################
+    # Save the model parameters #
+    #############################                       
+    def save_params(self, name, n, params):
+        log.maybeLog(self.logger, 'saving parameters...')
+        save_path = self.outdir+name+'_params_epoch_'+str(n)+'.pkl'
+        f = open(save_path, 'wb')
+        try:
+            cPickle.dump(params, f, protocol=cPickle.HIGHEST_PROTOCOL)
+        finally:
+            f.close()
+            
+    def load_params(self, filename):
+        '''
+        self.params = self.weights_list + self.bias_list + self.recurrent_to_gsn_weights_list + [self.W_u_u, self.W_x_u, self.recurrent_bias]
+        '''
+        def set_param(loaded_params, start, param):
+            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[start:start+len(param)], param)]
+            return start + len(param)
+            
+        if os.path.isfile(filename):
+            log.maybeLog(self.logger, "\nLoading existing RNN-GSN parameters")
+            loaded_params = cPickle.load(open(filename,'r'))
+            start = 0
+            start = set_param(loaded_params, start, self.weights_list)
+            start = set_param(loaded_params, start, self.bias_list)
+            start = set_param(loaded_params, start, self.recurrent_to_gsn_weights_list)
+            set_param(loaded_params, start, self.u_params)
+        else:
+            log.maybeLog(self.logger, "\n\nCould not find existing RNN-GSN parameter file {}.\n\n".format(filename))
+        
                 
     
     

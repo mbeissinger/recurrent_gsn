@@ -132,7 +132,7 @@ def load_piano_midi_de(path):
     valid_datasets = [midiread(f, r=(21, 109), dt=0.3).piano_roll.astype(theano.config.floatX) for f in valid_files]
     test_datasets = [midiread(f, r=(21, 109), dt=0.3).piano_roll.astype(theano.config.floatX) for f in test_files]
     
-    return train_datasets, valid_datasets, test_datasets
+    return (train_datasets,[None]), (valid_datasets,[None]), (test_datasets,[None])
     
 
 def load_nottingham(path):
@@ -152,7 +152,7 @@ def load_nottingham(path):
     valid_datasets = [midiread(f, r=(21, 109), dt=0.3).piano_roll.astype(theano.config.floatX) for f in valid_files]
     test_datasets = [midiread(f, r=(21, 109), dt=0.3).piano_roll.astype(theano.config.floatX) for f in test_files]
     
-    return train_datasets, valid_datasets, test_datasets
+    return (train_datasets,[None]), (valid_datasets,[None]), (test_datasets,[None])
 
 def load_muse(path):
     mkdir_p(path)
@@ -171,7 +171,7 @@ def load_muse(path):
     valid_datasets = [midiread(f, r=(21, 109), dt=0.3).piano_roll.astype(theano.config.floatX) for f in valid_files]
     test_datasets = [midiread(f, r=(21, 109), dt=0.3).piano_roll.astype(theano.config.floatX) for f in test_files]
     
-    return train_datasets, valid_datasets, test_datasets
+    return (train_datasets,[None]), (valid_datasets,[None]), (test_datasets,[None])
 
 def load_jsb(path):
     mkdir_p(path)
@@ -190,7 +190,7 @@ def load_jsb(path):
     valid_datasets = [midiread(f, r=(21, 109), dt=0.3).piano_roll.astype(theano.config.floatX) for f in valid_files]
     test_datasets = [midiread(f, r=(21, 109), dt=0.3).piano_roll.astype(theano.config.floatX) for f in test_files]
     
-    return train_datasets, valid_datasets, test_datasets
+    return (train_datasets,[None]), (valid_datasets,[None]), (test_datasets,[None])
     
 def load_tfd(path):
     data = io.loadmat(os.path.join(path, 'TFD_48x48.mat'))
@@ -206,6 +206,39 @@ def load_tfd(path):
     del data
 
     return (train_X, labels[unlabeled]), (valid_X, labels[unlabeled][:100]), (test_X, labels[labeled])
+
+
+
+def load_datasets(dataset, data_path):
+    """
+    Load the appropriate dataset as (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) tuples.
+
+    @type  dataset: String
+    @param dataset: Name of the dataset to return.
+    @type  data_path: String
+    @param data_path: Location of the data directory to use.
+    
+    @rtype:  Tuples
+    @return: (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y)
+    """
+    dataset = dataset.lower()
+    if dataset.startswith("mnist"):
+        if dataset is "mnist_binary":
+            return load_mnist_binary(data_path)
+        else:
+            return load_mnist(data_path)
+    elif dataset is "tfd":
+        return load_tfd(data_path)
+    elif dataset is "nottingham":
+        return load_nottingham(data_path)
+    elif dataset is "muse":
+        return load_muse(data_path)
+    elif dataset is "pianomidi":
+        return load_piano_midi_de(data_path)
+    elif dataset is "jsb":
+        return load_jsb(data_path)
+    else:
+        raise NotImplementedError("You requested to load dataset {0!s}, please choose MNIST*, TFD, nottingham, muse, pianomidi, jsb.".format(dataset))
 
 
 def shared_dataset(data_xy, borrow=True):

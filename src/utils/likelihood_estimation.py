@@ -2,14 +2,14 @@
 # encoding: utf-8
 
 import sys
-import os
 import numpy
-import cPickle, gzip
 import time
 
 import theano
 from theano import tensor as T
-from data_tools import load_mnist
+from data_tools import load_datasets
+from utils import make_time_units_string
+import logger as log
 
 def local_contrast_normalization(patches):
     patches = patches.reshape((patches.shape[0], -1))
@@ -25,7 +25,6 @@ def local_contrast_normalization(patches):
 
 def log_mean_exp(a):
     max_ = a.max(1)
-    
     return max_ + T.log(T.exp(a - max_.dimshuffle(0, 'x')).mean(1))
 
 
@@ -51,6 +50,25 @@ def numpy_parzen(x, mu, sigma):
     return log_mean(-0.5 * (a**2).sum(2)) - mu.shape[1] * numpy.log(sigma * numpy.sqrt(numpy.pi * 2))
 
 
+def CSL(h_samples, model, x_test):
+    '''
+    Conservative Sampling-based Log-likelihood (CSL)
+    "Bounding the Test Log-Likelihood of Generative Models"
+    Yoshua Bengio, Li Yao, Kyunghyun Cho
+    http://arxiv.org/pdf/1311.6184.pdf
+    '''
+    pass
+            
+def biased_CSL(h_samples, model, x_test):
+    '''
+    Biased CSL
+    "Bounding the Test Log-Likelihood of Generative Models"
+    Yoshua Bengio, Li Yao, Kyunghyun Cho
+    http://arxiv.org/pdf/1311.6184.pdf
+    '''
+    pass
+
+
 def get_ll(x, parzen, batch_size=10):
     inds = range(x.shape[0])
     
@@ -68,28 +86,27 @@ def get_ll(x, parzen, batch_size=10):
         lls.extend(ll)
         
         if i % 10 == 0:
-            print i, numpy.mean(times), numpy.mean(lls)
+            log.maybeLog(None, [i, make_time_units_string(numpy.mean(times)), numpy.mean(lls)])
     
     return lls
 
 
-def main(sigma, dataset, sample_path='samples.npy'):
+def main(sigma, dataset, data_path='../data/', sample_path='samples.npy'):
     
     # provide a .npy file where 10k generated samples are saved. 
     filename = sample_path
     
-    print 'loading samples from %s'%filename
-  
-    (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = load_mnist('.')
+    log.maybeLog(None, 'loading samples from %s'%filename)
     
     samples = numpy.load(filename)
     
     parzen = theano_parzen(samples, sigma)
-            
+    
+    (_, _), (_, _), (test_X, _) = load_datasets('.')
     test_ll = get_ll(test_X, parzen)
     
-    print "Mean Log-Likelihood of test set = %.5f" % numpy.mean(test_ll)
-    print "Std of Mean Log-Likelihood of test set = %.5f" % (numpy.std(test_ll) / 100)
+    log.maybeLog(None, "Mean Log-Likelihood of test set = %.5f" % numpy.mean(test_ll))
+    log.maybeLog(None, "Std of Mean Log-Likelihood of test set = %.5f" % (numpy.std(test_ll) / 100))
 
 
 if __name__ == "__main__":

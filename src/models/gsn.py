@@ -32,7 +32,7 @@ from collections import OrderedDict
 from utils import logger as log
 from utils import data_tools as data
 from utils.image_tiler import tile_raster_images
-from utils.utils import cast32, logit, trunc, get_shared_weights, get_shared_bias, salt_and_pepper, add_gaussian_noise, make_time_units_string, load_from_config, get_activation_function, get_cost_function, raise_data_to_list
+from utils.utils import cast32, logit, trunc, get_shared_weights, get_shared_bias, salt_and_pepper, add_gaussian_noise, make_time_units_string, load_from_config, get_activation_function, get_cost_function, raise_to_list, closest_to_square_factors, copy_params, restore_params
 
 # Default values to use for some GSN parameters
 defaults = {# gsn parameters
@@ -75,10 +75,12 @@ class GSN:
         self.outdir = args.get("output_path", defaults["output_path"])
         if self.outdir[-1] != '/':
             self.outdir = self.outdir+'/'
+        data.mkdir_p(self.outdir)
+        
         # Input data - make sure it is a list of shared datasets
-        self.train_X = raise_data_to_list(train_X)
-        self.valid_X = raise_data_to_list(valid_X)
-        self.test_X  = raise_data_to_list(test_X)
+        self.train_X = raise_to_list(train_X)
+        self.valid_X = raise_to_list(valid_X)
+        self.test_X  = raise_to_list(test_X)
         
         # variables from the dataset that are used for initialization and image reconstruction
         if train_X is None:
@@ -87,12 +89,12 @@ class GSN:
                 raise AssertionError("Please either specify input_size in the arguments or provide an example train_X for input dimensionality.")
         else:
             self.N_input = train_X[0].eval().shape[1]
-        self.root_N_input = numpy.sqrt(self.N_input)
         
         self.is_image = args.get('is_image', defaults['is_image'])
         if self.is_image:
-            self.image_width  = args.get('width', self.root_N_input)
-            self.image_height = args.get('height', self.root_N_input)
+            (_h, _w) = closest_to_square_factors(self.N_input)
+            self.image_width  = args.get('width', _w)
+            self.image_height = args.get('height', _h)
         
         #######################################
         # Network and training specifications #
@@ -316,9 +318,9 @@ class GSN:
             test_X  = self.test_X
             
         # Input data - make sure it is a list of shared datasets
-        train_X = raise_data_to_list(train_X)
-        valid_X = raise_data_to_list(valid_X)
-        test_X  = raise_data_to_list(test_X)
+        train_X = raise_to_list(train_X)
+        valid_X = raise_to_list(valid_X)
+        test_X  = raise_to_list(test_X)
         
             
         
@@ -383,7 +385,7 @@ class GSN:
                 patience = 0
                 best_cost = cost
                 # save the parameters that made it the best
-                best_params = save_params(self.params)
+                best_params = copy_params(self.params)
             else:
                 patience += 1
     
@@ -391,7 +393,7 @@ class GSN:
                 STOP = True
                 if best_params is not None:
                     restore_params(self.params, best_params)
-                save_params_to_file(counter, self.params, self.outdir, self.logger)
+                save_params(counter, self.params, self.outdir, self.logger)
     
             timing = time.time() - t
             times.append(timing)
@@ -413,14 +415,14 @@ class GSN:
                     number_reconstruction.save(self.outdir+'gsn_image_reconstruction_epoch_'+str(counter)+'.png')
         
                 #save gsn_params
-                save_params_to_file(counter, self.params, self.outdir, self.logger)
+                save_params(counter, self.params, self.outdir, self.logger)
          
             # ANNEAL!
             new_lr = self.learning_rate.get_value() * self.annealing
             self.learning_rate.set_value(new_lr)
             
-            new_hidden_sigma = self.hidden_add_noise_sigma.get_value() * self.noise_annealing
-            self.hidden_add_noise_sigma.set_value(new_hidden_sigma)
+#             new_hidden_sigma = self.hidden_add_noise_sigma.get_value() * self.noise_annealing
+#             self.hidden_add_noise_sigma.set_value(new_hidden_sigma)
             
             new_salt_pepper = self.input_salt_and_pepper.get_value() * self.noise_annealing
             self.input_salt_and_pepper.set_value(new_salt_pepper)
@@ -440,7 +442,7 @@ class GSN:
         else:
             log.maybeLog(self.logger, "Testing using data provided to test function.\n")
             
-        test_X = raise_data_to_list(test_X)
+        test_X = raise_to_list(test_X)
             
         ###########
         # TESTING #
@@ -520,12 +522,32 @@ class GSN:
         to_sample = time.time()
         initial = self.test_X.get_value()[:1]
         V = self.sample(initial, n_samples)
-        img_samples = PIL.Image.fromarray(tile_raster_images(V, (self.root_N_input,self.root_N_input), (ceil(sqrt(n_samples)), ceil(sqrt(n_samples)))))
+        img_samples = PIL.Image.fromarray(tile_raster_images(V, (self.image_height, self.image_width), (ceil(sqrt(n_samples)), ceil(sqrt(n_samples)))))
         
         fname = self.outdir+leading_text+'samples_epoch_'+str(epoch_number)+'.png'
         img_samples.save(fname) 
         log.maybeLog(self.logger, 'Took ' + str(time.time() - to_sample) + ' to sample '+n_samples+' numbers')
+        
+    #############################
+    # Save the model parameters #
+    #############################
+    def save_params(self, name, n, params):
+        log.maybeLog(self.logger, 'saving parameters...')
+        save_path = self.outdir+name+'gsn_params_epoch_'+str(n)+'.pkl'
+        f = open(save_path, 'wb')
+        try:
+            cPickle.dump(params, f, protocol=cPickle.HIGHEST_PROTOCOL)
+        finally:
+            f.close()
             
+    def load_params(self, filename):
+        if os.path.isfile(filename):
+            log.maybeLog(self.logger, "\nLoading existing GSN parameters")
+            loaded_params = cPickle.load(open(filename,'r'))
+            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[:len(self.weights_list)], self.weights_list)]
+            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(self.weights_list):], self.bias_list)]
+        else:
+            log.maybeLog(self.logger, "\n\nCould not find existing GSN parameter file {}.\n\n".format(filename))
         
          
     
@@ -883,30 +905,6 @@ def build_gsn_scan(X,
     
     return x_sample, cost, show_cost#, updates
     
-
-
-
-#############################
-# Save the model parameters #
-#############################
-def save_params_to_file(epoch, gsn_params, outdir, logger=None):
-    logger.log('saving parameters...')
-    if outdir[-1] != '/':
-        outdir = outdir + '/'
-    save_path = outdir+'gsn_params_epoch_'+str(epoch)+'.pkl'
-    f = open(save_path, 'wb')
-    try:
-        cPickle.dump(gsn_params, f, protocol=cPickle.HIGHEST_PROTOCOL)
-    finally:
-        f.close()
-        
-def save_params(params):
-    values = [param.get_value(borrow=True) for param in params]
-    return values
-
-def restore_params(params, values):
-    for i in range(len(params)):
-        params[i].set_value(values[i])
         
         
         
@@ -1011,14 +1009,8 @@ def main():
     
     # Load initial weights and biases from file if testing
     params_to_load = 'gsn_params.pkl'
-    if args.test_model and os.path.isfile(params_to_load):
-        logger.log("\nLoading existing GSN parameters")
-        loaded_params = cPickle.load(open(params_to_load,'r'))
-        [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[:len(gsn.weights_list)], gsn.weights_list)]
-        [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(gsn.weights_list):], gsn.bias_list)]
-    else:
-        logger.log("Could not find existing GSN parameter file {}, training instead.".format(params_to_load))
-        args.test_model = False
+    if args.test_model:
+        gsn.load_params(params_to_load)
     
     #########################################
     # Train or test the new GSN on the data #

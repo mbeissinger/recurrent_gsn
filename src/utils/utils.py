@@ -64,7 +64,8 @@ def get_cost_function(name):
         return lambda x,y: T.mean(T.nnet.binary_crossentropy(x,y))
     elif name == 'square':
         #return lambda x,y: T.log(T.mean(T.sqr(x-y)))
-        return lambda x,y: T.log(T.sum(T.pow((x-y),2)))
+        #return lambda x,y: T.log(T.sum(T.pow((x-y),2)))
+        return lambda x,y: T.mean(T.sqr(x-y))
     elif name == 'pseudo_log':
         return lambda y,x: T.sum(T.xlogx.xlogy0(x, y+eps) + T.xlogx.xlogy0(1-x, 1-y+eps)) / x.shape[0]
     else:
@@ -117,6 +118,14 @@ def fix_input_size(xs, hiddens=None):
         hiddens = [hiddens[i][:min_size] for i in range(len(hiddens))]
     return xs, hiddens
 
+def copy_params(params):
+        values = [param.get_value(borrow=True) for param in params]
+        return values
+
+def restore_params(params, values):
+    for i in range(len(params)):
+        params[i].set_value(values[i])
+
 def load_from_config(config_filename):
     print 'Loading local config file'
     config_file =   open(config_filename, 'r')
@@ -144,11 +153,20 @@ def make_time_units_string(time):
     else:
         return trunc(time/3600)+" hours"
     
-def raise_data_to_list(dataset):
-    if dataset is None:
+def raise_to_list(_input):
+    if _input is None:
         return None
-    elif isinstance(dataset, list):
-        return dataset
+    elif isinstance(_input, list):
+        return _input
     else:
-        return [dataset]
+        return [_input]
+    
+def closest_to_square_factors(n):
+    test = numpy.ceil(numpy.sqrt(float(n)))
+    while not (n/test).is_integer():
+        test-=1
+    if test < 1:
+        test = 1
+    return int(test), int(n/test)
+    
     
