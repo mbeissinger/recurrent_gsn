@@ -334,7 +334,7 @@ class RNN_GSN():
         #with noise
         _, cost, show_cost = gsn.build_gsn_given_hiddens(self.Xs, h_list, self.weights_list, self.bias_list, True, self.noiseless_h1, self.hidden_add_noise_sigma, self.input_salt_and_pepper, self.input_sampling, self.MRG, self.visible_activation, self.hidden_activation, self.walkbacks, self.cost_function, self.logger)
         #without noise for reconstruction
-        x_sample_recon, _, _ = gsn.build_gsn_given_hiddens(self.Xs, h_list_recon, self.weights_list, self.bias_list, False, self.noiseless_h1, self.hidden_add_noise_sigma, self.input_salt_and_pepper, self.input_sampling, self.MRG, self.visible_activation, self.hidden_activation, self.walkbacks, self.cost_function, self.logger)
+        x_sample_recon, _, recon_show_cost = gsn.build_gsn_given_hiddens(self.Xs, h_list_recon, self.weights_list, self.bias_list, False, self.noiseless_h1, self.hidden_add_noise_sigma, self.input_salt_and_pepper, self.input_sampling, self.MRG, self.visible_activation, self.hidden_activation, self.walkbacks, self.cost_function, self.logger)
         
         updates_train = updates_recurrent
         updates_cost = updates_recurrent
@@ -376,7 +376,7 @@ class RNN_GSN():
         # Denoise some numbers : show number, noisy number, predicted number, reconstructed number
         log.maybeLog(self.logger, "Creating graph for noisy reconstruction function at checkpoints during training.")
         self.f_recon = theano.function(inputs=[self.Xs],
-                                       outputs=x_sample_recon[-1],
+                                       outputs=[x_sample_recon[-1], recon_show_cost],
                                        name='rnngsn_f_recon')
         
         # a function to add salt and pepper noise
@@ -466,14 +466,16 @@ class RNN_GSN():
             best_params = None
             patience = 0
                         
-            log.maybeLog(self.logger, ['train X size:',str(train_X[0].shape.eval())])
+            log.maybeLog(self.logger, ['train X size:',str(T.concatenate(train_X).shape.eval())])
             if valid_X is not None:
-                log.maybeLog(self.logger, ['valid X size:',str(valid_X[0].shape.eval())])
+                log.maybeLog(self.logger, ['valid X size:',str(T.concatenate(valid_X).shape.eval())])
             if test_X is not None:
-                log.maybeLog(self.logger, ['test X size:',str(test_X[0].shape.eval())])
+                log.maybeLog(self.logger, ['test X size:',str(T.concatenate(test_X).shape.eval())])
             
             if self.vis_init:
                 self.bias_list[0].set_value(logit(numpy.clip(0.9,0.001,train_X.get_value().mean(axis=0))))
+                
+            start_time = time.time()
         
             while not STOP:
                 counter += 1
@@ -533,16 +535,15 @@ class RNN_GSN():
                 log.maybeLog(self.logger, 'remaining: '+make_time_units_string((self.n_epoch - counter) * numpy.mean(times)))
         
                 if (counter % self.save_frequency) == 0 or STOP is True:
+                    n_examples = 100
+                    xs_test = test_X[0].get_value(borrow=True)[range(n_examples)]
+                    noisy_xs_test = self.f_noise(test_X[0].get_value(borrow=True)[range(n_examples)])
+                    reconstructions = []
+                    for i in xrange(0, len(noisy_xs_test)):
+                        recon, recon_cost = self.f_recon(noisy_xs_test[max(0,(i+1)-self.batch_size):i+1])
+                        reconstructions.append(recon)
+                    reconstructed = numpy.array(reconstructions)
                     if (self.is_image):
-                        n_examples = 100
-                        xs_test = test_X[0].get_value(borrow=True)[range(n_examples)]
-                        noisy_xs_test = self.f_noise(test_X[0].get_value(borrow=True)[range(n_examples)])
-                        reconstructions = []
-                        for i in xrange(0, len(noisy_xs_test)):
-                            recon = self.f_recon(noisy_xs_test[max(0,(i+1)-self.batch_size):i+1])
-                            reconstructions.append(recon)
-                        reconstructed = numpy.array(reconstructions)
-    
                         # Concatenate stuff
                         stacked = numpy.vstack([numpy.vstack([xs_test[i*10 : (i+1)*10], noisy_xs_test[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10]]) for i in range(10)])
                         number_reconstruction = PIL.Image.fromarray(tile_raster_images(stacked, (self.image_height, self.image_width), (10,30)))
@@ -561,6 +562,8 @@ class RNN_GSN():
                 
                 new_noise = self.input_salt_and_pepper.get_value() * self.noise_annealing
                 self.input_salt_and_pepper.set_value(new_noise)
+                
+            log.maybeLog(self.logger, "\n------------TOTAL RNN-GSN TRAIN TIME TOOK {0!s}---------".format(make_time_units_string(time.time()-start_time)))
     
             
             # 10k samples

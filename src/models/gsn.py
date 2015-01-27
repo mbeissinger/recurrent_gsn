@@ -337,14 +337,16 @@ class GSN:
         best_params = None
         patience    = 0
                     
-        log.maybeLog(self.logger, ['train X size:',str(train_X[0].shape.eval())])
+        log.maybeLog(self.logger, ['train X size:',str(T.concatenate(train_X).shape.eval())])
         if valid_X is not None:
-            log.maybeLog(self.logger, ['valid X size:',str(valid_X[0].shape.eval())])
+            log.maybeLog(self.logger, ['valid X size:',str(T.concatenate(valid_X).shape.eval())])
         if test_X is not None:
-            log.maybeLog(self.logger, ['test X size:',str(test_X[0].shape.eval())])
+            log.maybeLog(self.logger, ['test X size:',str(T.concatenate(test_X).shape.eval())])
         
         if self.vis_init:
             self.bias_list[0].set_value(logit(numpy.clip(0.9,0.001,train_X[0].get_value().mean(axis=0))))
+            
+        start_time = time.time()
     
         while not STOP:
             counter += 1
@@ -393,7 +395,7 @@ class GSN:
                 STOP = True
                 if best_params is not None:
                     restore_params(self.params, best_params)
-                save_params(counter, self.params, self.outdir, self.logger)
+                self.save_params(counter, self.params)
     
             timing = time.time() - t
             times.append(timing)
@@ -415,7 +417,7 @@ class GSN:
                     number_reconstruction.save(self.outdir+'gsn_image_reconstruction_epoch_'+str(counter)+'.png')
         
                 #save gsn_params
-                save_params(counter, self.params, self.outdir, self.logger)
+                self.save_params(counter, self.params)
          
             # ANNEAL!
             new_lr = self.learning_rate.get_value() * self.annealing
@@ -426,6 +428,8 @@ class GSN:
             
             new_salt_pepper = self.input_salt_and_pepper.get_value() * self.noise_annealing
             self.input_salt_and_pepper.set_value(new_salt_pepper)
+        
+        log.maybeLog(self.logger, "\n------------TOTAL GSN TRAIN TIME TOOK {0!s}---------".format(make_time_units_string(time.time()-start_time)))
             
         
     
@@ -531,9 +535,9 @@ class GSN:
     #############################
     # Save the model parameters #
     #############################
-    def save_params(self, name, n, params):
+    def save_params(self, n, params):
         log.maybeLog(self.logger, 'saving parameters...')
-        save_path = self.outdir+name+'gsn_params_epoch_'+str(n)+'.pkl'
+        save_path = self.outdir+'gsn_params_epoch_'+str(n)+'.pkl'
         f = open(save_path, 'wb')
         try:
             cPickle.dump(params, f, protocol=cPickle.HIGHEST_PROTOCOL)
@@ -728,16 +732,16 @@ def simple_update_layer(hiddens,
 
     # post activation noise
     # why is there post activation noise? Because there is already pre-activation noise, this just doubles the amount of noise between each activation of the hiddens.  
-    if i != 0 and add_noise:
-        log.maybeLog(logger, ['Adding post-activation gaussian noise for layer', i])
-        hiddens[i] = add_gaussian_noise(hiddens[i], hidden_add_noise_sigma)
+#     if i != 0 and add_noise:
+#         log.maybeLog(logger, ['Adding post-activation gaussian noise for layer', i])
+#         hiddens[i] = add_gaussian_noise(hiddens[i], hidden_add_noise_sigma)
 
     # build the reconstruction chain if updating the visible layer X
     if i == 0:
-        # if input layer -> append p(X|...)
+        # if input layer -> append p(X|H...)
         p_X_chain.append(hiddens[i])
         
-        # sample from p(X|...) - SAMPLING NEEDS TO BE CORRECT FOR INPUT TYPES I.E. FOR BINARY MNIST SAMPLING IS BINOMIAL. real-valued inputs should be gaussian
+        # sample from p(X|H...) - SAMPLING NEEDS TO BE CORRECT FOR INPUT TYPES I.E. FOR BINARY MNIST SAMPLING IS BINOMIAL. real-valued inputs should be gaussian
         if input_sampling:
             log.maybeLog(logger, 'Sampling from input')
             sampled = MRG.binomial(p = hiddens[i], size=hiddens[i].shape, dtype='float32')
