@@ -161,6 +161,33 @@ def raise_to_list(_input):
     else:
         return [_input]
     
+def stack_and_shared(_input):
+    if _input is None:
+        return None
+    elif isinstance(_input, list):
+        shared_ins = []
+        for _in in _input:
+            try:
+                shared_ins.append(theano.shared(_in))
+            except TypeError as _:
+                shared_ins.append(_in)
+        return T.stack(shared_ins)
+    else:
+        try:
+            _output = [theano.shared(_input)]
+        except TypeError as _:
+            _output = [_input]
+        return T.stack(_output)
+    
+def concatenate_list(_input):
+    if _input is None:
+        return None
+    elif isinstance(_input, list):
+        return T.concatenate(_input, axis=1)
+    else:
+        return _input
+    
+    
 def closest_to_square_factors(n):
     test = numpy.ceil(numpy.sqrt(float(n)))
     while not (n/test).is_integer():

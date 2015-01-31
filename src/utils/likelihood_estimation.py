@@ -59,7 +59,7 @@ def CSL(h_samples, model, x_test):
     '''
     pass
             
-def biased_CSL(h_samples, model, x_test):
+def biased_CSL(model, x_test):
     '''
     Biased CSL
     "Bounding the Test Log-Likelihood of Generative Models"

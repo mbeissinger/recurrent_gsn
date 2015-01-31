@@ -90,12 +90,12 @@ class RNN_GSN():
         self.test_Y  = raise_to_list(test_Y)
         
         # variables from the dataset that are used for initialization and image reconstruction
-        if train_X is None:
+        if self.train_X is None:
             self.N_input = args.get("input_size")
             if args.get("input_size") is None:
                 raise AssertionError("Please either specify input_size in the arguments or provide an example train_X for input dimensionality.")
         else:
-            self.N_input = train_X[0].eval().shape[1]
+            self.N_input = self.train_X[0].eval().shape[1]
         
         self.is_image = args.get('is_image', defaults['is_image'])
         if self.is_image:
@@ -641,13 +641,13 @@ class RNN_GSN():
         
     def plot_samples(self, epoch_number="", leading_text="", n_samples=400):
         to_sample = time.time()
-        initial = self.test_X.get_value()[:1]
+        initial = self.test_X[0].get_value()[:1]
         V = self.sample(initial, n_samples)
         img_samples = PIL.Image.fromarray(tile_raster_images(V, (self.image_height, self.image_width), (ceil(sqrt(n_samples)), ceil(sqrt(n_samples)))))
         
         fname = self.outdir+leading_text+'samples_epoch_'+str(epoch_number)+'.png'
         img_samples.save(fname) 
-        log.maybeLog(self.logger, 'Took ' + str(time.time() - to_sample) + ' to sample '+n_samples+' numbers')
+        log.maybeLog(self.logger, 'Took ' + make_time_units_string(time.time() - to_sample) + ' to sample '+n_samples+' numbers')
         
     #############################
     # Save the model parameters #
@@ -670,13 +670,14 @@ class RNN_GSN():
             return start + len(param)
             
         if os.path.isfile(filename):
-            log.maybeLog(self.logger, "\nLoading existing RNN-GSN parameters")
+            log.maybeLog(self.logger, "\nLoading existing RNN-GSN parameters...")
             loaded_params = cPickle.load(open(filename,'r'))
             start = 0
             start = set_param(loaded_params, start, self.weights_list)
             start = set_param(loaded_params, start, self.bias_list)
             start = set_param(loaded_params, start, self.recurrent_to_gsn_weights_list)
             set_param(loaded_params, start, self.u_params)
+            log.maybeLog(self.logger, "Parameters loaded.\n")
         else:
             log.maybeLog(self.logger, "\n\nCould not find existing RNN-GSN parameter file {}.\n\n".format(filename))
         

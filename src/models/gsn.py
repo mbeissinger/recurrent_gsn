@@ -32,7 +32,10 @@ from collections import OrderedDict
 from utils import logger as log
 from utils import data_tools as data
 from utils.image_tiler import tile_raster_images
-from utils.utils import cast32, logit, trunc, get_shared_weights, get_shared_bias, salt_and_pepper, add_gaussian_noise, make_time_units_string, load_from_config, get_activation_function, get_cost_function, raise_to_list, closest_to_square_factors, copy_params, restore_params
+from utils.utils import cast32, logit, trunc
+from utils.utils import get_shared_weights, get_shared_bias, salt_and_pepper, add_gaussian_noise
+from utils.utils import make_time_units_string, load_from_config, get_activation_function, get_cost_function, copy_params, restore_params
+from utils.utils import stack_and_shared, raise_to_list, concatenate_list, closest_to_square_factors
 
 # Default values to use for some GSN parameters
 defaults = {# gsn parameters
@@ -77,18 +80,19 @@ class GSN:
             self.outdir = self.outdir+'/'
         data.mkdir_p(self.outdir)
         
-        # Input data - make sure it is a list of shared datasets
-        self.train_X = raise_to_list(train_X)
-        self.valid_X = raise_to_list(valid_X)
-        self.test_X  = raise_to_list(test_X)
+        # Input data
+        self.train_X = concatenate_list(train_X)
+        self.valid_X = concatenate_list(valid_X)
+        self.test_X  = concatenate_list(test_X)
+
         
         # variables from the dataset that are used for initialization and image reconstruction
-        if train_X is None:
+        if self.train_X is None:
             self.N_input = args.get("input_size")
             if args.get("input_size") is None:
                 raise AssertionError("Please either specify input_size in the arguments or provide an example train_X for input dimensionality.")
         else:
-            self.N_input = train_X[0].eval().shape[1]
+            self.N_input = self.train_X.shape.eval()[1]
         
         self.is_image = args.get('is_image', defaults['is_image'])
         if self.is_image:
@@ -160,6 +164,8 @@ class GSN:
         # Theano variables and RNG #
         ############################
         self.X   = T.fmatrix('X') # for use in sampling
+        self.dataset_index = T.lscalar('dataset_index')
+        self.batch_index = T.lscalar('batch_index')
         self.MRG = RNG_MRG.MRG_RandomStreams(1)
         rng.seed(1)
         
@@ -218,7 +224,7 @@ class GSN:
         #######################
         log.maybeLog(self.logger, 'Cost w.r.t p(X|...) at every step in the graph for the GSN')
         gsn_costs     = [self.cost_function(rX, self.X) for rX in p_X_chain]
-        show_gsn_cost = gsn_costs[-1] # for logging to show progress
+        self.show_gsn_cost = gsn_costs[-1] # for logging to show progress
         gsn_cost      = numpy.sum(gsn_costs)
         
         gsn_costs_recon     = [self.cost_function(rX, self.X) for rX in p_X_chain_recon]
@@ -232,7 +238,7 @@ class GSN:
         m_gradient      =   [self.momentum * gb + (cast32(1) - self.momentum) * g for (gb, g) in zip(gradient_buffer, gradient)]
         param_updates   =   [(param, param - self.learning_rate * mg) for (param, mg) in zip(self.params, m_gradient)]
         gradient_buffer_updates = zip(gradient_buffer, m_gradient)
-        updates         =   OrderedDict(param_updates + gradient_buffer_updates)
+        self.updates         =   OrderedDict(param_updates + gradient_buffer_updates)
         
         ############
         # Sampling #
@@ -268,24 +274,29 @@ class GSN:
         log.maybeLog(self.logger, "Compiling functions...")
         t = time.time()
         
-        self.f_learn = theano.function(inputs  = [self.X],
-                                  updates = updates,
-                                  outputs = show_gsn_cost,
-                                  name='gsn_f_learn')
-    
-        self.f_cost  = theano.function(inputs  = [self.X],
-                                  outputs = show_gsn_cost,
-                                  name='gsn_f_cost')
+#         self.f_learn = theano.function(inputs  = [self.X],
+#                                   updates = updates,
+#                                   outputs = show_gsn_cost,
+#                                   name='gsn_f_learn')
+#         
+#         self.f_cost  = theano.function(inputs  = [self.X],
+#                                   outputs = show_gsn_cost,
+#                                   name='gsn_f_cost')
+        
+        self.compile_train_functions(self.train_X, self.valid_X, self.test_X)
         
         # used for checkpoints and testing - no noise in network
+        log.maybeLog(self.logger, "f_recon")
         self.f_recon = theano.function(inputs  = [self.X],
                                        outputs = [show_gsn_cost_recon, p_X_chain_recon[-1]],
                                        name='gsn_f_recon')
         
+        log.maybeLog(self.logger, "f_noise")
         self.f_noise = theano.function(inputs = [self.X],
-                                       outputs = salt_and_pepper(self.X, self.input_salt_and_pepper),
+                                       outputs = salt_and_pepper(self.X, self.input_salt_and_pepper, self.MRG),
                                        name='gsn_f_noise')
     
+        log.maybeLog(self.logger, "f_sample")
         if self.layers == 1: 
             self.f_sample = theano.function(inputs = [X_sample], 
                                             outputs = visible_pX_chain[-1], 
@@ -306,21 +317,29 @@ class GSN:
         log.maybeLog(self.logger, "\nTraining---------\n")
         if train_X is None:
             log.maybeLog(self.logger, "Training using data given during initialization of GSN class.\n")
-            train_X = self.train_X
-            if train_X is None:
+            if self.train_X is None:
                 log.maybeLog(self.logger, "\nPlease provide a training dataset!\n")
                 raise AssertionError("Please provide a training dataset!")
         else:
             log.maybeLog(self.logger, "Training using data provided to training function.\n")
-        if valid_X is None:
-            valid_X = self.valid_X
-        if test_X is None:
-            test_X  = self.test_X
+            self.train_X = train_X
+        if valid_X is not None:
+            self.valid_X = valid_X
+        if test_X is not None:
+            self.test_X  = test_X
             
-        # Input data - make sure it is a list of shared datasets
-        train_X = raise_to_list(train_X)
-        valid_X = raise_to_list(valid_X)
-        test_X  = raise_to_list(test_X)
+        # Input data
+        self.train_X = concatenate_list(self.train_X)
+        self.valid_X = concatenate_list(self.valid_X)
+        self.test_X  = concatenate_list(self.test_X)
+        
+        ########################################################
+        # Compile training functions to use indexing for speed #
+        ########################################################
+        log.maybeLog(self.logger, "Compiling training functions...")
+        t = time.time()
+        self.compile_train_functions(train_X, valid_X, test_X)
+        log.maybeLog(self.logger, "Compiling done. Took "+make_time_units_string(time.time() - t)+".\n")
         
             
         
@@ -337,14 +356,17 @@ class GSN:
         best_params = None
         patience    = 0
                     
-        log.maybeLog(self.logger, ['train X size:',str(T.concatenate(train_X).shape.eval())])
-        if valid_X is not None:
-            log.maybeLog(self.logger, ['valid X size:',str(T.concatenate(valid_X).shape.eval())])
-        if test_X is not None:
-            log.maybeLog(self.logger, ['test X size:',str(T.concatenate(test_X).shape.eval())])
+        x_shape = self.train_X.shape.eval()
+        log.maybeLog(self.logger, ['train X size:',str(x_shape)])
+        if self.valid_X is not None:
+            vx_shape = self.valid_X.shape.eval()
+            log.maybeLog(self.logger, ['valid X size:',str(vx_shape)])
+        if self.test_X is not None:
+            tx_shape = self.test_X.shape.eval()
+            log.maybeLog(self.logger, ['test X size:',str(tx_shape)])
         
         if self.vis_init:
-            self.bias_list[0].set_value(logit(numpy.clip(0.9,0.001,train_X[0].get_value().mean(axis=0))))
+            self.bias_list[0].set_value(logit(numpy.clip(0.9,0.001,self.train_X.get_value().mean(axis=0))))
             
         start_time = time.time()
     
@@ -354,32 +376,38 @@ class GSN:
             log.maybeAppend(self.logger, [counter,'\t'])
             
             #shuffle the data
-            [data.shuffle_data(ts) for ts in train_X]
-            [data.shuffle_data(vs) for vs in valid_X]
-            [data.shuffle_data(ts) for ts in test_X]
+#             [data.shuffle_data(tx) for tx in train_X]
+#             [data.shuffle_data(vx) for vx in valid_X]
+#             [data.shuffle_data(ts) for ts in test_X]
+#             data.shuffle_data(self.train_X)
+#             data.shuffle_data(self.valid_X)
+#             data.shuffle_data(self.test_X)
             
             #train
-            train_costs = []
-            for train_data in train_X:
-                train_costs.extend(data.apply_cost_function_to_dataset(self.f_learn, train_data, self.batch_size))
+#             train_costs = []
+#             for train_data in train_X:
+#                 train_costs.extend(data.apply_cost_function_to_dataset(self.f_learn, train_data, self.batch_size))
+            train_costs = data.apply_indexed_cost_function_to_dataset(self.f_learn, x_shape[0], self.batch_size)
             log.maybeAppend(self.logger, ['Train:',trunc(numpy.mean(train_costs)), '\t'])
     
             #valid
-            if valid_X is not None:
-                valid_costs = []
-                for valid_data in valid_X:
-                    valid_costs.extend(data.apply_cost_function_to_dataset(self.f_cost, valid_data, self.batch_size))
+            if self.valid_X is not None:
+#                 valid_costs = []
+#                 for valid_data in valid_X:
+#                     valid_costs.extend(data.apply_cost_function_to_dataset(self.f_cost, valid_data, self.batch_size))
+                valid_costs = data.apply_indexed_cost_function_to_dataset(self.f_valid, vx_shape[0], self.batch_size)
                 log.maybeAppend(self.logger, ['Valid:',trunc(numpy.mean(valid_costs)), '\t'])
     
             #test
-            if test_X is not None:
-                test_costs = []
-                for test_data in test_X:
-                    test_costs.extend(data.apply_cost_function_to_dataset(self.f_cost, test_data, self.batch_size))
+            if self.test_X is not None:
+#                 test_costs = []
+#                 for test_data in test_X:
+#                     test_costs.extend(data.apply_cost_function_to_dataset(self.f_cost, test_data, self.batch_size))
+                test_costs = data.apply_indexed_cost_function_to_dataset(self.f_test, tx_shape[0], self.batch_size)
                 log.maybeAppend(self.logger, ['Test:',trunc(numpy.mean(test_costs)), '\t'])
                 
             #check for early stopping
-            if valid_X is not None:
+            if self.valid_X is not None:
                 cost = numpy.sum(valid_costs)
             else:
                 cost = numpy.sum(train_costs)
@@ -407,14 +435,16 @@ class GSN:
             if (counter % self.save_frequency) == 0 or STOP is True:
                 if self.is_image:
                     n_examples = 100
-                    tests = test_X[0].get_value()[0:n_examples]
-                    noisy_tests = self.f_noise(test_X[0].get_value()[0:n_examples])
+                    tests = self.test_X.get_value()[0:n_examples]
+                    noisy_tests = self.f_noise(self.test_X.get_value()[0:n_examples])
                     _, reconstructed = self.f_recon(noisy_tests) 
                     # Concatenate stuff if it is an image
                     stacked = numpy.vstack([numpy.vstack([tests[i*10 : (i+1)*10], noisy_tests[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10]]) for i in range(10)])
                     number_reconstruction = PIL.Image.fromarray(tile_raster_images(stacked, (self.image_height,self.image_width), (10,30)))
                     
                     number_reconstruction.save(self.outdir+'gsn_image_reconstruction_epoch_'+str(counter)+'.png')
+                    
+                    self.plot_samples(counter, "gsn", 400)
         
                 #save gsn_params
                 self.save_params(counter, self.params)
@@ -446,14 +476,14 @@ class GSN:
         else:
             log.maybeLog(self.logger, "Testing using data provided to test function.\n")
             
-        test_X = raise_to_list(test_X)
+        test_X = concatenate_list(test_X)
             
         ###########
         # TESTING #
         ###########
         n_examples = 100
-        tests = test_X[0].get_value()[0:n_examples]
-        noisy_tests = self.f_noise(test_X[0].get_value()[0:n_examples])
+        tests = test_X.get_value()[0:n_examples]
+        noisy_tests = self.f_noise(test_X.get_value()[0:n_examples])
         cost, reconstructed = self.f_recon(noisy_tests) 
         # Concatenate stuff if it is an image
         if self.is_image:
@@ -525,12 +555,20 @@ class GSN:
     def plot_samples(self, epoch_number="", leading_text="", n_samples=400):
         to_sample = time.time()
         initial = self.test_X.get_value()[:1]
+        rand_idx = numpy.random.choice(range(self.test_X.eval().shape[0]))
+        rand_init = self.test_X.get_value()[rand_idx:rand_idx+1]
+        
         V = self.sample(initial, n_samples)
-        img_samples = PIL.Image.fromarray(tile_raster_images(V, (self.image_height, self.image_width), (ceil(sqrt(n_samples)), ceil(sqrt(n_samples)))))
+        rand_V = self.sample(rand_init, n_samples)
+        
+        img_samples = PIL.Image.fromarray(tile_raster_images(V, (self.image_height, self.image_width), closest_to_square_factors(n_samples)))
+        rand_img_samples = PIL.Image.fromarray(tile_raster_images(rand_V, (self.image_height, self.image_width), closest_to_square_factors(n_samples)))
         
         fname = self.outdir+leading_text+'samples_epoch_'+str(epoch_number)+'.png'
-        img_samples.save(fname) 
-        log.maybeLog(self.logger, 'Took ' + str(time.time() - to_sample) + ' to sample '+n_samples+' numbers')
+        img_samples.save(fname)
+        rfname = self.outdir+leading_text+'samples_rand_epoch_'+str(epoch_number)+'.png'
+        rand_img_samples.save(rfname) 
+        log.maybeLog(self.logger, 'Took ' + make_time_units_string(time.time() - to_sample) + ' to sample '+str(n_samples*2)+' numbers')
         
     #############################
     # Save the model parameters #
@@ -546,16 +584,41 @@ class GSN:
             
     def load_params(self, filename):
         if os.path.isfile(filename):
-            log.maybeLog(self.logger, "\nLoading existing GSN parameters")
+            log.maybeLog(self.logger, "\nLoading existing GSN parameters...")
             loaded_params = cPickle.load(open(filename,'r'))
             [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[:len(self.weights_list)], self.weights_list)]
             [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(self.weights_list):], self.bias_list)]
+            log.maybeLog(self.logger, "Parameters loaded.\n")
         else:
             log.maybeLog(self.logger, "\n\nCould not find existing GSN parameter file {}.\n\n".format(filename))
         
          
-    
-    
+    #####################
+    # Compiling helpers #
+    #####################
+    def compile_train_functions(self, train_X, valid_X, test_X):
+        if train_X is not None:
+            log.maybeLog(self.logger, "f_learn")
+            train_batch   = self.train_X[self.batch_index * self.batch_size : (self.batch_index+1) * self.batch_size]
+            self.f_learn     =   theano.function(inputs  = [self.batch_index], 
+                                            updates = self.updates, 
+                                            givens  = {self.X : train_batch},
+                                            outputs = self.show_gsn_cost,
+                                            name='gsn_f_learn')
+        if valid_X is not None:
+            log.maybeLog(self.logger, "f_valid")
+            valid_batch   = self.valid_X[self.batch_index * self.batch_size : (self.batch_index+1) * self.batch_size]
+            self.f_valid  = theano.function(inputs  = [self.batch_index],
+                                            givens  = {self.X : valid_batch},
+                                            outputs = self.show_gsn_cost,
+                                            name='gsn_f_valid')
+        if test_X is not None:
+            log.maybeLog(self.logger, "f_test")
+            test_batch   = self.test_X[self.batch_index * self.batch_size : (self.batch_index+1) * self.batch_size]
+            self.f_test  = theano.function(inputs  = [self.batch_index],
+                                           givens  = {self.X : test_batch},
+                                            outputs = self.show_gsn_cost,
+                                            name='gsn_f_valid')
 
 
 ###############################################
@@ -720,7 +783,7 @@ def simple_update_layer(hiddens,
     # pre activation noise       
     if i != 0 and add_noise:
         log.maybeLog(logger, ['Adding pre-activation gaussian noise for layer', i])
-        hiddens[i] = add_gaussian_noise(hiddens[i], hidden_add_noise_sigma)
+        hiddens[i] = add_gaussian_noise(hiddens[i], hidden_add_noise_sigma, MRG)
    
     # ACTIVATION!
     if i == 0:
@@ -732,9 +795,9 @@ def simple_update_layer(hiddens,
 
     # post activation noise
     # why is there post activation noise? Because there is already pre-activation noise, this just doubles the amount of noise between each activation of the hiddens.  
-#     if i != 0 and add_noise:
-#         log.maybeLog(logger, ['Adding post-activation gaussian noise for layer', i])
-#         hiddens[i] = add_gaussian_noise(hiddens[i], hidden_add_noise_sigma)
+    if i != 0 and add_noise:
+        log.maybeLog(logger, ['Adding post-activation gaussian noise for layer', i])
+        hiddens[i] = add_gaussian_noise(hiddens[i], hidden_add_noise_sigma, MRG)
 
     # build the reconstruction chain if updating the visible layer X
     if i == 0:
@@ -749,7 +812,7 @@ def simple_update_layer(hiddens,
             log.maybeLog(logger, '>>NO input sampling')
             sampled = hiddens[i]
         # add noise
-        sampled = salt_and_pepper(sampled, input_salt_and_pepper)
+        sampled = salt_and_pepper(sampled, input_salt_and_pepper, MRG)
         
         # set input layer
         hiddens[i] = sampled
@@ -821,7 +884,7 @@ def build_gsn(X,
     p_X_chain = []
     # Whether or not to corrupt the visible input X
     if add_noise:
-        X_init = salt_and_pepper(X, input_salt_and_pepper)
+        X_init = salt_and_pepper(X, input_salt_and_pepper, MRG)
     else:
         X_init = X
     # init hiddens with zeros
@@ -886,7 +949,7 @@ def build_gsn_scan(X,
     
     # Whether or not to corrupt the visible input X
     if add_noise:
-        X_init = salt_and_pepper(X, input_salt_and_pepper)
+        X_init = salt_and_pepper(X, input_salt_and_pepper, MRG)
     else:
         X_init = X
     # init hiddens with zeros
