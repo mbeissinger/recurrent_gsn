@@ -260,12 +260,13 @@ class RNN_GSN():
         visible_pX_chain = []
     
         # ONE update
+        _add_noise = True
         log.maybeLog(self.logger, "Performing one walkback in network state sampling.")
         gsn.update_layers(self.network_state_output,
                           self.weights_list,
                           self.bias_list,
                           visible_pX_chain, 
-                          True,
+                          _add_noise,
                           self.noiseless_h1,
                           self.hidden_add_noise_sigma,
                           self.input_salt_and_pepper,
@@ -276,9 +277,9 @@ class RNN_GSN():
                           self.logger)
     
                
-        ##############################################
-        #      Build the graphs for the RNN-GSN      #
-        ##############################################
+        #############################################
+        #      Build the graphs for the RNN-GSN     #
+        #############################################
         # If `x_t` is given, deterministic recurrence to compute the u_t. Otherwise, first generate
         def recurrent_step(x_t, u_tm1, add_noise):
             # Make current guess for hiddens based on U
@@ -482,8 +483,8 @@ class RNN_GSN():
                 t = time.time()
                 log.maybeAppend(self.logger, [counter,'\t'])
                     
-                if is_artificial:
-                    data.sequence_mnist_data(train_X[0], train_Y[0], valid_X[0], valid_Y[0], test_X[0], test_Y[0], artificial_sequence, rng)
+#                 if is_artificial:
+#                     data.sequence_mnist_data(train_X[0], train_Y[0], valid_X[0], valid_Y[0], test_X[0], test_Y[0], artificial_sequence, rng)
                      
                 #train
                 train_costs = []
@@ -587,7 +588,8 @@ class RNN_GSN():
     
     
     
-    def sample(self, initial, n_samples=400):
+    def sample(self, initial, n_samples=400, k=1):
+        log.maybeLog(self.logger, "Starting sampling...")
         def sample_some_numbers_single_layer(n_samples):
             x0 = initial
             samples = [x0]
@@ -597,8 +599,9 @@ class RNN_GSN():
                 samples.append(x)
                 x = rng.binomial(n=1, p=x, size=x.shape).astype('float32')
                 x = self.f_noise(x)
-                
-            return numpy.vstack(samples)
+            
+            log.maybeLog(self.logger, "Sampling done.")
+            return numpy.vstack(samples), None
                 
         def sampling_wrapper(NSI):
             # * is the "splat" operator: It takes a list as input, and expands it into actual positional arguments in the function call.
@@ -610,16 +613,17 @@ class RNN_GSN():
         def sample_some_numbers(n_samples):
             # The network's initial state
             init_vis       = initial
-    
             noisy_init_vis = self.f_noise(init_vis)
-    
-            network_state  = [[noisy_init_vis] + [numpy.zeros((1,len(b.get_value())), dtype='float32') for b in self.bias_list[1:]]]
-    
+            
+            network_state  = [[noisy_init_vis] + [numpy.zeros((initial.shape[0],self.hidden_size), dtype='float32') for _ in self.bias_list[1:]]]
+            
             visible_chain  = [init_vis]
-    
             noisy_h0_chain = [noisy_init_vis]
-    
-            for _ in xrange(n_samples-1):
+            sampled_h = []
+            
+            times = []
+            for i in xrange(n_samples-1):
+                _t = time.time()
                
                 # feed the last state into the network, compute new state, and obtain visible units expectation chain 
                 net_state_out, vis_pX_chain = sampling_wrapper(network_state[-1])
@@ -631,8 +635,16 @@ class RNN_GSN():
                 network_state.append(net_state_out)
                 
                 noisy_h0_chain.append(net_state_out[0])
+                
+                if i%k == 0:
+                    sampled_h.append(T.stack(net_state_out[1:]))
+                    if i == k:
+                        log.maybeLog(self.logger, "About "+make_time_units_string(numpy.mean(times)*(n_samples-1-i))+" remaining...")
+                    
+                times.append(time.time() - _t)
     
-            return numpy.vstack(visible_chain)#, numpy.vstack(noisy_h0_chain)
+            log.maybeLog(self.logger, "Sampling done.")
+            return numpy.vstack(visible_chain), sampled_h
         
         if self.layers == 1:
             return sample_some_numbers_single_layer(n_samples)
@@ -641,13 +653,21 @@ class RNN_GSN():
         
     def plot_samples(self, epoch_number="", leading_text="", n_samples=400):
         to_sample = time.time()
-        initial = self.test_X[0].get_value()[:1]
-        V = self.sample(initial, n_samples)
-        img_samples = PIL.Image.fromarray(tile_raster_images(V, (self.image_height, self.image_width), (ceil(sqrt(n_samples)), ceil(sqrt(n_samples)))))
+        initial = self.test_X.get_value()[:1]
+        rand_idx = numpy.random.choice(range(self.test_X.eval().shape[0]))
+        rand_init = self.test_X.get_value()[rand_idx:rand_idx+1]
+        
+        V, _ = self.sample(initial, n_samples)
+        rand_V, _ = self.sample(rand_init, n_samples)
+        
+        img_samples = PIL.Image.fromarray(tile_raster_images(V, (self.image_height, self.image_width), closest_to_square_factors(n_samples)))
+        rand_img_samples = PIL.Image.fromarray(tile_raster_images(rand_V, (self.image_height, self.image_width), closest_to_square_factors(n_samples)))
         
         fname = self.outdir+leading_text+'samples_epoch_'+str(epoch_number)+'.png'
-        img_samples.save(fname) 
-        log.maybeLog(self.logger, 'Took ' + make_time_units_string(time.time() - to_sample) + ' to sample '+n_samples+' numbers')
+        img_samples.save(fname)
+        rfname = self.outdir+leading_text+'samples_rand_epoch_'+str(epoch_number)+'.png'
+        rand_img_samples.save(rfname) 
+        log.maybeLog(self.logger, 'Took ' + make_time_units_string(time.time() - to_sample) + ' to sample '+str(n_samples*2)+' numbers')
         
     #############################
     # Save the model parameters #

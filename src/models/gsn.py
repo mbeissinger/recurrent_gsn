@@ -122,7 +122,8 @@ class GSN:
         self.input_sampling         = args.get('input_sampling', defaults["input_sampling"])
         self.vis_init               = args.get('vis_init', defaults['vis_init'])
         
-        self.layer_sizes = [self.N_input] + [args.get('hidden_size', defaults['hidden_size'])] * self.layers # layer sizes, from h0 to hK (h0 is the visible layer)
+        self.hidden_size = args.get('hidden_size', defaults['hidden_size'])
+        self.layer_sizes = [self.N_input] + [self.hidden_size] * self.layers # layer sizes, from h0 to hK (h0 is the visible layer)
         
         self.f_recon = None
         self.f_noise = None
@@ -309,6 +310,18 @@ class GSN:
                                             outputs = self.network_state_output + visible_pX_chain,
                                             on_unused_input='warn',
                                             name='gsn_f_sample')
+            
+        self.H = T.tensor3('H',dtype='float32')
+        add_noise = True
+        if add_noise:
+            x_init = salt_and_pepper(self.X, self.input_salt_and_pepper, self.MRG)
+        else:
+            x_init = self.X
+        hiddens = [x_init]+[self.H[i] for i in range(len(self.bias_list)-1)]
+        sample = build_gsn_pxh(hiddens, self.weights_list, self.bias_list, add_noise, self.noiseless_h1, self.hidden_add_noise_sigma, self.input_salt_and_pepper, self.input_sampling, self.MRG, self.visible_activation, self.hidden_activation, self.walkbacks, self.logger)
+        
+        log.maybeLog(self.logger, "P(X=x|H)")
+        self.pxh = theano.function(inputs = [self.X, self.H], outputs=sample, name='px_given_h ')
         
         log.maybeLog(self.logger, "Compiling done. Took "+make_time_units_string(time.time() - t)+".\n")
         
@@ -376,9 +389,6 @@ class GSN:
             log.maybeAppend(self.logger, [counter,'\t'])
             
             #shuffle the data
-#             [data.shuffle_data(tx) for tx in train_X]
-#             [data.shuffle_data(vx) for vx in valid_X]
-#             [data.shuffle_data(ts) for ts in test_X]
 #             data.shuffle_data(self.train_X)
 #             data.shuffle_data(self.valid_X)
 #             data.shuffle_data(self.test_X)
@@ -444,7 +454,7 @@ class GSN:
                     
                     number_reconstruction.save(self.outdir+'gsn_image_reconstruction_epoch_'+str(counter)+'.png')
                     
-                    self.plot_samples(counter, "gsn", 400)
+                    self.plot_samples(counter, "gsn", 1000)
         
                 #save gsn_params
                 self.save_params(counter, self.params)
@@ -459,7 +469,7 @@ class GSN:
             new_salt_pepper = self.input_salt_and_pepper.get_value() * self.noise_annealing
             self.input_salt_and_pepper.set_value(new_salt_pepper)
         
-        log.maybeLog(self.logger, "\n------------TOTAL GSN TRAIN TIME TOOK {0!s}---------".format(make_time_units_string(time.time()-start_time)))
+        log.maybeLog(self.logger, "\n------------TOTAL GSN TRAIN TIME TOOK {0!s}---------\n\n".format(make_time_units_string(time.time()-start_time)))
             
         
     
@@ -495,12 +505,13 @@ class GSN:
         else:
             numpy.savetxt(self.outdir+'gsn_reconstruction_test.csv', reconstructed, delimiter=",")
             
-        log.maybeLog(self.logger, "----------------\n\nAverage test cost is "+str(cost)+"\n\n-----------------")
+        log.maybeLog(self.logger, "----------------\n\nAverage test cost is "+str(cost)+"-----------------\n\n")
         
     
     
     
-    def sample(self, initial, n_samples=400):
+    def sample(self, initial, n_samples=400, k=1):
+        log.maybeLog(self.logger, "Starting sampling...")
         def sample_some_numbers_single_layer(n_samples):
             x0 = initial
             samples = [x0]
@@ -511,28 +522,30 @@ class GSN:
                 x = rng.binomial(n=1, p=x, size=x.shape).astype('float32')
                 x = self.f_noise(x)
                 
-            return numpy.vstack(samples)
-                
+            log.maybeLog(self.logger, "Sampling done.")
+            return numpy.vstack(samples), None
+        
         def sampling_wrapper(NSI):
             # * is the "splat" operator: It takes a list as input, and expands it into actual positional arguments in the function call.
             out = self.f_sample(*NSI)
             NSO = out[:len(self.network_state_output)]
             vis_pX_chain = out[len(self.network_state_output):]
             return NSO, vis_pX_chain
-    
+        
         def sample_some_numbers(n_samples):
             # The network's initial state
             init_vis       = initial
-    
             noisy_init_vis = self.f_noise(init_vis)
-    
-            network_state  = [[noisy_init_vis] + [numpy.zeros((1,len(b.get_value())), dtype='float32') for b in self.bias_list[1:]]]
-    
+            
+            network_state  = [[noisy_init_vis] + [numpy.zeros((initial.shape[0],self.hidden_size), dtype='float32') for _ in self.bias_list[1:]]]
+            
             visible_chain  = [init_vis]
-    
             noisy_h0_chain = [noisy_init_vis]
-    
-            for _ in xrange(n_samples-1):
+            sampled_h = []
+            
+            times = []
+            for i in xrange(n_samples-1):
+                _t = time.time()
                
                 # feed the last state into the network, compute new state, and obtain visible units expectation chain 
                 net_state_out, vis_pX_chain = sampling_wrapper(network_state[-1])
@@ -544,8 +557,16 @@ class GSN:
                 network_state.append(net_state_out)
                 
                 noisy_h0_chain.append(net_state_out[0])
+                
+                if i%k == 0:
+                    sampled_h.append(T.stack(net_state_out[1:]))
+                    if i == k:
+                        log.maybeLog(self.logger, "About "+make_time_units_string(numpy.mean(times)*(n_samples-1-i))+" remaining...")
+                    
+                times.append(time.time() - _t)
     
-            return numpy.vstack(visible_chain)#, numpy.vstack(noisy_h0_chain)
+            log.maybeLog(self.logger, "Sampling done.")
+            return numpy.vstack(visible_chain), sampled_h
         
         if self.layers == 1:
             return sample_some_numbers_single_layer(n_samples)
@@ -558,8 +579,8 @@ class GSN:
         rand_idx = numpy.random.choice(range(self.test_X.eval().shape[0]))
         rand_init = self.test_X.get_value()[rand_idx:rand_idx+1]
         
-        V = self.sample(initial, n_samples)
-        rand_V = self.sample(rand_init, n_samples)
+        V, _ = self.sample(initial, n_samples)
+        rand_V, _ = self.sample(rand_init, n_samples)
         
         img_samples = PIL.Image.fromarray(tile_raster_images(V, (self.image_height, self.image_width), closest_to_square_factors(n_samples)))
         rand_img_samples = PIL.Image.fromarray(tile_raster_images(rand_V, (self.image_height, self.image_width), closest_to_square_factors(n_samples)))
@@ -922,7 +943,6 @@ def build_gsn_given_hiddens(X,
         log.maybeLog(logger, "GSN (prediction) Walkback {!s}/{!s}".format(i+1,walkbacks))
         update_layers_reverse(hiddens, weights_list, bias_list, p_X_chain, add_noise, noiseless_h1, hidden_add_noise_sigma, input_salt_and_pepper, input_sampling, MRG, visible_activation, hidden_activation, logger)
         
-
     x_sample = p_X_chain[-1]
     
     costs     = [cost_function(rX, X) for rX in p_X_chain]
@@ -971,6 +991,30 @@ def build_gsn_scan(X,
     cost      = numpy.sum(costs)
     
     return x_sample, cost, show_cost#, updates
+
+def build_gsn_pxh(hiddens,
+                weights_list,
+                bias_list,
+                add_noise              = defaults["add_noise"],
+                noiseless_h1           = defaults["noiseless_h1"],
+                hidden_add_noise_sigma = defaults["hidden_add_noise_sigma"],
+                input_salt_and_pepper  = defaults["input_salt_and_pepper"],
+                input_sampling         = defaults["input_sampling"],
+                MRG                    = defaults["MRG"],
+                visible_activation     = defaults["visible_activation"],
+                hidden_activation      = defaults["hidden_activation"],
+                walkbacks              = defaults["walkbacks"],
+                logger = None):
+    
+    log.maybeLog(logger, ["Building the GSN graph for P(X=x|H) with", walkbacks,"walkbacks"])
+    p_X_chain = []
+    for i in range(walkbacks):
+        log.maybeLog(logger, "GSN Walkback {!s}/{!s}".format(i+1,walkbacks))
+        update_layers(hiddens, weights_list, bias_list, p_X_chain, add_noise, noiseless_h1, hidden_add_noise_sigma, input_salt_and_pepper, input_sampling, MRG, visible_activation, hidden_activation, logger)
+        
+    x_sample = p_X_chain[-1]
+    
+    return x_sample
     
         
         

@@ -3,6 +3,7 @@ from models.gsn import GSN
 from utils import data_tools as data
 import utils.logger as log
 from utils.utils import load_from_config
+from utils import likelihood_estimation as ll
 
 ###############################################
 # MAIN METHOD FOR RUNNING DEFAULT GSN EXAMPLE #
@@ -11,8 +12,8 @@ def main():
     parser = argparse.ArgumentParser()
 
     # GSN settings
-    parser.add_argument('--layers', type=int, default=2) # number of hidden layers
-    parser.add_argument('--walkbacks', type=int, default=4) # number of walkbacks
+    parser.add_argument('--layers', type=int, default=3) # number of hidden layers
+    parser.add_argument('--walkbacks', type=int, default=5) # number of walkbacks
     parser.add_argument('--hidden_size', type=int, default=1500)
     parser.add_argument('--hidden_act', type=str, default='tanh')
     parser.add_argument('--visible_act', type=str, default='sigmoid')
@@ -22,18 +23,18 @@ def main():
     parser.add_argument('--n_epoch', type=int, default=500)
     parser.add_argument('--batch_size', type=int, default=100)
     parser.add_argument('--save_frequency', type=int, default=5) #number of epochs between parameters being saved
-    parser.add_argument('--early_stop_threshold', type=float, default=0.9996)
+    parser.add_argument('--early_stop_threshold', type=float, default=0.9995)
     parser.add_argument('--early_stop_length', type=int, default=30) #the patience number of epochs
     
     # noise
     parser.add_argument('--hidden_add_noise_sigma', type=float, default=2) #default=2
-    parser.add_argument('--input_salt_and_pepper', type=float, default=0.4) #default=0.4
+    parser.add_argument('--input_salt_and_pepper', type=float, default=0.7) #default=0.4
     
     # hyper parameters
     parser.add_argument('--learning_rate', type=float, default=0.25)
     parser.add_argument('--momentum', type=float, default=0.5)
     parser.add_argument('--annealing', type=float, default=0.995)
-    parser.add_argument('--noise_annealing', type=float, default=1)
+    parser.add_argument('--noise_annealing', type=float, default=.987)
     
     # data
     parser.add_argument('--dataset', type=str, default='MNIST')
@@ -102,9 +103,13 @@ def main():
     ##########################
     gsn = GSN(train_X, valid_X, test_X, vars(args), logger)
     
-    gsn.train()
+    gsn.load_params('gsn_params_mnist.pkl')
     
+    _, h_samples = gsn.sample(train_X[0:1].eval(), 100000, 100)
     
+    print ll.CSL(h_samples, test_X.get_value(), gsn)
+        
+#     logger.log(str(ll.CSL(h_samples, test_X.get_value(), gsn)))
 
 if __name__ == '__main__':
     main()

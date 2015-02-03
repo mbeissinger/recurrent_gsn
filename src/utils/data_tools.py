@@ -234,7 +234,12 @@ def load_datasets(dataset, data_path):
         if dataset is "mnist_binary":
             return load_mnist_binary(data_path)
         else:
-            return load_mnist(data_path)
+            (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = load_mnist(data_path)
+            try:
+                dataset = int(dataset.split('_')[1])
+                return sequence_mnist_not_shared(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset)
+            except:
+                return (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y)
     elif dataset is "tfd":
         return load_tfd(data_path)
     elif dataset is "nottingham":
@@ -358,7 +363,7 @@ def dataset2_indices(labels, rng, classes=10, change_prob=.5):
                     sequence.append(pool[n].pop())
     return sequence
 
-#order sequentially up then down
+#order sequentially up then down 0-9-9-0....
 def dataset2a_indices(labels, classes=10):
     sequence = []
     pool = []
@@ -465,9 +470,9 @@ def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, data
             set_xy_indices(x, y, indices)
         
     #shuffle the datasets
-    shuffle_xy(train_X, train_Y)
-    shuffle_xy(valid_X, valid_Y)
-    shuffle_xy(test_X, test_Y)
+#     shuffle_xy(train_X, train_Y)
+#     shuffle_xy(valid_X, valid_Y)
+#     shuffle_xy(test_X, test_Y)
     
     # Find the order of MNIST data going from 0-9 repeating if the first dataset
     order_i = True
@@ -505,7 +510,42 @@ def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, data
         test = numpy.array([[1 if i==y else 0 for i in range(10)] for y in test_Y.get_value(borrow=True)],dtype="float32")
         test_X.set_value(test)
     
+def sequence_mnist_not_shared(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset=1):        
+    def set_xy_indices(x, y, indices):
+        x = x[indices]
+        y = y[indices]
+        return x,y
+   
+    # Find the order of MNIST data going from 0-9 repeating if the first dataset
+    order_i = True
+    if dataset == 1:
+        train_ordered_indices = dataset1_indices(train_Y)
+        valid_ordered_indices = dataset1_indices(valid_Y)
+        test_ordered_indices = dataset1_indices(test_Y)
+    elif dataset == 2:
+        train_ordered_indices = dataset2a_indices(train_Y)
+        valid_ordered_indices = dataset2a_indices(valid_Y)
+        test_ordered_indices = dataset2a_indices(test_Y)
+    elif dataset == 3:
+        train_ordered_indices = dataset3_indices(train_Y)
+        valid_ordered_indices = dataset3_indices(valid_Y)
+        test_ordered_indices = dataset3_indices(test_Y)
+    else:
+        order_i = False
     
+    # Put the data sets in order
+    if order_i:
+        train_X, train_Y = set_xy_indices(train_X, train_Y, train_ordered_indices)
+        valid_X, valid_Y = set_xy_indices(valid_X, valid_Y, valid_ordered_indices)
+        test_X, test_Y   = set_xy_indices(test_X, test_Y, test_ordered_indices)
+        
+    return (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y)
+        
     
+        
+        
+        
+        
+           
     
     

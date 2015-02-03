@@ -50,23 +50,61 @@ def numpy_parzen(x, mu, sigma):
     return log_mean(-0.5 * (a**2).sum(2)) - mu.shape[1] * numpy.log(sigma * numpy.sqrt(numpy.pi * 2))
 
 
-def CSL(h_samples, model, x_test):
+def CSL(h_samples, x_test, model):
     '''
     Conservative Sampling-based Log-likelihood (CSL)
     "Bounding the Test Log-Likelihood of Generative Models"
     Yoshua Bengio, Li Yao, Kyunghyun Cho
     http://arxiv.org/pdf/1311.6184.pdf
     '''
-    pass
+    log.maybeLog(None, "Starting CSL estimate...")
+    t = time.time()
+    x_indices = xrange(x_test.shape[0])
+    h_indices = xrange(len(h_samples))
+    LL = 0
+    times = []
+    for x_i in x_indices:
+        _t = time.time()
+        x = x_test[x_i:x_i+1]
+        r = T.zeros_like(x, dtype='float32')
+        
+        for h_i in h_indices:
+            h = h_samples[h_i][0].eval()
+            r += model.pxh(x,h)
             
-def biased_CSL(model, x_test):
+        fs = r / len(h_samples)
+        LL += T.log(fs.mean(1))
+        times.append(time.time()-_t)
+        if x_i % 1 == 0:
+            log.maybeLog(None, make_time_units_string(numpy.average(times)*(x_test.shape[0]-x_i))+" remaining")
+        
+    log.maybeLog(None, "CSL took "+make_time_units_string(time.time()-t))
+    return (LL / len(x_test)).eval()
+
+
+def biased_CSL(x_test, model):
     '''
     Biased CSL
     "Bounding the Test Log-Likelihood of Generative Models"
     Yoshua Bengio, Li Yao, Kyunghyun Cho
     http://arxiv.org/pdf/1311.6184.pdf
     '''
-    pass
+    x_indices = xrange(x_test.shape[0])
+    LL = 0
+    for x_i in x_indices:
+        x = x_test[x_i:x_i+1]
+        r = T.zeros_like(x, dtype='float32')
+        
+        _, hs = model.sample(x_i, 300, 1)
+        h_indices = xrange(len(hs))
+        for h_i in h_indices:
+            h = hs[h_i][0].eval()
+            r += model.pxh(x,h)
+            
+        fs = r / len(hs)
+        LL += T.log(fs.mean(1))
+        
+    return (LL / len(x_test)).eval()
 
 
 def get_ll(x, parzen, batch_size=10):
