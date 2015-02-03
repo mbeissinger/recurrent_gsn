@@ -81,4 +81,6 @@ def create_rnngsn(args):
 if __name__ == '__main__':
     args = main()
     create_rnngsn(args)
+    args.dataset = 'mnist_2'
+    create_rnngsn(args)
     
