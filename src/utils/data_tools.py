@@ -231,7 +231,7 @@ def load_datasets(dataset, data_path):
     """
     dataset = dataset.lower()
     if dataset.startswith("mnist"):
-        if dataset is "mnist_binary":
+        if dataset == "mnist_binary":
             return load_mnist_binary(data_path)
         else:
             (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = load_mnist(data_path)
@@ -240,15 +240,15 @@ def load_datasets(dataset, data_path):
                 return sequence_mnist_not_shared(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset)
             except:
                 return (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y)
-    elif dataset is "tfd":
+    elif dataset == "tfd":
         return load_tfd(data_path)
-    elif dataset is "nottingham":
+    elif dataset == "nottingham":
         return load_nottingham(data_path)
-    elif dataset is "muse":
+    elif dataset == "muse":
         return load_muse(data_path)
-    elif dataset is "pianomidi":
+    elif dataset == "pianomidi":
         return load_piano_midi_de(data_path)
-    elif dataset is "jsb":
+    elif dataset == "jsb":
         return load_jsb(data_path)
     else:
         raise NotImplementedError("You requested to load dataset {0!s}, please choose MNIST*, TFD, nottingham, muse, pianomidi, jsb.".format(dataset))
@@ -453,6 +453,52 @@ def dataset3_indices(labels, classes=10):
             
     return sequence
 
+# extra bits of parity
+def dataset4_indices(labels, classes=10):
+    def even(n):
+        return n%2==0
+    def odd(n):
+        return not even(n)
+    sequence = []
+    pool = []
+    for _ in range(classes):
+        pool.append([])
+    #organize the indices into groups by label
+    for i in range(len(labels)):
+        pool[labels[i]].append(i)
+    #draw from each pool (also with the random number insertions) until one is empty
+    stop = False
+    #check if there is an empty class
+    for n in pool:
+        if len(n) == 0:
+            stop = True
+            print "stopped early from dataset4 sequencing - missing some class of labels"
+    s = [0,1,2]
+    sequence.append(pool[0].pop())
+    sequence.append(pool[1].pop())
+    sequence.append(pool[2].pop())
+    while not stop:
+        if odd(s[-3]):
+            first_bit = (s[-2] - s[-3])%classes
+        else:
+            first_bit = (s[-2] + s[-3])%classes
+        if odd(first_bit):
+            second_bit = (s[-1] - first_bit)%classes
+        else:
+            second_bit = (s[-1] + first_bit)%classes
+        if odd(second_bit):
+            next_num = second_bit = (s[-1] - second_bit)%classes
+        else:
+            next_num = second_bit = (s[-1] + second_bit + 1)%classes 
+            
+        if len(pool[next_num]) == 0: #stop the procedure if you are trying to pop from an empty list
+            stop = True
+        else:
+            s.append(next_num)
+            sequence.append(pool[next_num].pop())
+            
+    return sequence
+
 
 def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset=1, rng=None, one_hot=False):
     if rng is None:
@@ -488,6 +534,10 @@ def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, data
         train_ordered_indices = dataset3_indices(train_Y.get_value(borrow=True))
         valid_ordered_indices = dataset3_indices(valid_Y.get_value(borrow=True))
         test_ordered_indices = dataset3_indices(test_Y.get_value(borrow=True))
+    elif dataset == 4:
+        train_ordered_indices = dataset4_indices(train_Y.get_value(borrow=True))
+        valid_ordered_indices = dataset4_indices(valid_Y.get_value(borrow=True))
+        test_ordered_indices = dataset4_indices(test_Y.get_value(borrow=True))
     else:
         order_i = False
     
@@ -530,6 +580,10 @@ def sequence_mnist_not_shared(train_X, train_Y, valid_X, valid_Y, test_X, test_Y
         train_ordered_indices = dataset3_indices(train_Y)
         valid_ordered_indices = dataset3_indices(valid_Y)
         test_ordered_indices = dataset3_indices(test_Y)
+    elif dataset == 4:
+        train_ordered_indices = dataset4_indices(train_Y)
+        valid_ordered_indices = dataset4_indices(valid_Y)
+        test_ordered_indices = dataset4_indices(test_Y)
     else:
         order_i = False
     

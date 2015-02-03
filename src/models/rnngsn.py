@@ -88,7 +88,7 @@ class RNN_GSN():
         self.valid_Y = raise_to_list(valid_Y)
         self.test_X  = raise_to_list(test_X)
         self.test_Y  = raise_to_list(test_Y)
-        
+                
         # variables from the dataset that are used for initialization and image reconstruction
         if self.train_X is None:
             self.N_input = args.get("input_size")

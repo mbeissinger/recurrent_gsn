@@ -3,6 +3,7 @@ from models.rnngsn import RNN_GSN
 from utils import data_tools as data
 from utils import logger as log
 import theano
+from utils.utils import raise_to_list
 
 def main():
     parser = argparse.ArgumentParser()
@@ -42,7 +43,7 @@ def main():
     parser.add_argument('--regularize_weight', type=float, default=0)
     
     # data
-    parser.add_argument('--dataset', type=str, default='MNIST_2')
+    parser.add_argument('--dataset', type=str, default='MNIST_4')
     parser.add_argument('--data_path', type=str, default='../data/')
     parser.add_argument('--outdir_base', type=str, default='../outputs/rnn_gsn/')
    
@@ -57,11 +58,15 @@ def main():
     
 def create_rnngsn(args):
     (train,_), (valid,_), (test,_) = data.load_datasets(args.dataset, args.data_path)
-              
-    train_X = [theano.shared(t, borrow=True) for t in train]
-    valid_X = [theano.shared(v, borrow=True) for v in valid]
-    test_X  = [theano.shared(t, borrow=True) for t in test]
-    
+        
+    train_X = raise_to_list(train)
+    valid_X = raise_to_list(valid)
+    test_X = raise_to_list(test)
+    train_X = [theano.shared(t, borrow=True) for t in train_X]
+    valid_X = [theano.shared(v, borrow=True) for v in valid_X]
+    test_X  = [theano.shared(t, borrow=True) for t in test_X]
+        
+        
     args.is_image = True
     
     args.output_path = args.outdir_base + args.dataset
