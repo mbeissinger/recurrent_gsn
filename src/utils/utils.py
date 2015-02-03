@@ -183,7 +183,7 @@ def concatenate_list(_input):
     if _input is None:
         return None
     elif isinstance(_input, list):
-        return T.concatenate(_input, axis=1)
+        return T.concatenate(_input, axis=0)
     else:
         return _input
     

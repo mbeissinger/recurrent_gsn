@@ -102,12 +102,13 @@ def main():
     # Initialize the new GSN #
     ##########################
     gsn = GSN(train_X, valid_X, test_X, vars(args), logger)
+    gsn.train()
     
-    gsn.load_params('gsn_params_mnist.pkl')
-    
-    _, h_samples = gsn.sample(train_X[0:1].eval(), 100000, 100)
-    
-    print ll.CSL(h_samples, test_X.get_value(), gsn)
+#     gsn.load_params('gsn_params_mnist.pkl')
+#     
+#     _, h_samples = gsn.sample(train_X[0:1].eval(), 100000, 100)
+#     
+#     print ll.CSL(h_samples, test_X.get_value(), gsn)
         
 #     logger.log(str(ll.CSL(h_samples, test_X.get_value(), gsn)))
 

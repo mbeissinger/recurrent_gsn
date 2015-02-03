@@ -17,8 +17,8 @@ from midi.utils import midiread
 def apply_cost_function_to_dataset(function, dataset, batch_size=1):
     costs = []
     for i in xrange(len(dataset.get_value(borrow=True)) / batch_size):
-#         xs = dataset.get_value(borrow=True)[i * batch_size : (i+1) * batch_size]
-        xs = dataset[i * batch_size : (i+1) * batch_size]
+        xs = dataset.get_value(borrow=True)[i * batch_size : (i+1) * batch_size]
+#         xs = dataset[i * batch_size : (i+1) * batch_size].eval()
         cost = function(xs)
         costs.append([cost])
     return costs

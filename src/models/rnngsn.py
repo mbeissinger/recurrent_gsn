@@ -80,6 +80,12 @@ class RNN_GSN():
             self.outdir = self.outdir+'/'
             
         data.mkdir_p(self.outdir)
+        
+        # Configuration
+        config_filename = self.outdir+'config'
+        logger.log('Saving config')
+        with open(config_filename, 'w') as f:
+            f.write(str(args))
  
         # Input data - make sure it is a list of shared datasets if it isn't. THIS WILL KEEP 'NONE' AS 'NONE' no need to worry :)
         self.train_X = raise_to_list(train_X)
@@ -95,7 +101,7 @@ class RNN_GSN():
             if args.get("input_size") is None:
                 raise AssertionError("Please either specify input_size in the arguments or provide an example train_X for input dimensionality.")
         else:
-            self.N_input = self.train_X[0].eval().shape[1]
+            self.N_input = self.train_X[0].get_value(borrow=True).shape[1]
         
         self.is_image = args.get('is_image', defaults['is_image'])
         if self.is_image:
@@ -467,14 +473,14 @@ class RNN_GSN():
             best_params = None
             patience = 0
                         
-            log.maybeLog(self.logger, ['train X size:',str(T.concatenate(train_X).shape.eval())])
+            log.maybeLog(self.logger, ['train X size:',str(train_X[0].get_value(borrow=True).shape)])
             if valid_X is not None:
-                log.maybeLog(self.logger, ['valid X size:',str(T.concatenate(valid_X).shape.eval())])
+                log.maybeLog(self.logger, ['valid X size:',str(valid_X[0].get_value(borrow=True).shape)])
             if test_X is not None:
-                log.maybeLog(self.logger, ['test X size:',str(T.concatenate(test_X).shape.eval())])
+                log.maybeLog(self.logger, ['test X size:',str(test_X[0].get_value(borrow=True).shape)])
             
             if self.vis_init:
-                self.bias_list[0].set_value(logit(numpy.clip(0.9,0.001,train_X.get_value().mean(axis=0))))
+                self.bias_list[0].set_value(logit(numpy.clip(0.9,0.001,train_X[0].get_value(borrow=True).mean(axis=0))))
                 
             start_time = time.time()
         
@@ -568,11 +574,11 @@ class RNN_GSN():
     
             
             # 10k samples
-#             print 'Generating 10,000 samples'
+#             log.maybeLog(self.logger, 'Generating 10,000 samples')
 #             samples, _  =   sample_some_numbers(N=10000)
 #             f_samples   =   self.outdir+'samples.npy'
 #             numpy.save(f_samples, samples)
-#             print 'saved digits'
+#             log.maybeLog(self.logger, 'saved digits')
     
     
     
@@ -653,9 +659,9 @@ class RNN_GSN():
         
     def plot_samples(self, epoch_number="", leading_text="", n_samples=400):
         to_sample = time.time()
-        initial = self.test_X.get_value()[:1]
-        rand_idx = numpy.random.choice(range(self.test_X.eval().shape[0]))
-        rand_init = self.test_X.get_value()[rand_idx:rand_idx+1]
+        initial = self.test_X.get_value(borrow=True)[:1]
+        rand_idx = numpy.random.choice(range(self.test_X.get_value(borrow=True).shape[0]))
+        rand_init = self.test_X.get_value(borrow=True)[rand_idx:rand_idx+1]
         
         V, _ = self.sample(initial, n_samples)
         rand_V, _ = self.sample(rand_init, n_samples)
