@@ -43,7 +43,7 @@ def main():
     parser.add_argument('--regularize_weight', type=float, default=0)
     
     # data
-    parser.add_argument('--dataset', type=str, default='pianomidi')
+    parser.add_argument('--dataset', type=str, default='nottingham')
     parser.add_argument('--data_path', type=str, default='../data/')
     parser.add_argument('--outdir_base', type=str, default='../outputs/rnn_gsn/')
    
@@ -74,7 +74,7 @@ def create_rnngsn(args):
     logger = log.Logger(args.output_path)
     
     rnngsn = RNN_GSN(train_X=train_X, valid_X=valid_X, test_X=test_X, args=vars(args), logger=logger)
-    rnngsn.load_params('pianomidi_params.pkl')
+    rnngsn.load_params('nottingham_params.pkl')
     rnngsn.gen_10k_samples()
     
     sample_paths = ['samples_test'+str(i)+'.npy' for i in range(len(test_X))]
@@ -82,7 +82,7 @@ def create_rnngsn(args):
     # parzen
     print 'Evaluating parzen window'
     import utils.likelihood_estimation as ll
-    ll.main(0.20,'pianomidi','../data/',sample_paths) 
+    ll.main(0.20,'nottingham','../data/',sample_paths) 
     
     
 if __name__ == '__main__':
