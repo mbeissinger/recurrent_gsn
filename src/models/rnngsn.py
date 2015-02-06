@@ -572,13 +572,7 @@ class RNN_GSN():
                 
             log.maybeLog(self.logger, "\n------------TOTAL RNN-GSN TRAIN TIME TOOK {0!s}---------".format(make_time_units_string(time.time()-start_time)))
     
-            
-            # 10k samples
-#             log.maybeLog(self.logger, 'Generating 10,000 samples')
-#             samples, _  =   sample_some_numbers(N=10000)
-#             f_samples   =   self.outdir+'samples.npy'
-#             numpy.save(f_samples, samples)
-#             log.maybeLog(self.logger, 'saved digits')
+
     
     
     
@@ -586,13 +580,13 @@ class RNN_GSN():
     
     
     
-    
-    
-    
-    
-    
-    
-    
+    def gen_10k_samples(self):
+        for i,x in enumerate(self.test_X):
+            log.maybeLog(self.logger, 'Generating 10,000 samples {0!s}/{1!s}'.format(i,len(self.test_X)))
+            samples, _ = self.sample(x.get_value()[0:1], 1000, 1)
+            f_samples = 'samples_test{0!s}.npy'.format(i)
+            numpy.save(f_samples, samples)
+            log.maybeLog(self.logger, 'saved digits')
     
     def sample(self, initial, n_samples=400, k=1):
         log.maybeLog(self.logger, "Starting sampling...")

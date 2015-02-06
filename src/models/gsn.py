@@ -514,7 +514,13 @@ class GSN:
         
     
     
-    
+    def gen_10k_samples(self):
+        log.maybeLog(self.logger, 'Generating 10,000 samples')
+        samples, _ = self.sample(self.test_X[0].get_value()[1:2], 10000, 1)
+        f_samples = 'samples.npy'
+        numpy.save(f_samples, samples)
+        log.maybeLog(self.logger, 'saved digits')
+        
     def sample(self, initial, n_samples=400, k=1):
         log.maybeLog(self.logger, "Starting sampling...")
         def sample_some_numbers_single_layer(n_samples):

@@ -28,13 +28,13 @@ def main():
     
     # noise
     parser.add_argument('--hidden_add_noise_sigma', type=float, default=2) #default=2
-    parser.add_argument('--input_salt_and_pepper', type=float, default=0.7) #default=0.4
+    parser.add_argument('--input_salt_and_pepper', type=float, default=0.4) #default=0.4
     
     # hyper parameters
     parser.add_argument('--learning_rate', type=float, default=0.25)
     parser.add_argument('--momentum', type=float, default=0.5)
     parser.add_argument('--annealing', type=float, default=0.995)
-    parser.add_argument('--noise_annealing', type=float, default=.987)
+    parser.add_argument('--noise_annealing', type=float, default=1)
     
     # data
     parser.add_argument('--dataset', type=str, default='MNIST')
@@ -102,9 +102,15 @@ def main():
     # Initialize the new GSN #
     ##########################
     gsn = GSN(train_X, valid_X, test_X, vars(args), logger)
-    gsn.train()
+#     gsn.train()
     
-#     gsn.load_params('gsn_params_mnist.pkl')
+    gsn.load_params('gsn_params_mnist.pkl')
+    gsn.gen_10k_samples()
+    # parzen
+    print 'Evaluating parzen window'
+    import utils.likelihood_estimation as ll
+    ll.main(0.20,'mnist','../data/','samples.npy') 
+    
 #     
 #     _, h_samples = gsn.sample(train_X[0:1].eval(), 100000, 100)
 #     

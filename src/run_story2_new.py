@@ -33,17 +33,17 @@ def main():
     
     # noise
     parser.add_argument('--hidden_add_noise_sigma', type=float, default=2)
-    parser.add_argument('--input_salt_and_pepper', type=float, default=0.7) #default=0.4
+    parser.add_argument('--input_salt_and_pepper', type=float, default=0.4) #default=0.4
     
     # hyper parameters
     parser.add_argument('--learning_rate', type=float, default=0.25)
     parser.add_argument('--momentum', type=float, default=0.5)
     parser.add_argument('--annealing', type=float, default=0.995)
-    parser.add_argument('--noise_annealing', type=float, default=.98) #default=1 for no noise schedule
+    parser.add_argument('--noise_annealing', type=float, default=1) #default=1 for no noise schedule
     parser.add_argument('--regularize_weight', type=float, default=0)
     
     # data
-    parser.add_argument('--dataset', type=str, default='mnist_4')
+    parser.add_argument('--dataset', type=str, default='pianomidi')
     parser.add_argument('--data_path', type=str, default='../data/')
     parser.add_argument('--outdir_base', type=str, default='../outputs/rnn_gsn/')
    
@@ -74,13 +74,17 @@ def create_rnngsn(args):
     logger = log.Logger(args.output_path)
     
     rnngsn = RNN_GSN(train_X=train_X, valid_X=valid_X, test_X=test_X, args=vars(args), logger=logger)
+    rnngsn.load_params('pianomidi_params.pkl')
+    rnngsn.gen_10k_samples()
     
-    rnngsn.train()
+    sample_paths = ['samples_test'+str(i)+'.npy' for i in range(len(test_X))]
+        
+    # parzen
+    print 'Evaluating parzen window'
+    import utils.likelihood_estimation as ll
+    ll.main(0.20,'pianomidi','../data/',sample_paths) 
     
     
 if __name__ == '__main__':
     args = main()
     create_rnngsn(args)
-    args.dataset = 'mnist_2'
-    create_rnngsn(args)
-    

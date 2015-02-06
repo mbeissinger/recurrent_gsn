@@ -8,7 +8,7 @@ import time
 import theano
 from theano import tensor as T
 from data_tools import load_datasets
-from utils import make_time_units_string
+from utils import make_time_units_string, raise_to_list
 import logger as log
 
 def local_contrast_normalization(patches):
@@ -129,22 +129,25 @@ def get_ll(x, parzen, batch_size=10):
     return lls
 
 
-def main(sigma, dataset, data_path='../data/', sample_path='samples.npy'):
+def main(sigma, dataset, data_path='../data/', sample_paths=['samples.npy']):
+    lls = []
+    for sample_path in sample_paths:
+        # provide a .npy file where 10k generated samples are saved. 
+        filename = sample_path
+        
+        log.maybeLog(None, 'loading samples from %s'%filename)
+        
+        samples = numpy.load(filename)
+        
+        parzen = theano_parzen(samples, sigma)
+        
+        (_, _), (_, _), (test_X, _) = load_datasets(dataset,data_path)
+        test_X = raise_to_list(test_X)
+        test_ll = get_ll(test_X[0], parzen)
+        lls.extend(test_ll)
     
-    # provide a .npy file where 10k generated samples are saved. 
-    filename = sample_path
-    
-    log.maybeLog(None, 'loading samples from %s'%filename)
-    
-    samples = numpy.load(filename)
-    
-    parzen = theano_parzen(samples, sigma)
-    
-    (_, _), (_, _), (test_X, _) = load_datasets('.')
-    test_ll = get_ll(test_X, parzen)
-    
-    log.maybeLog(None, "Mean Log-Likelihood of test set = %.5f" % numpy.mean(test_ll))
-    log.maybeLog(None, "Std of Mean Log-Likelihood of test set = %.5f" % (numpy.std(test_ll) / 100))
+        log.maybeLog(None, "Mean Log-Likelihood of test set = %.5f" % numpy.mean(lls))
+        log.maybeLog(None, "Std of Mean Log-Likelihood of test set = %.5f" % (numpy.std(lls) / 100))
 
 
 if __name__ == "__main__":
