@@ -2,7 +2,6 @@ import argparse, numpy, os, cPickle
 from models.gsn import GSN
 from utils import data_tools as data
 import utils.logger as log
-from utils.logger import Logger
 from utils.utils import load_from_config
 
 ###############################################

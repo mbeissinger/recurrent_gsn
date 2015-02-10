@@ -583,7 +583,7 @@ class RNN_GSN():
     def gen_10k_samples(self):
         for i,x in enumerate(self.test_X):
             log.maybeLog(self.logger, 'Generating 10,000 samples {0!s}/{1!s}'.format(i,len(self.test_X)))
-            samples, _ = self.sample(x.get_value()[0:1], 1000, 1)
+            samples, _ = self.sample(x.get_value()[1:2], 1000, 1)
             f_samples = 'samples_test{0!s}.npy'.format(i)
             numpy.save(f_samples, samples)
             log.maybeLog(self.logger, 'saved digits')

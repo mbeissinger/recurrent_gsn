@@ -244,7 +244,7 @@ class GSN:
         m_gradient      =   [self.momentum * gb + (cast32(1) - self.momentum) * g for (gb, g) in zip(gradient_buffer, gradient)]
         param_updates   =   [(param, param - self.learning_rate * mg) for (param, mg) in zip(self.params, m_gradient)]
         gradient_buffer_updates = zip(gradient_buffer, m_gradient)
-        self.updates         =   OrderedDict(param_updates + gradient_buffer_updates)
+        self.updates    =   OrderedDict(param_updates + gradient_buffer_updates)
         
         ############
         # Sampling #
