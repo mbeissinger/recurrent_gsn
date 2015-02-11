@@ -1,5 +1,3 @@
-# Author: Nicolas Boulanger-Lewandowski
-# University of Montreal, 2012-2013
 '''
 LICENSE
 =======
@@ -38,6 +36,8 @@ import theano.tensor as T
 import cPickle
 import os
 
+from optimizer import Optimizer
+
 
 
 def gauss_newton_product(cost, p, v, s):  # this computes the product Gv = J'HJv (G is the Gauss-Newton matrix)
@@ -48,7 +48,7 @@ def gauss_newton_product(cost, p, v, s):  # this computes the product Gv = J'HJv
   return Gv
 
 
-class hf_optimizer:
+class HessianFree(Optimizer):
   '''Black-box Theano-based Hessian-free optimizer.
 See (Martens, ICML 2010) and (Martens & Sutskever, ICML 2011) for details.
 
