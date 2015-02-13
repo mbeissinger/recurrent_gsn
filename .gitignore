@@ -1,5 +1,6 @@
 outputs
-data*/
+datasets
+*/logs
 *.npy
 
 #################
