@@ -1,0 +1,18 @@
+2015-02-11 15:27:19,591 - __main__ - INFO - this is info.
+2015-02-11 15:27:19,591 - __main__ - ERROR - this is error.
+2015-02-11 15:27:19,591 - __main__ - CRITICAL - this is critical.
+2015-02-11 15:27:19,591 - __main__ - ERROR - hello from exception.
+None
+2015-02-11 15:27:19,591 - __main__ - WARNING - this is a warning.
+2015-02-11 15:27:43,595 - __main__ - INFO - this is info.
+2015-02-11 15:27:43,595 - __main__ - ERROR - this is error.
+2015-02-11 15:27:43,595 - __main__ - CRITICAL - this is critical.
+2015-02-11 15:27:43,595 - __main__ - ERROR - hello from exception.
+None
+2015-02-11 15:27:43,596 - __main__ - WARNING - this is a warning.
+2015-02-11 15:28:00,427 - __main__ - INFO - this is info.
+2015-02-11 15:28:00,427 - __main__ - ERROR - this is error.
+2015-02-11 15:28:00,427 - __main__ - CRITICAL - this is critical.
+2015-02-11 15:28:00,427 - __main__ - ERROR - hello from exception.
+None
+2015-02-11 15:28:00,427 - __main__ - WARNING - this is a warning.
