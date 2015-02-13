@@ -1,6 +1,6 @@
 outputs
 datasets
-*/logs
+opendeep/log/logs
 *.npy
 
 #################
