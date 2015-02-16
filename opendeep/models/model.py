@@ -29,21 +29,24 @@ class Model(object):
         '''
         pass
 
+
     def get_learn_function(self):
         log.critical("The Model %s does not have a learn function!", str(type(self)))
         raise NotImplementedError()
+
 
     def get_output_function(self):
         log.critical("The Model %s does not have an output function!", str(type(self)))
         raise NotImplementedError()
 
-    def train(self, dataset, optimizer=SGD()):
-        log.critical("The Model %s does not have a train method!", str(type(self)))
+
+    def get_output(self, dataset):
+        log.critical("The Model %s does not have an output method! (The value from the output function)", str(type(self)))
         raise NotImplementedError()
 
 
-    def predict(self, dataset):
-        log.critical("The Model %s does not have a predict method!", str(type(self)))
+    def train(self, dataset, optimizer=SGD()):
+        log.critical("The Model %s does not have a train method!", str(type(self)))
         raise NotImplementedError()
 
 

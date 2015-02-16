@@ -17,6 +17,8 @@ logit       = lambda p : numpy.log(p / (1 - p) )
 binarize    = lambda x : cast32(x >= 0.5)
 sigmoid     = lambda x : cast32(1. / (1 + numpy.exp(-x)))
 
+def make_shared_variables(variable_list, borrow=True):
+    return (theano.shared(variable, borrow=borrow) for variable in variable_list)
 
 def get_shared_weights(n_in, n_out, interval=None, name="W"):
     if interval is None:

@@ -1,0 +1,49 @@
+'''
+A sequential dataset iterator
+'''
+__authors__ = "Markus Beissinger"
+__copyright__ = "Copyright 2015, Vitruvian Science"
+__credits__ = ["Markus Beissinger"]
+__license__ = "Apache"
+__maintainer__ = "OpenDeep"
+__email__ = "dev@opendeep.com"
+
+# standard libraries
+import logging
+# internal references
+from opendeep.data.iterators.iterator import Iterator
+import opendeep.data.dataset as datasets
+
+log = logging.getLogger(__name__)
+
+class SequentialIterator(Iterator):
+    '''
+    An iterator that goes through a dataset in its stored sequence
+    '''
+    def __init__(self, dataset, subset=datasets.TRAIN, batch_size=1, minimum_batch_size=1):
+        log.debug('Initializing a % sequential iterator over %', str(type(dataset)), datasets.get_subset_strings(subset))
+        super(self.__class__, self).__init__(dataset, subset, batch_size, minimum_batch_size)
+
+    def next(self):
+        '''
+        Gets the next examples(s) based on the batch size
+        :return: tuple
+        Batch of data values and labels from the dataset
+
+        :raises: StopIteration
+        When there are no more batches that meet the minimum requirement to return
+        '''
+        if self.iteration_index < self.iterations:
+            # convert the iteration index into the start and end indices for the batch in the dataset
+            _start_index = self.iteration_index*self.batch_size
+            _end_index   = (self.iteration_index+1)*self.batch_size
+            # increment the iteration index
+            self.iteration_index += 1
+            # grab the data and labels to return
+            data = self.dataset.getDataByIndices(indices=list(range(_start_index, _end_index)),
+                                                 subset=self.subset)
+            labels = self.dataset.getLabelsByIndices(indices=list(range(_start_index, _end_index)),
+                                                     subset=self.subset)
+            return (data, labels)
+        else:
+            raise StopIteration()

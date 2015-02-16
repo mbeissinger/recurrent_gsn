@@ -10,14 +10,53 @@ __email__ = "dev@opendeep.com"
 
 # standard libraries
 import logging
+# third party libraries
+import numpy
+# internal references
+import opendeep.data.dataset as datasets
 
 log = logging.getLogger(__name__)
+
+# variables for the dataset iteration modes
+SEQUENTIAL = 0
+RANDOM     = 1
 
 class Iterator(object):
     '''
     Default interface for a Dataset iterator
     '''
-    def __init__(self):
-        pass
+    def __init__(self, dataset=None, subset=None, batch_size=1, minimum_batch_size=1, rng=None):
+        # make sure the subset is recognized
+        if subset not in [datasets.TRAIN, datasets.VALID, datasets.TEST]:
+            log.error('Dataset subset %s not recognized, try TRAIN, VALID, or TEST', datasets.get_subset_strings(subset))
+        self.dataset = dataset
+        self.subset = subset
+        self.batch_size = batch_size
+        self.minimum_batch_size = minimum_batch_size
+        self.rng = rng
+
+        # determine the number of possible iterations given the batch size, minimum batch size, dataset, and subset
+        data_len = self.dataset.getDataShape(self.subset)[0]
+        batches = data_len/self.batch_size
+        remainder = numpy.remainder(data_len, self.batch_size)
+        if remainder >= self.minimum_batch_size:
+            batches += 1
+        self.iterations = batches
+        self.iteration_index = 0
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        '''
+        Gets the next examples(s) based on the batch size
+        :return: tuple
+        Batch of data values and labels from the dataset
+
+        :raises: StopIteration
+        When there are no more batches that meet the minimum requirement to return
+        '''
+        log.critical('Iterator %s doesn\'t have a next() method')
+        raise NotImplementedError()
 
 

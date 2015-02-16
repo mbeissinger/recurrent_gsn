@@ -1,29 +1,5 @@
 '''
-Generic structure for a dataset
-Iterator based on code from pylearn2 (https://github.com/lisa-lab/pylearn2/blob/master/pylearn2/datasets/dataset.py)
-Pylearn2's license is as follows:
-Copyright (c) 2011--2014, Universite de Montreal
-All rights reserved.
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-1. Redistributions of source code must retain the above copyright notice, this
-list of conditions and the following disclaimer.
-2. Redistributions in binary form must reproduce the above copyright notice,
-this list of conditions and the following disclaimer in the documentation
-and/or other materials provided with the distribution.
-3. Neither the name of the copyright holder nor the names of its contributors
-may be used to endorse or promote products derived from this software without
-specific prior written permission.
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+Generic structure for a dataset.
 '''
 __authors__ = "Markus Beissinger"
 __copyright__ = "Copyright 2015, Vitruvian Science"
@@ -42,14 +18,25 @@ import opendeep.utils.file_ops as files
 
 log = logging.getLogger(__name__)
 
-# variables for the dataset modes
-SEQUENTIAL = 0
-RANDOM     = 1
+# variables for each subset of the dataset
+TRAIN = 0
+VALID = 1
+TEST  = 2
+
+def get_subset_strings(subset):
+    if subset is TRAIN:
+        return 'TRAIN'
+    elif subset is VALID:
+        return 'VALID'
+    elif subset is TEST:
+        return 'TEST'
+    else:
+        return str(subset)
 
 
 class Dataset(object):
     '''
-    Default interface for a dataset object
+    Default interface for a dataset object - a bunch of sources for an iterator to grab data from
     '''
     def __init__(self, filename=None, source=None, dataset_dir='../../datasets'):
         '''
@@ -70,6 +57,9 @@ class Dataset(object):
 
 
     def install(self):
+        '''
+        Method to both download and extract the dataset from the internet (if there) or verify connection settings
+        '''
         log.debug('Installing dataset %s', str(type(self)))
         # construct the actual path to the dataset
         prevdir = os.getcwd()
@@ -137,6 +127,9 @@ class Dataset(object):
 
 
     def uninstall(self):
+        '''
+        Method to delete dataset files from disk (if in file form)
+        '''
         # TODO: Check if this shutil.rmtree is unsafe...
         log.debug('Uninstalling (removing) dataset %s for class %s...', self.dataset_location, str(type(self)))
         if self.dataset_location is not None and os.path.exists(self.dataset_location):
@@ -151,26 +144,47 @@ class Dataset(object):
         log.debug('Uninstallation (removal) successful for %s!', str(type(self)))
 
 
-    def __iter__(self):
-        return self.iterator()
-
-
-    def iterator(self, mode=None, batch_size=None, minimum_batch_size=None, rng=None):
+    def getDataByIndices(self, indices, subset):
         '''
-        :param mode: integer
-        The type of iteration through the dataset. Can be SEQUENTIAL or RANDOM
-        :param batch_size: integer
-        The target batch size while iterating through the dataset
-        :param minimum_batch_size: integer
-        The minimum batch size allowed while iterating through the dataset (reached at the end)
-        :param rng: random number generator object
-        A random generator object with an interface such as numpy's random or theano's rng_mrg
-
-        :return iterator: dataset.Iterator object
-        An iterator object implementing the standard Python
-        iterator protocol (i.e. it has an `__iter__` method that
-        return the object itself, and a `next()` method that
-        returns results until it raises `StopIteration`).
+        This method is used by an iterator to return data values at given indices.
+        :param indices: either integer or list of integers
+        The index (or indices) of values to return
+        :param subset: integer
+        The integer representing the subset of the data to consider dataset.(TRAIN, VALID, or TEST)
+        :return: array
+        The dataset values at the index (indices)
         '''
-        log.critical("Iterator not implemented for dataset %s", str(type(self)))
+        log.critical('No getDataByIndices method implemented for %s!', str(type(self)))
         raise NotImplementedError()
+
+
+    def getLabelsByIndices(self, indices, subset):
+        '''
+        This method is used by an iterator to return data label values at given indices.
+        :param indices: either integer or list of integers
+        The index (or indices) of values to return
+        :param subset: integer
+        The integer representing the subset of the data to consider dataset.(TRAIN, VALID, or TEST)
+        :return: array
+        The dataset labels at the index (indices)
+        '''
+        log.critical('No getLabelsByIndices method implemented for %s!', str(type(self)))
+        raise NotImplementedError()
+
+
+    def getDataShape(self, subset):
+        '''
+        :return: tuple
+        Return the shape of this dataset's subset in a NxD tuple where N=#examples and D=dimensionality
+        '''
+        if subset not in [TRAIN, VALID, TEST]:
+            log.error('Subset %s not recognized!', get_subset_strings(subset))
+        if subset is TRAIN and hasattr(self, '_train_shape'):
+            return self._train_shape
+        elif subset is VALID and hasattr(self, '_valid_shape'):
+            return self._valid_shape
+        elif subset is TEST and hasattr(self, '_test_shape'):
+            return self._test_shape
+        else:
+            log.critical('No getDataShape method implemented for %s for subset %s!', str(type(self)), get_subset_strings(subset))
+            raise NotImplementedError()
