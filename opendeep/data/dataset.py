@@ -207,3 +207,27 @@ class Dataset(object):
         else:
             log.critical('No getDataShape method implemented for %s for subset %s!', str(type(self)), get_subset_strings(subset))
             raise NotImplementedError()
+
+
+    def scaleMeanZeroVarianceOne(self):
+        '''
+        Scale the dataset input vectors X to have a mean of 0 and variance of 1
+        :return: boolean
+        Whether successful
+        '''
+        log.critical('No scaleMeanZeroVarianceOne method implemented for %s', str(type(self)))
+        raise NotImplementedError()
+
+
+    def scaleMinMax(self, min, max):
+        '''
+        Scale the dataset input vectors X to have a minimum and maximum
+        :param min: integer
+        Minimum value in input vector X
+        :param max: integer
+        Maximum value in input vector X
+        :return: boolean
+        Whether successful
+        '''
+        log.critical('No scaleMinMax method implemented for %s', str(type(self)))
+        raise NotImplementedError()

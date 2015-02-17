@@ -1,5 +1,5 @@
 '''
-Generic stochastic gradient descent optimization
+Generic stochastic gradient descent optimization with momentum and annealing
 '''
 __authors__ = "Markus Beissinger"
 __copyright__ = "Copyright 2015, Vitruvian Science"
@@ -42,9 +42,9 @@ defaults = {"cost_function": 'binary_crossentropy',
 
 class SGD(Optimizer):
     '''
-    Stochastic gradient descent for training a model - includes early stopping
+    Stochastic gradient descent for training a model - includes early stopping, momentum, and annealing
     '''
-    #TODO: add conjugate gradient?
+    #TODO: add conjugate gradients?
 
     def __init__(self, model, dataset, config=dict(), rng=None):
         # grab parameters from the config if it exists, otherwise use the defaults

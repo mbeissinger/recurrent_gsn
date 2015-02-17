@@ -1,5 +1,19 @@
 '''
 Basic interface for an optimizer
+
+Some information from Andrej Karpath:
+'In my own experience, Adagrad/Adadelta are "safer" because they don't depend so strongly on setting of learning rates
+(with Adadelta being slightly better), but well-tuned SGD+Momentum almost always converges faster and at better final
+values.' http://cs.stanford.edu/people/karpathy/convnetjs/demo/trainers.html
+
+Also see:
+'Practical recommendations for gradient-based training of deep architectures'
+Yoshua Bengio
+http://arxiv.org/abs/1206.5533
+
+'No More Pesky Learning Rates'
+Tom Schaul, Sixin Zhang, Yann LeCun
+http://arxiv.org/abs/1206.1106
 '''
 __authors__ = "Markus Beissinger"
 __copyright__ = "Copyright 2015, Vitruvian Science"
