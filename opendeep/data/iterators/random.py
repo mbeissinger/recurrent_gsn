@@ -11,6 +11,7 @@ __email__ = "dev@opendeep.com"
 # standard libraries
 import logging
 # third party libraries
+import numpy
 import numpy.random as random
 # internal references
 from opendeep.data.iterators.iterator import Iterator
@@ -30,8 +31,12 @@ class RandomIterator(Iterator):
         else:
             self.rng = rng
 
-        log.debug('Initializing a % random iterator over %', str(type(dataset)), datasets.get_subset_strings(subset))
-        super(self.__class__, self).__init__(dataset, subset, batch_size, minimum_batch_size, rng)
+        log.debug('Initializing a %s random iterator over %s', str(type(dataset)), datasets.get_subset_strings(subset))
+        super(self.__class__, self).__init__(dataset, subset, batch_size, minimum_batch_size)
+
+        # randomize the indices to access
+        self.indices = numpy.arange(self.data_len)
+        self.rng.shuffle(self.indices)
 
     def next(self):
         '''
@@ -41,18 +46,22 @@ class RandomIterator(Iterator):
 
         :raises: StopIteration
         When there are no more batches that meet the minimum requirement to return
+
+        The intention of the protocol is that once an iterator's next() method raises StopIteration, it will continue
+        to do so on subsequent calls. Implementations that do not obey this property are deemed broken.
         '''
         if self.iteration_index < self.iterations:
             # convert the iteration index into the start and end indices for the batch in the dataset
             _start_index = self.iteration_index*self.batch_size
             _end_index   = (self.iteration_index+1)*self.batch_size
+            indices_this_step = self.indices[_start_index:_end_index]
             # increment the iteration index
             self.iteration_index += 1
             # grab the labels and data to return
-            data = self.dataset.getDataByIndices(indices=list(range(_start_index, _end_index)),
+            data = self.dataset.getDataByIndices(indices=indices_this_step,
                                                  subset=self.subset)
-            labels = self.dataset.getLabelsByIndices(indices=list(range(_start_index, _end_index)),
+            labels = self.dataset.getLabelsByIndices(indices=indices_this_step,
                                                      subset=self.subset)
-            return (data, labels)
+            return data, labels
         else:
             raise StopIteration()

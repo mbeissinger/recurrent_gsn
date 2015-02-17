@@ -25,7 +25,7 @@ class Iterator(object):
     '''
     Default interface for a Dataset iterator
     '''
-    def __init__(self, dataset=None, subset=None, batch_size=1, minimum_batch_size=1, rng=None):
+    def __init__(self, dataset=None, subset=None, batch_size=1, minimum_batch_size=1):
         # make sure the subset is recognized
         if subset not in [datasets.TRAIN, datasets.VALID, datasets.TEST]:
             log.error('Dataset subset %s not recognized, try TRAIN, VALID, or TEST', datasets.get_subset_strings(subset))
@@ -33,12 +33,11 @@ class Iterator(object):
         self.subset = subset
         self.batch_size = batch_size
         self.minimum_batch_size = minimum_batch_size
-        self.rng = rng
 
         # determine the number of possible iterations given the batch size, minimum batch size, dataset, and subset
-        data_len = self.dataset.getDataShape(self.subset)[0]
-        batches = data_len/self.batch_size
-        remainder = numpy.remainder(data_len, self.batch_size)
+        self.data_len = self.dataset.getDataShape(self.subset)[0]
+        batches = self.data_len/self.batch_size
+        remainder = numpy.remainder(self.data_len, self.batch_size)
         if remainder >= self.minimum_batch_size:
             batches += 1
         self.iterations = batches
@@ -55,8 +54,11 @@ class Iterator(object):
 
         :raises: StopIteration
         When there are no more batches that meet the minimum requirement to return
+
+        The intention of the protocol is that once an iterator's next() method raises StopIteration, it will continue
+        to do so on subsequent calls. Implementations that do not obey this property are deemed broken.
         '''
-        log.critical('Iterator %s doesn\'t have a next() method')
+        log.critical('Iterator %s doesn\'t have a next() method', str(type(self)))
         raise NotImplementedError()
 
 

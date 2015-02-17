@@ -15,6 +15,9 @@ import logging
 from opendeep.data.image.mnist import MNIST
 import opendeep.data.dataset as dataset
 import opendeep.log.logger as logger
+from opendeep.data.iterators.sequential import SequentialIterator
+from opendeep.data.iterators.random import RandomIterator
+
 
 class TestMNIST(unittest.TestCase):
 
@@ -25,11 +28,33 @@ class TestMNIST(unittest.TestCase):
         self.log = logging.getLogger(__name__)
         # get the mnist dataset
         self.mnist = MNIST()
+        # instantiate the sequential iterator
+        self.sequentialIterator = SequentialIterator(self.mnist, dataset.TRAIN, 255, 255)
+        # instantiate the random iterator
+        self.randomIterator = RandomIterator(self.mnist, dataset.TRAIN, 255, 255)
 
     def testSizes(self):
         assert self.mnist.getDataShape(dataset.TRAIN) == (60000, 784)
         assert self.mnist.getDataShape(dataset.VALID) == (10000, 784)
         assert self.mnist.getDataShape(dataset.TEST) == (10000, 784)
+
+    def testSequentialIterator(self):
+        self.log.debug('TESTING SEQUENTIAL ITERATOR')
+        i = 0
+        for _, y in self.sequentialIterator:
+            if i < 2:
+                self.log.debug(y.eval())
+            i+=1
+        assert i==235
+
+    def testRandomIterator(self):
+        self.log.debug('TESTING RANDOM ITERATOR')
+        i = 0
+        for x, y in self.randomIterator:
+            if i < 2:
+                self.log.debug(y.eval())
+            i+=1
+        assert i==235
 
     def tearDown(self):
         pass
