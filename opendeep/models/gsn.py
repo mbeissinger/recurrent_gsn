@@ -165,6 +165,16 @@ class GSN:
         else:
             log.maybeLog(self.logger, '\nUsing default cost function for training\n')
             self.cost_function = defaults['cost_function']
+        # # Cost function - what to use when comparing network outputs to the targets
+        # if config.get('cost_function') is not None:
+        #     log.debug('Using specified cost function for SGD')
+        #     self.cost_function = config.get('cost_function')
+        # elif config.get('cost_funct') is not None:
+        #     self.cost_function = get_cost_function(config.get('cost_funct'))
+        #     log.debug('Using %s for SGD cost function', config.get('cost_funct'))
+        # else:
+        #     log.debug('Using default cost function for SGD')
+        #     self.cost_function = get_cost_function(defaults['cost_function'])
         
         ############################
         # Theano variables and RNG #

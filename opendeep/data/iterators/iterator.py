@@ -25,7 +25,7 @@ class Iterator(object):
     '''
     Default interface for a Dataset iterator
     '''
-    def __init__(self, dataset=None, subset=None, batch_size=1, minimum_batch_size=1):
+    def __init__(self, dataset=None, subset=None, batch_size=1, minimum_batch_size=1, rng=None):
         # make sure the subset is recognized
         if subset not in [datasets.TRAIN, datasets.VALID, datasets.TEST]:
             log.error('Dataset subset %s not recognized, try TRAIN, VALID, or TEST', datasets.get_subset_strings(subset))

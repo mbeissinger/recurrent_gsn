@@ -172,6 +172,25 @@ class Dataset(object):
         raise NotImplementedError()
 
 
+    def hasSubset(self, subset):
+        '''
+        :param subset: integer
+        The integer representing the subset of the data to consider dataset.(TRAIN, VALID, or TEST)
+        :return: boolean
+        Whether or not this dataset has the given subset split
+        '''
+        if subset not in [TRAIN, VALID, TEST]:
+            log.error('Subset %s not recognized!', get_subset_strings(subset))
+        if subset is TRAIN:
+            return True
+        elif subset is VALID and hasattr(self, '_valid_shape'):
+            return True
+        elif subset is TEST and hasattr(self, '_test_shape'):
+            return True
+        else:
+            return False
+
+
     def getDataShape(self, subset):
         '''
         :return: tuple

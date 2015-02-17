@@ -10,6 +10,12 @@ __email__ = "dev@opendeep.com"
 
 # standard libraries
 import logging
+import time
+# third party libraries
+import theano
+import theano.tensor as T
+# internal references
+from opendeep.utils.utils import make_time_units_string
 
 log = logging.getLogger(__name__)
 
@@ -25,22 +31,48 @@ class Model(object):
         '''
         :param config: a dictionary-like object containing all the necessary parameters for the model. Could be parsed by JSON.
         '''
-        pass
+        self.X = T.fmatrix('X')
+        self.Y = T.fmatrix('Y')
 
 
-    def get_learn_function(self):
-        log.critical("The Model %s does not have a learn function!", str(type(self)))
+    def get_inputs(self):
+        return [self.X, self.Y]
+
+
+    def get_updates(self):
+        log.critical("The Model %s does not have a get_updates function!", str(type(self)))
         raise NotImplementedError()
 
 
-    def get_output_function(self):
-        log.critical("The Model %s does not have an output function!", str(type(self)))
+    def get_outputs(self):
+        log.critical("The Model %s does not have an output method!", str(type(self)))
         raise NotImplementedError()
 
 
-    def get_output(self, dataset):
-        log.critical("The Model %s does not have an output method! (The value from the output function)", str(type(self)))
+    def get_cost(self):
+        log.critical("The Model %s does not have a cost method!", str(type(self)))
         raise NotImplementedError()
+
+
+    def get_monitors(self):
+        '''
+        :return: list
+        A list of the theano variables to use as the monitors.
+        '''
+        log.critical("The Model %s does not have a monitors method!", str(type(self)))
+        raise NotImplementedError()
+
+
+    def get_monitor_function(self):
+        if not hasattr(self, 'f_monitors'):
+            log.info('Compiling f_monitor function...')
+            t = time.time()
+            self.f_monitors = theano.function(inputs  = self.get_inputs(),
+                                              updates = self.get_updates(),
+                                              outputs = self.get_monitors(),
+                                              name    = 'f_monitors')
+            log.info('f_monitor compilation took %s', make_time_units_string(time.time() - t))
+        return self.f_monitors
 
 
     def load_params(self, param_file):
@@ -48,7 +80,7 @@ class Model(object):
         raise NotImplementedError()
 
 
-    def save_params(self, param_file):
+    def save_params(self, param_file_suffix):
         log.critical("The Model %s does not have save_params!", str(type(self)))
         raise NotImplementedError()
 
@@ -61,6 +93,11 @@ class Model(object):
     # return a list of the parameter values
     def get_params_values(self):
         raise NotImplementedError()
+
+
+    # return a list of the decay functions on internal parameters to decay each time step
+    def get_decay_params(self):
+        return []
 
 
     def score(self, X):

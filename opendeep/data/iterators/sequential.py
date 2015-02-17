@@ -20,9 +20,9 @@ class SequentialIterator(Iterator):
     '''
     An iterator that goes through a dataset in its stored sequence
     '''
-    def __init__(self, dataset, subset=datasets.TRAIN, batch_size=1, minimum_batch_size=1):
+    def __init__(self, dataset, subset=datasets.TRAIN, batch_size=1, minimum_batch_size=1, rng=None):
         log.debug('Initializing a %s sequential iterator over %s', str(type(dataset)), datasets.get_subset_strings(subset))
-        super(self.__class__, self).__init__(dataset, subset, batch_size, minimum_batch_size)
+        super(self.__class__, self).__init__(dataset, subset, batch_size, minimum_batch_size, rng)
 
     def next(self):
         '''

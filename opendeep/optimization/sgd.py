@@ -8,15 +8,37 @@ __license__ = "Apache"
 __maintainer__ = "OpenDeep"
 __email__ = "dev@opendeep.com"
 
+# standard libraries
 import logging
-
+import time
+from collections import OrderedDict
+# third party libraries
 import numpy
+import numpy.random as random
 import theano
 import theano.tensor as T
+# internal references
+from opendeep.optimization.optimizer import Optimizer
+from opendeep.utils.decay_functions import get_decay_function
+from opendeep.data.iterators.sequential import SequentialIterator
+import opendeep.data.dataset as datasets
+from opendeep.utils.utils import cast32, make_time_units_string, copy_params, restore_params
 
 log = logging.getLogger(__name__)
 
-from optimizer import Optimizer
+# Default values to use for some training parameters
+defaults = {"cost_function": 'binary_crossentropy',
+            "n_epoch": 1000,
+            "batch_size": 100,
+            "minimum_batch_size": 1,
+            "save_frequency": 10,
+            "early_stop_threshold": .9995,
+            "early_stop_length": 30,
+            "learning_rate": 0.25,
+            "lr_decay": "exponential",
+            "lr_factor": .995,
+            "momentum": 0.5,
+            "iterator": SequentialIterator}
 
 class SGD(Optimizer):
     '''
@@ -24,73 +46,116 @@ class SGD(Optimizer):
     '''
     #TODO: add conjugate gradient?
 
-    def __init__(self, model, train_data, train_targets, valid_data=None, valid_targets=None, test_data=None, test_targets=None, config=None):
-        pass
+    def __init__(self, model, dataset, config=dict(), rng=None):
+        # grab parameters from the config if it exists, otherwise use the defaults
+        # Training epochs - how many times to iterate over the whole dataset
+        self.n_epoch = config.get('n_epoch', defaults['n_epoch'])
+        # Dataset iteration batch sizes - number of examples in each calculation
+        self.batch_size = config.get('batch_size', defaults['batch_size'])
+        self.minimum_batch_size = config.get('minimum_batch_size', defaults['minimum_batch_size'])
+        # Number of epochs between saving model parameters
+        self.save_frequency = config.get('save_frequency', defaults['save_frequency'])
+        # Early stopping threshold and patience - by how much does the cost have to improve over a number of epochs
+        self.early_stop_threshold = config.get('early_stop_threshold', defaults['early_stop_threshold'])
+        self.early_stop_length = config.get('early_stop_length', defaults['early_stop_length'])
+        # Learning rate - how drastic of a step do the parameters change
+        self.learning_rate = theano.shared(config.get('learning_rate', defaults['learning_rate']))
+        self.learning_rate_decay = get_decay_function(config.get('lr_decay', defaults['lr_decay']),
+                                                      self.learning_rate,
+                                                      self.learning_rate.get_value(),
+                                                      config.get('lr_factor', defaults['lr_factor']))
+        # Momentum - smoothing over the parameter changes
+        self.momentum = config.get('momentum', defaults['momentum'])
+        # Iterator - what class of dataset iterator to use
+        self.iterator = config.get('iterator', defaults['iterator'])
+
+        self.model = model
+        self.params = self.model.get_params()
+        self.dataset = dataset
+
+        # RNG for working on random iterator
+        if rng is None:
+            random.seed(123)
+            self.rng = random
+        else:
+            self.rng = rng
+
+        # Now create the training cost function for the model to use while training - update parameters
+        log.info("%s params: %s", str(type(self.model)), str(self.params))
+        # Stochastic gradient descent!
+        gradient        =   T.grad(self.model.get_cost(), self.params)
+        gradient_buffer =   [theano.shared(numpy.zeros(param.get_value().shape, dtype='float32')) for param in self.params]
+        m_gradient      =   [self.momentum * gb + (cast32(1) - self.momentum) * g for (gb, g) in zip(gradient_buffer, gradient)]
+        param_updates   =   [(param, param - self.learning_rate * mg) for (param, mg) in zip(self.params, m_gradient)]
+        gradient_buffer_updates = zip(gradient_buffer, m_gradient)
+        gradient_updates    =   OrderedDict(param_updates + gradient_buffer_updates)
+
+        train_updates = model.get_updates()
+        train_updates.update(gradient_updates)
+
+        # Compile the functions!
+        self.f_learn = theano.function(inputs  = model.get_inputs(),
+                                       updates = train_updates,
+                                       outputs = self.model.get_cost(),
+                                       name    = 'f_learn',
+                                       on_unused_input= 'warn')
+
+        self.f_cost  = theano.function(inputs  = model.get_inputs(),
+                                       updates = model.get_updates(),
+                                       outputs = self.model.get_cost(),
+                                       name    = 'f_cost',
+                                       on_unused_input= 'warn')
+
 
     def train(self, continue_training=False):
-
-        ############
-        # TRAINING #
-        ############
-        log.maybeLog(self.logger, "-----------TRAINING GSN FOR {0!s} EPOCHS-----------".format(self.n_epoch))
-        STOP        = False
-        counter     = 0
+        log.info("-----------TRAINING %s FOR %s EPOCHS (continue_training=%s)-----------", str(type(self.model)), str(self.n_epoch), str(continue_training))
+        STOP    = False
+        counter = 0
         if not continue_training:
-            self.learning_rate.set_value(self.init_learn_rate)  # learning rate
+            # reset the learning rate
+            self.learning_rate_decay.reset()
+            # reset the other model decaying functions
+            for decay_param in self.model.get_decay_params():
+                decay_param.reset()
+
         times       = []
         best_cost   = float('inf')
         best_params = None
         patience    = 0
-
-        x_shape = self.train_X[0].get_value(borrow=True).shape
-        log.maybeLog(self.logger, ['train X size:',str(x_shape)])
-        if self.valid_X is not None:
-            vx_shape = self.valid_X[0].get_value(borrow=True).shape
-            log.maybeLog(self.logger, ['valid X size:',str(vx_shape)])
-        if self.test_X is not None:
-            tx_shape = self.test_X[0].get_value(borrow=True).shape
-            log.maybeLog(self.logger, ['test X size:',str(tx_shape)])
-
-        if self.vis_init:
-            self.bias_list[0].set_value(logit(numpy.clip(0.9,0.001,self.train_X[0].get_value(borrow=True).mean(axis=0))))
 
         start_time = time.time()
 
         while not STOP:
             counter += 1
             t = time.time()
-            log.maybeAppend(self.logger, [counter,'\t'])
-
-            #shuffle the data
-#             data.shuffle_data(self.train_X)
-#             data.shuffle_data(self.valid_X)
-#             data.shuffle_data(self.test_X)
+            # log.info(self.logger, [counter,'\t'])
 
             #train
             train_costs = []
-            for train_data in self.train_X:
-                train_costs.extend(data.apply_cost_function_to_dataset(self.f_learn, train_data, self.batch_size))
-#             train_costs = data.apply_indexed_cost_function_to_dataset(self.f_learn, x_shape[0], self.batch_size)
-            log.maybeAppend(self.logger, ['Train:',trunc(numpy.mean(train_costs)), '\t'])
+            for x, y in self.iterator(self.dataset, datasets.TRAIN, self.batch_size, self.minimum_batch_size, self.rng):
+                train_cost = self.f_learn([x, y])
+                train_costs.append(train_cost)
+            # log.maybeAppend(self.logger, ['Train:',trunc(numpy.mean(train_costs)), '\t'])
 
             #valid
-            if self.valid_X is not None:
+            if self.dataset.hasSubset(datasets.VALID):
                 valid_costs = []
-                for valid_data in self.valid_X:
-                    valid_costs.extend(data.apply_cost_function_to_dataset(self.f_cost, valid_data, self.batch_size))
-#                 valid_costs = data.apply_indexed_cost_function_to_dataset(self.f_valid, vx_shape[0], self.batch_size)
-                log.maybeAppend(self.logger, ['Valid:',trunc(numpy.mean(valid_costs)), '\t'])
+                for x, y in self.iterator(self.dataset, datasets.VALID, self.batch_size, self.minimum_batch_size, self.rng):
+                    valid_cost = self.f_cost([x, y])
+                    valid_costs.append(valid_cost)
+                # log.maybeAppend(self.logger, ['Valid:',trunc(numpy.mean(valid_costs)), '\t'])
 
             #test
-            if self.test_X is not None:
+            if self.dataset.hasSubset(datasets.TEST):
                 test_costs = []
-                for test_data in self.test_X:
-                    test_costs.extend(data.apply_cost_function_to_dataset(self.f_cost, test_data, self.batch_size))
-#                 test_costs = data.apply_indexed_cost_function_to_dataset(self.f_test, tx_shape[0], self.batch_size)
-                log.maybeAppend(self.logger, ['Test:',trunc(numpy.mean(test_costs)), '\t'])
+                for x, y in self.iterator(self.dataset, datasets.TEST, self.batch_size, self.minimum_batch_size, self.rng):
+                    test_cost = self.f_cost([x, y])
+                    test_costs.append(test_cost)
+                # log.maybeAppend(self.logger, ['Test:',trunc(numpy.mean(test_costs)), '\t'])
 
             #check for early stopping
-            if self.valid_X is not None:
+            if self.dataset.hasSubset(datasets.VALID):
+                # use the first monitor for the cost checking
                 cost = numpy.sum(valid_costs)
             else:
                 cost = numpy.sum(train_costs)
@@ -106,59 +171,21 @@ class SGD(Optimizer):
                 STOP = True
                 if best_params is not None:
                     restore_params(self.params, best_params)
-                self.save_params(counter, self.params)
 
             timing = time.time() - t
             times.append(timing)
 
-            log.maybeAppend(self.logger, 'time: '+make_time_units_string(timing)+'\t')
+            # log.maybeAppend(self.logger, 'time: '+make_time_units_string(timing)+'\t')
 
-            log.maybeLog(self.logger, 'remaining: '+make_time_units_string((self.n_epoch - counter) * numpy.mean(times)))
+            # log.maybeLog(self.logger, 'remaining: '+make_time_units_string((self.n_epoch - counter) * numpy.mean(times)))
 
             if (counter % self.save_frequency) == 0 or STOP is True:
-                if self.is_image:
-                    n_examples = 100
-                    tests = self.test_X[0].get_value(borrow=True)[0:n_examples]
-                    noisy_tests = self.f_noise(self.test_X[0].get_value(borrow=True)[0:n_examples])
-                    _, reconstructed = self.f_recon(noisy_tests)
-                    # Concatenate stuff if it is an image
-                    stacked = numpy.vstack([numpy.vstack([tests[i*10 : (i+1)*10], noisy_tests[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10]]) for i in range(10)])
-                    number_reconstruction = PIL.Image.fromarray(tile_raster_images(stacked, (self.image_height,self.image_width), (10,30)))
-
-                    number_reconstruction.save(self.outdir+'gsn_image_reconstruction_epoch_'+str(counter)+'.png')
-
-                    self.plot_samples(counter, "gsn", 1000)
-
-                #save gsn_params
-                self.save_params(counter, self.params)
+                #save params
+                self.model.save_params('_epoch_'+str(counter))
 
             # ANNEAL!
-            new_lr = self.learning_rate.get_value() * self.annealing
-            self.learning_rate.set_value(new_lr)
+            self.learning_rate_decay.decay()
+            for decay_param in self.model.get_decay_params():
+                decay_param.decay()
 
-#             new_hidden_sigma = self.hidden_add_noise_sigma.get_value() * self.noise_annealing
-#             self.hidden_add_noise_sigma.set_value(new_hidden_sigma)
-
-            new_salt_pepper = self.input_salt_and_pepper.get_value() * self.noise_annealing
-            self.input_salt_and_pepper.set_value(new_salt_pepper)
-
-        log.maybeLog(self.logger, "\n------------TOTAL GSN TRAIN TIME TOOK {0!s}---------\n\n".format(make_time_units_string(time.time()-start_time)))
-
-
-        def sgd_optimizer(p, inputs, costs, train_set, lr=1e-4):
-            '''SGD optimizer with a similar interface to hf_optimizer.'''
-
-            g = [T.grad(costs[0], i) for i in p]
-            updates = dict((i, i - lr*j) for i, j in zip(p, g))
-            f = theano.function(inputs, costs, updates=updates)
-
-            try:
-                for u in xrange(1000):
-                    cost = []
-                    for i in train_set.iterate(True):
-                        cost.append(f(*i))
-                    print 'update %i, cost=' %u, numpy.mean(cost, axis=0)
-                    sys.stdout.flush()
-
-            except KeyboardInterrupt:
-                print 'Training interrupted.'
+        log.info("------------TOTAL %s SGD TRAIN TIME TOOK %s---------", str(type(self.model)), make_time_units_string(time.time()-start_time))
