@@ -1,12 +1,20 @@
 '''
 Generic stochastic gradient descent optimization
 '''
+__authors__ = "Markus Beissinger"
+__copyright__ = "Copyright 2015, Vitruvian Science"
+__credits__ = ["Markus Beissinger"]
+__license__ = "Apache"
+__maintainer__ = "OpenDeep"
+__email__ = "dev@opendeep.com"
 
 import logging
 
 import numpy
 import theano
 import theano.tensor as T
+
+log = logging.getLogger(__name__)
 
 from optimizer import Optimizer
 
@@ -16,7 +24,7 @@ class SGD(Optimizer):
     '''
     #TODO: add conjugate gradient?
 
-    def __init__(self, model, train_data, valid_data=None, test_data=None, config=None):
+    def __init__(self, model, train_data, train_targets, valid_data=None, valid_targets=None, test_data=None, test_targets=None, config=None):
         pass
 
     def train(self, train_X=None, valid_X=None, test_X=None, continue_training=False):
