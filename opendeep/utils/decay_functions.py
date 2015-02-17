@@ -17,10 +17,14 @@ log = logging.getLogger(__name__)
 
 class DecayFunction(object):
     '''
-    Interface for a decay function
+    Interface for a parameter decay function
     '''
     def __init__(self, param):
         # make sure the parameter is a Theano shared variable
+        if not hasattr(param, 'get_value'):
+            log.error('Parameter doesn\'t have a get_value() function!')
+        if not hasattr(param, 'set_value'):
+            log.error('Parameter doesn\'t have a set_value() function!')
         assert hasattr(param, 'get_value')
         assert hasattr(param, 'set_value')
 
@@ -28,7 +32,7 @@ class DecayFunction(object):
         log.critical('Parameter decay function %s does not have a reduce method!', str(type(self)))
         raise NotImplementedError()
 
-    def simulate(self):
+    def simulate(self, initial, reduction_factor, epoch):
         log.critical('Parameter decay function %s does not have a simulate method!', str(type(self)))
         raise NotImplementedError()
 
@@ -61,7 +65,7 @@ class Exponential(DecayFunction):
         self.param.set_value(new_value)
 
     def simulate(self, initial_value, reduction_factor, epoch):
-        new_value = initial_value*reduction_factor^epoch
+        new_value = initial_value*pow(reduction_factor, epoch)
         return new_value
 
 

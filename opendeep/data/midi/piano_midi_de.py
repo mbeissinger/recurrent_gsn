@@ -21,7 +21,3 @@ class PianoMidiDe(Dataset):
     '''
     def __init__(self, filename='Piano-midi.de.zip', source='http://www-etud.iro.umontreal.ca/~boulanni/Piano-midi.de.zip'):
         super(self.__class__, self).__init__(filename, source)
-
-
-    def iterator(self, mode=None, batch_size=None, minimum_batch_size=None, rng=None):
-        pass

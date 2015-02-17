@@ -27,35 +27,7 @@ class SGD(Optimizer):
     def __init__(self, model, train_data, train_targets, valid_data=None, valid_targets=None, test_data=None, test_targets=None, config=None):
         pass
 
-    def train(self, train_X=None, valid_X=None, test_X=None, continue_training=False):
-        log.maybeLog(self.logger, "\nTraining---------\n")
-        if train_X is None:
-            log.maybeLog(self.logger, "Training using data given during initialization of GSN class.\n")
-            if self.train_X is None:
-                log.maybeLog(self.logger, "\nPlease provide a training dataset!\n")
-                raise AssertionError("Please provide a training dataset!")
-        else:
-            log.maybeLog(self.logger, "Training using data provided to training function.\n")
-            self.train_X = train_X
-        if valid_X is not None:
-            self.valid_X = valid_X
-        if test_X is not None:
-            self.test_X  = test_X
-
-        # Input data
-        self.train_X = raise_to_list(self.train_X)
-        self.valid_X = raise_to_list(self.valid_X)
-        self.test_X  = raise_to_list(self.test_X)
-
-        ########################################################
-        # Compile training functions to use indexing for speed #
-        ########################################################
-#         log.maybeLog(self.logger, "Compiling training functions...")
-#         t = time.time()
-#         self.compile_train_functions(train_X, valid_X, test_X)
-#         log.maybeLog(self.logger, "Compiling done. Took "+make_time_units_string(time.time() - t)+".\n")
-
-
+    def train(self, continue_training=False):
 
         ############
         # TRAINING #

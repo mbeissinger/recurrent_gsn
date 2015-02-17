@@ -21,7 +21,3 @@ class MuseData(Dataset):
     '''
     def __init__(self, filename='MuseData.zip', source='http://www-etud.iro.umontreal.ca/~boulanni/MuseData.zip'):
         super(self.__class__, self).__init__(filename, source)
-
-
-    def iterator(self, mode=None, batch_size=None, minimum_batch_size=None, rng=None):
-        pass

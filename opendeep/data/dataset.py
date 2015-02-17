@@ -60,7 +60,7 @@ class Dataset(object):
         '''
         Method to both download and extract the dataset from the internet (if there) or verify connection settings
         '''
-        log.debug('Installing dataset %s', str(type(self)))
+        log.info('Installing dataset %s', str(type(self)))
         # construct the actual path to the dataset
         prevdir = os.getcwd()
         os.chdir(os.path.split(os.path.realpath(__file__))[0])
@@ -121,7 +121,7 @@ class Dataset(object):
                 self.dataset_location = post_unzip
                 self.file_type = get_file_type(self.dataset_location)
         if download_success and unzip_success:
-            log.debug('Installation complete for %s. Yay!', str(type(self)))
+            log.info('Installation complete for %s. Yay!', str(type(self)))
         else:
             log.warning('Something went wrong installing dataset %s. Boo :(', str(type(self)))
 
@@ -131,7 +131,7 @@ class Dataset(object):
         Method to delete dataset files from disk (if in file form)
         '''
         # TODO: Check if this shutil.rmtree is unsafe...
-        log.debug('Uninstalling (removing) dataset %s for class %s...', self.dataset_location, str(type(self)))
+        log.info('Uninstalling (removing) dataset %s for class %s...', self.dataset_location, str(type(self)))
         if self.dataset_location is not None and os.path.exists(self.dataset_location):
             # If we are trying to remove something not from the dataset directory, give a warning
             if not self.dataset_location.startswith(self.dataset_dir):
@@ -141,7 +141,7 @@ class Dataset(object):
             shutil.rmtree(self.dataset_location)
         else:
             log.debug('%s\'s dataset_location was not valid. It was %s', str(type(self)), str(self.dataset_location))
-        log.debug('Uninstallation (removal) successful for %s!', str(type(self)))
+        log.info('Uninstallation (removal) successful for %s!', str(type(self)))
 
 
     def getDataByIndices(self, indices, subset):

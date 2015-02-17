@@ -10,8 +10,6 @@ __email__ = "dev@opendeep.com"
 
 # standard libraries
 import logging
-# internal references
-from opendeep.optimization.sgd import SGD
 
 log = logging.getLogger(__name__)
 
@@ -42,11 +40,6 @@ class Model(object):
 
     def get_output(self, dataset):
         log.critical("The Model %s does not have an output method! (The value from the output function)", str(type(self)))
-        raise NotImplementedError()
-
-
-    def train(self, dataset, optimizer=SGD()):
-        log.critical("The Model %s does not have a train method!", str(type(self)))
         raise NotImplementedError()
 
 

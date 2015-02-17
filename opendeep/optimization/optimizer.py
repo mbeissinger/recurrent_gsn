@@ -15,9 +15,9 @@ log = logging.getLogger(__name__)
 
 class Optimizer(object):
     '''
-    Default interface for an optimizer implementation
+    Default interface for an optimizer implementation - to train a model on a dataset
     '''
-    def __init__(self):
+    def __init__(self, model, dataset, config):
         pass
 
     def train(self):

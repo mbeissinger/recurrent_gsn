@@ -27,7 +27,7 @@ class MNIST(Dataset):
     '''
     def __init__(self, binary=False, filename='mnist.pkl.gz', source='http://www.iro.umontreal.ca/~lisa/deep/data/mnist/mnist.pkl.gz'):
         # instantiate the Dataset class to install the dataset from the url
-        log.debug('Loading MNIST with binary=%s', str(binary))
+        log.info('Loading MNIST with binary=%s', str(binary))
         super(self.__class__, self).__init__(filename, source)
         # self.dataset_location now contains the os path to the dataset file
         # self.file_type tells how to load the dataset
