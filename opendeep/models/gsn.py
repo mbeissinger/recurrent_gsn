@@ -28,7 +28,8 @@ import theano.sandbox.rng_mrg as RNG_MRG
 import numpy.random as rng
 from numpy import ceil, sqrt
 import PIL.Image
-from collections import OrderedDict
+#from collections import OrderedDict #not this import
+from theano.compat.python2x import OrderedDict # this OrderedDict instead
 from utils import logger as log
 from utils import data_tools as data
 from utils.image_tiler import tile_raster_images

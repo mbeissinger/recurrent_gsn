@@ -31,12 +31,12 @@ class Model(object):
         '''
         :param config: a dictionary-like object containing all the necessary parameters for the model. Could be parsed by JSON.
         '''
-        self.X = T.fmatrix('X')
-        self.Y = T.fmatrix('Y')
+        self.config = config
 
 
     def get_inputs(self):
-        return [self.X, self.Y]
+        log.critical("The Model %s does not have a get_inputs function!", str(type(self)))
+        raise NotImplementedError()
 
 
     def get_updates(self):

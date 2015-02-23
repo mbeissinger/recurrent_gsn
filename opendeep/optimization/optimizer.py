@@ -32,7 +32,10 @@ class Optimizer(object):
     Default interface for an optimizer implementation - to train a model on a dataset
     '''
     def __init__(self, model, dataset, config, rng=None):
-        pass
+        self.model = model
+        self.dataset = dataset
+        self.config = config
+        self.rng = rng
 
     def train(self):
         log.critical("You need to implement a 'train' function to train the model on the dataset with respect to parameters! Optimizer is %s", str(type(self)))

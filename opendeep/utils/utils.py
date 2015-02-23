@@ -4,6 +4,8 @@ University of Pennsylvania, 2014-2015
 
 Based on code from Li Yao (University of Montreal)
 https://github.com/yaoli/GSN
+
+As well as Pylearn2.utils
 '''
 import numpy
 import theano
@@ -197,5 +199,95 @@ def closest_to_square_factors(n):
     if test < 1:
         test = 1
     return int(test), int(n/test)
-    
-    
+
+
+
+##################
+# PYLEARN2 UTILS #
+##################
+def get_variable_name(variable, anon="anonymous_variable"):
+    """
+    If variable has a name, returns that name. Otherwise, returns anon.
+    Parameters
+    ----------
+    variable : tensor_like
+        WRITEME
+    anon : str, optional
+        WRITEME
+    Returns
+    -------
+    WRITEME
+    """
+
+    if hasattr(variable, 'name') and variable.name is not None:
+        return variable.name
+
+    return anon
+
+
+def sharedX(value, name=None, borrow=False, dtype=None):
+    """
+    Transform value into a shared variable of type floatX
+    Parameters
+    ----------
+    value : WRITEME
+    name : WRITEME
+    borrow : WRITEME
+    dtype : str, optional
+        data type. Default value is theano.config.floatX
+    Returns
+    -------
+    WRITEME
+    """
+
+    if dtype is None:
+        dtype = theano.config.floatX
+    return theano.shared(theano._asarray(value, dtype=dtype),
+                         name=name,
+                         borrow=borrow)
+
+
+def as_floatX(variable):
+    """
+    Casts a given variable into dtype `config.floatX`. Numpy ndarrays will
+    remain numpy ndarrays, python floats will become 0-D ndarrays and
+    all other types will be treated as theano tensors
+    Parameters
+    ----------
+    variable : WRITEME
+    Returns
+    -------
+    WRITEME
+    """
+
+    if isinstance(variable, float):
+        return numpy.cast[theano.config.floatX](variable)
+
+    if isinstance(variable, numpy.ndarray):
+        return numpy.cast[theano.config.floatX](variable)
+
+    return theano.tensor.cast(variable, theano.config.floatX)
+
+
+def constantX(value):
+    """
+    Returns a constant of value `value` with floatX dtype
+    Parameters
+    ----------
+    variable : WRITEME
+    Returns
+    -------
+    WRITEME
+    """
+    return theano.tensor.constant(numpy.asarray(value,
+                                             dtype=theano.config.floatX))
+
+def safe_zip(*args):
+    """Like zip, but ensures arguments are of same length"""
+    base = len(args[0])
+    for i, arg in enumerate(args[1:]):
+        if len(arg) != base:
+            raise ValueError("Argument 0 has length %d but argument %d has "
+                             "length %d" % (base, i+1, len(arg)))
+    return zip(*args)
+

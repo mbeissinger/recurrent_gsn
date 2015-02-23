@@ -11,18 +11,19 @@ __email__ = "dev@opendeep.com"
 # standard libraries
 import logging
 import time
-from collections import OrderedDict
+#from collections import OrderedDict
 # third party libraries
 import numpy
 import numpy.random as random
 import theano
 import theano.tensor as T
+from theano.compat.python2x import OrderedDict
 # internal references
 from opendeep.optimization.optimizer import Optimizer
 from opendeep.utils.decay_functions import get_decay_function
 from opendeep.data.iterators.sequential import SequentialIterator
 import opendeep.data.dataset as datasets
-from opendeep.utils.utils import cast32, make_time_units_string, copy_params, restore_params
+from opendeep.utils.utils import cast32, make_time_units_string, copy_params, restore_params, sharedX
 
 log = logging.getLogger(__name__)
 
@@ -44,34 +45,38 @@ class SGD(Optimizer):
     '''
     Stochastic gradient descent for training a model - includes early stopping, momentum, and annealing
     '''
-    #TODO: add conjugate gradients?
 
     def __init__(self, model, dataset, config=dict(), rng=None):
+        super(self.__class__, self).__init__(model, dataset, config, rng)
         # grab parameters from the config if it exists, otherwise use the defaults
         # Training epochs - how many times to iterate over the whole dataset
         self.n_epoch = config.get('n_epoch', defaults['n_epoch'])
+
         # Dataset iteration batch sizes - number of examples in each calculation
-        self.batch_size = config.get('batch_size', defaults['batch_size'])
+        self.batch_size         = config.get('batch_size', defaults['batch_size'])
         self.minimum_batch_size = config.get('minimum_batch_size', defaults['minimum_batch_size'])
+
         # Number of epochs between saving model parameters
         self.save_frequency = config.get('save_frequency', defaults['save_frequency'])
+
         # Early stopping threshold and patience - by how much does the cost have to improve over a number of epochs
         self.early_stop_threshold = config.get('early_stop_threshold', defaults['early_stop_threshold'])
-        self.early_stop_length = config.get('early_stop_length', defaults['early_stop_length'])
+        self.early_stop_length    = config.get('early_stop_length', defaults['early_stop_length'])
+
         # Learning rate - how drastic of a step do the parameters change
-        self.learning_rate = theano.shared(config.get('learning_rate', defaults['learning_rate']))
+        self.learning_rate       = sharedX(config.get('learning_rate', defaults['learning_rate']), 'learning_rate')
         self.learning_rate_decay = get_decay_function(config.get('lr_decay', defaults['lr_decay']),
                                                       self.learning_rate,
                                                       self.learning_rate.get_value(),
                                                       config.get('lr_factor', defaults['lr_factor']))
-        # Momentum - smoothing over the parameter changes
+
+        # Momentum - smoothing over the parameter changes (see Hinton)
         self.momentum = config.get('momentum', defaults['momentum'])
+
         # Iterator - what class of dataset iterator to use
         self.iterator = config.get('iterator', defaults['iterator'])
 
-        self.model = model
         self.params = self.model.get_params()
-        self.dataset = dataset
 
         # RNG for working on random iterator
         if rng is None:
@@ -110,7 +115,7 @@ class SGD(Optimizer):
     def train(self, continue_training=False):
         log.info("-----------TRAINING %s FOR %s EPOCHS (continue_training=%s)-----------", str(type(self.model)), str(self.n_epoch), str(continue_training))
         STOP    = False
-        counter = 0
+        self.epoch_counter = 0
         if not continue_training:
             # reset the learning rate
             self.learning_rate_decay.reset()
@@ -118,15 +123,21 @@ class SGD(Optimizer):
             for decay_param in self.model.get_decay_params():
                 decay_param.reset()
 
-        times       = []
-        best_cost   = float('inf')
-        best_params = None
-        patience    = 0
+        self.times       = []
+        self.best_cost   = float('inf')
+        self.best_params = None
+        self.patience    = 0
 
         start_time = time.time()
 
         while not STOP:
-            counter += 1
+            STOP = self._perform_one_epoch()
+
+        log.info("------------TOTAL %s SGD TRAIN TIME TOOK %s---------", str(type(self.model)), make_time_units_string(time.time()-start_time))
+
+
+    def _perform_one_epoch(self):
+            self.epoch_counter += 1
             t = time.time()
             # log.info(self.logger, [counter,'\t'])
 
@@ -187,5 +198,3 @@ class SGD(Optimizer):
             self.learning_rate_decay.decay()
             for decay_param in self.model.get_decay_params():
                 decay_param.decay()
-
-        log.info("------------TOTAL %s SGD TRAIN TIME TOOK %s---------", str(type(self.model)), make_time_units_string(time.time()-start_time))

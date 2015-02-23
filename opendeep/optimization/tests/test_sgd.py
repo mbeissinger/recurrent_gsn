@@ -21,7 +21,7 @@ import theano
 import theano.tensor as T
 # internal references
 import opendeep.log.logger as logger
-from opendeep.optimization.sgd import SGD
+from opendeep.optimization.stochastic_gradient_descent import SGD
 
 class TestSGD(unittest.TestCase):
 
