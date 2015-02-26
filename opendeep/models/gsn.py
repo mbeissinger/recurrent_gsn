@@ -20,35 +20,49 @@ Multimodal transition operator (using NADE) discussed in:
 Sherjil Ozair, Li Yao, Yoshua Bengio
 http://arxiv.org/abs/1312.5578
 '''
+__authors__ = "Markus Beissinger"
+__copyright__ = "Copyright 2015, Vitruvian Science"
+__credits__ = ["Markus Beissinger"]
+__license__ = "Apache"
+__maintainer__ = "OpenDeep"
+__email__ = "dev@opendeep.com"
 
-import os, cPickle, time, argparse
-import numpy, theano
+# standard libraries
+import os
+import cPickle
+import time
+import argparse
+import logging
+# third-party libraries
+import numpy
+import numpy.random as rng
+import theano
 import theano.tensor as T
 import theano.sandbox.rng_mrg as RNG_MRG
-import numpy.random as rng
-from numpy import ceil, sqrt
+from theano.compat.python2x import OrderedDict #use this OrderedDict instead
 import PIL.Image
-#from collections import OrderedDict #not this import
-from theano.compat.python2x import OrderedDict # this OrderedDict instead
-from utils import logger as log
-from utils import data_tools as data
-from utils.image_tiler import tile_raster_images
-from utils.utils import cast32, logit, trunc
-from utils.utils import get_shared_weights, get_shared_bias, salt_and_pepper, add_gaussian_noise
-from utils.utils import make_time_units_string, load_from_config, get_activation_function, get_cost_function, copy_params, restore_params
-from utils.utils import stack_and_shared, raise_to_list, concatenate_list, closest_to_square_factors
+# internal references
+from opendeep.models.model import Model
+from opendeep.utils import data_tools as data
+from opendeep.utils.image_tiler import tile_raster_images
+from opendeep.utils.utils import cast32, logit, trunc
+from opendeep.utils.utils import get_shared_weights, get_shared_bias, salt_and_pepper, add_gaussian_noise
+from opendeep.utils.utils import make_time_units_string, load_from_config, get_activation_function, get_cost_function, copy_params, restore_params
+from opendeep.utils.utils import raise_to_list, concatenate_list, closest_to_square_factors
+
+log = logging.getLogger(__name__)
 
 # Default values to use for some GSN parameters
 defaults = {# gsn parameters
             "layers": 3, # number of hidden layers to use
             "walkbacks": 5, # number of walkbacks (generally 2*layers) - need enough to have info from top layer propagate to visible layer
             "hidden_size": 1500,
-            "visible_activation": lambda x: T.nnet.sigmoid(x),
-            "hidden_activation": lambda x: T.tanh(x),
+            "visible_activation": 'sigmoid',
+            "hidden_activation": 'tanh',
             "input_sampling": True,
             "MRG": RNG_MRG.MRG_RandomStreams(1),
             # training parameters
-            "cost_function": lambda x,y: T.mean(T.nnet.binary_crossentropy(x,y)),
+            "cost_function": 'binary_crossentropy',
             "n_epoch": 1000,
             "batch_size": 100,
             "save_frequency": 10,
@@ -69,23 +83,23 @@ defaults = {# gsn parameters
             "vis_init": False}
 
 
-class GSN:
+class GSN(Model):
     '''
     Class for creating a new Generative Stochastic Network (GSN)
     '''
-    def __init__(self, train_X=None, valid_X=None, test_X=None, args=None, logger=None):
-        # Output logger
-        self.logger = logger
-        self.outdir = args.get("output_path", defaults["output_path"])
+    def __init__(self, train_X=None, valid_X=None, test_X=None, config=None, logger=None):
+        # init model
+        super(self.__class__, self).__init__(config, defaults)
+        self.outdir = self.config.get("output_path", self.defaults["output_path"])
         if self.outdir[-1] != '/':
             self.outdir = self.outdir+'/'
         data.mkdir_p(self.outdir)
         
         # Configuration
         config_filename = self.outdir+'config'
-        logger.log('Saving config')
+        log.debug('Saving config as %s', config_filename)
         with open(config_filename, 'w') as f:
-            f.write(str(args))
+            f.write(str(self.config))
         
         # Input data        
         self.train_X = raise_to_list(train_X)
@@ -94,78 +108,78 @@ class GSN:
         
         # variables from the dataset that are used for initialization and image reconstruction
         if self.train_X is None:
-            self.N_input = args.get("input_size")
-            if args.get("input_size") is None:
+            self.N_input = self.config.get("input_size")
+            if self.config.get("input_size") is None:
                 raise AssertionError("Please either specify input_size in the arguments or provide an example train_X for input dimensionality.")
         else:
             self.N_input = self.train_X[0].get_value(borrow=True).shape[1]
         
-        self.is_image = args.get('is_image', defaults['is_image'])
+        self.is_image = self.config.get('is_image', self.defaults['is_image'])
         if self.is_image:
             (_h, _w) = closest_to_square_factors(self.N_input)
-            self.image_width  = args.get('width', _w)
-            self.image_height = args.get('height', _h)
+            self.image_width  = self.config.get('width', _w)
+            self.image_height = self.config.get('height', _h)
         
         #######################################
         # Network and training specifications #
         #######################################
-        self.layers          = args.get('layers', defaults['layers']) # number hidden layers
-        self.walkbacks       = args.get('walkbacks', defaults['walkbacks']) # number of walkbacks
-        self.learning_rate   = theano.shared(cast32(args.get('learning_rate', defaults['learning_rate'])))  # learning rate
-        self.init_learn_rate = cast32(args.get('learning_rate', defaults['learning_rate']))
-        self.momentum        = theano.shared(cast32(args.get('momentum', defaults['momentum']))) # momentum term
-        self.annealing       = cast32(args.get('annealing', defaults['annealing'])) # exponential annealing coefficient
-        self.noise_annealing = cast32(args.get('noise_annealing', defaults['noise_annealing'])) # exponential noise annealing coefficient
-        self.batch_size      = args.get('batch_size', defaults['batch_size'])
-        self.n_epoch         = args.get('n_epoch', defaults['n_epoch'])
-        self.early_stop_threshold = args.get('early_stop_threshold', defaults['early_stop_threshold'])
-        self.early_stop_length = args.get('early_stop_length', defaults['early_stop_length'])
-        self.save_frequency  = args.get('save_frequency', defaults['save_frequency'])
+        self.layers          = self.config.get('layers', self.defaults['layers']) # number hidden layers
+        self.walkbacks       = self.config.get('walkbacks', self.defaults['walkbacks']) # number of walkbacks
+        self.learning_rate   = theano.shared(cast32(self.config.get('learning_rate', self.defaults['learning_rate'])))  # learning rate
+        self.init_learn_rate = cast32(self.config.get('learning_rate', self.defaults['learning_rate']))
+        self.momentum        = theano.shared(cast32(self.config.get('momentum', self.defaults['momentum']))) # momentum term
+        self.annealing       = cast32(self.config.get('annealing', self.defaults['annealing'])) # exponential annealing coefficient
+        self.noise_annealing = cast32(self.config.get('noise_annealing', self.defaults['noise_annealing'])) # exponential noise annealing coefficient
+        self.batch_size      = self.config.get('batch_size', self.defaults['batch_size'])
+        self.n_epoch         = self.config.get('n_epoch', self.defaults['n_epoch'])
+        self.early_stop_threshold = self.config.get('early_stop_threshold', self.defaults['early_stop_threshold'])
+        self.early_stop_length = self.config.get('early_stop_length', self.defaults['early_stop_length'])
+        self.save_frequency  = self.config.get('save_frequency', self.defaults['save_frequency'])
         
-        self.noiseless_h1           = args.get('noiseless_h1', defaults["noiseless_h1"])
-        self.hidden_add_noise_sigma = theano.shared(cast32(args.get('hidden_add_noise_sigma', defaults["hidden_add_noise_sigma"])))
-        self.input_salt_and_pepper  = theano.shared(cast32(args.get('input_salt_and_pepper', defaults["input_salt_and_pepper"])))
-        self.input_sampling         = args.get('input_sampling', defaults["input_sampling"])
-        self.vis_init               = args.get('vis_init', defaults['vis_init'])
+        self.noiseless_h1           = self.config.get('noiseless_h1', self.defaults["noiseless_h1"])
+        self.hidden_add_noise_sigma = theano.shared(cast32(self.config.get('hidden_add_noise_sigma', self.defaults["hidden_add_noise_sigma"])))
+        self.input_salt_and_pepper  = theano.shared(cast32(self.config.get('input_salt_and_pepper', self.defaults["input_salt_and_pepper"])))
+        self.input_sampling         = self.config.get('input_sampling', self.defaults["input_sampling"])
+        self.vis_init               = self.config.get('vis_init', self.defaults['vis_init'])
         
-        self.hidden_size = args.get('hidden_size', defaults['hidden_size'])
+        self.hidden_size = self.config.get('hidden_size', self.defaults['hidden_size'])
         self.layer_sizes = [self.N_input] + [self.hidden_size] * self.layers # layer sizes, from h0 to hK (h0 is the visible layer)
         
         self.f_recon = None
         self.f_noise = None
         
         # Activation functions!            
-        if args.get('hidden_activation') is not None:
-            log.maybeLog(self.logger, 'Using specified activation for hiddens')
-            self.hidden_activation = args.get('hidden_activation')
-        elif args.get('hidden_act') is not None:
-            self.hidden_activation = get_activation_function(args.get('hidden_act'))
-            log.maybeLog(self.logger, 'Using {0!s} activation for hiddens'.format(args.get('hidden_act')))
+        if self.config.get('hidden_activation') is not None and callable(self.config.get('hidden_activation')):
+            log.debug('Using specified activation for hiddens')
+            self.hidden_activation = self.config.get('hidden_activation')
+        elif isinstance(self.config.get('hidden_activation'), basestring):
+            self.hidden_activation = get_activation_function(self.config.get('hidden_activation'))
+            log.debug('Using {0!s} activation for hiddens'.format(self.config.get('hidden_activation')))
         else:
-            log.maybeLog(self.logger, "Using default activation for hiddens")
-            self.hidden_activation = defaults['hidden_activation']
+            log.debug("Using default activation for hiddens")
+            self.hidden_activation = get_activation_function(self.defaults['hidden_activation'])
             
         # Visible layer activation
-        if args.get('visible_activation') is not None:
-            log.maybeLog(self.logger, 'Using specified activation for visible layer')
-            self.visible_activation = args.get('visible_activation')
-        elif args.get('visible_act') is not None:
-            self.visible_activation = get_activation_function(args.get('visible_act'))
-            log.maybeLog(self.logger, 'Using {0!s} activation for visible layer'.format(args.get('visible_act')))
+        if self.config.get('visible_activation') is not None:
+            log.debug('Using specified activation for visible layer')
+            self.visible_activation = self.config.get('visible_activation')
+        elif self.config.get('visible_act') is not None:
+            self.visible_activation = get_activation_function(self.config.get('visible_act'))
+            log.debug('Using {0!s} activation for visible layer'.format(self.config.get('visible_act')))
         else:
-            log.maybeLog(self.logger, 'Using default activation for visible layer')
-            self.visible_activation = defaults['visible_activation']
+            log.debug('Using default activation for visible layer')
+            self.visible_activation = self.defaults['visible_activation']
             
         # Cost function!
-        if args.get('cost_function') is not None:
-            log.maybeLog(self.logger, '\nUsing specified cost function for training\n')
-            self.cost_function = args.get('cost_function')
-        elif args.get('cost_funct') is not None:
-            self.cost_function = get_cost_function(args.get('cost_funct'))
-            log.maybeLog(self.logger, 'Using {0!s} for cost function'.format(args.get('cost_funct')))
+        if self.config.get('cost_function') is not None:
+            log.debug('\nUsing specified cost function for training\n')
+            self.cost_function = self.config.get('cost_function')
+        elif self.config.get('cost_funct') is not None:
+            self.cost_function = get_cost_function(self.config.get('cost_funct'))
+            log.debug('Using {0!s} for cost function'.format(self.config.get('cost_funct')))
         else:
-            log.maybeLog(self.logger, '\nUsing default cost function for training\n')
-            self.cost_function = defaults['cost_function']
+            log.debug('\nUsing default cost function for training\n')
+            self.cost_function = self.defaults['cost_function']
         # # Cost function - what to use when comparing network outputs to the targets
         # if config.get('cost_function') is not None:
         #     log.debug('Using specified cost function for SGD')
@@ -175,7 +189,7 @@ class GSN:
         #     log.debug('Using %s for SGD cost function', config.get('cost_funct'))
         # else:
         #     log.debug('Using default cost function for SGD')
-        #     self.cost_function = get_cost_function(defaults['cost_function'])
+        #     self.cost_function = get_cost_function(self.defaults['cost_function'])
         
         ############################
         # Theano variables and RNG #
@@ -190,20 +204,20 @@ class GSN:
         # Parameters! #
         ###############
         # initialize a list of weights and biases based on layer_sizes for the GSN
-        if args.get('weights_list') is None:
+        if self.config.get('weights_list') is None:
             self.weights_list = [get_shared_weights(self.layer_sizes[layer], self.layer_sizes[layer+1], name="W_{0!s}_{1!s}".format(layer,layer+1)) for layer in range(self.layers)] # initialize each layer to uniform sample from sqrt(6. / (n_in + n_out))
         else:
-            self.weights_list = args.get('weights_list')
-        if args.get('bias_list') is None:
+            self.weights_list = self.config.get('weights_list')
+        if self.config.get('bias_list') is None:
             self.bias_list    = [get_shared_bias(self.layer_sizes[layer], name='b_'+str(layer)) for layer in range(self.layers + 1)] # initialize each layer to 0's.
         else:
-            self.bias_list    = args.get('bias_list')
+            self.bias_list    = self.config.get('bias_list')
         self.params = self.weights_list + self.bias_list
         
         #################
         # Build the GSN #
         #################
-        log.maybeLog(self.logger, "\nBuilding GSN graphs for training and testing")
+        log.debug("\nBuilding GSN graphs for training and testing")
         # GSN for training - with noise
         add_noise = True
         p_X_chain, _ = build_gsn(self.X,
@@ -239,7 +253,7 @@ class GSN:
         #######################
         # Costs and gradients #
         #######################
-        log.maybeLog(self.logger, 'Cost w.r.t p(X|...) at every step in the graph for the GSN')
+        log.debug('Cost w.r.t p(X|...) at every step in the graph for the GSN')
         gsn_costs     = [self.cost_function(rX, self.X) for rX in p_X_chain]
         self.show_gsn_cost = gsn_costs[-1] # for logging to show progress
         gsn_cost      = numpy.sum(gsn_costs)
@@ -247,7 +261,7 @@ class GSN:
         gsn_costs_recon     = [self.cost_function(rX, self.X) for rX in p_X_chain_recon]
         show_gsn_cost_recon = gsn_costs_recon[-1]
         
-        log.maybeLog(self.logger, ["gsn params:", self.params])
+        log.debug(["gsn params:", self.params])
         
         # Stochastic gradient descent!
         gradient        =   T.grad(gsn_cost, self.params)              
@@ -270,7 +284,7 @@ class GSN:
         visible_pX_chain = []
     
         # ONE update
-        log.maybeLog(self.logger, "Performing one walkback in network state sampling.")
+        log.debug("Performing one walkback in network state sampling.")
         update_layers(self.network_state_output,
                       self.weights_list,
                       self.bias_list,
@@ -288,7 +302,7 @@ class GSN:
         #################################
         #     Create the functions      #
         #################################
-        log.maybeLog(self.logger, "Compiling functions...")
+        log.debug("Compiling functions...")
         t = time.time()
         
         self.f_learn = theano.function(inputs  = [self.X],
@@ -303,17 +317,17 @@ class GSN:
 #         self.compile_train_functions(self.train_X, self.valid_X, self.test_X)
         
         # used for checkpoints and testing - no noise in network
-        log.maybeLog(self.logger, "f_recon")
+        log.debug("f_recon")
         self.f_recon = theano.function(inputs  = [self.X],
                                        outputs = [show_gsn_cost_recon, p_X_chain_recon[-1]],
                                        name='gsn_f_recon')
         
-        log.maybeLog(self.logger, "f_noise")
+        log.debug("f_noise")
         self.f_noise = theano.function(inputs = [self.X],
                                        outputs = salt_and_pepper(self.X, self.input_salt_and_pepper, self.MRG),
                                        name='gsn_f_noise')
     
-        log.maybeLog(self.logger, "f_sample")
+        log.debug("f_sample")
         if self.layers == 1: 
             self.f_sample = theano.function(inputs = [X_sample], 
                                             outputs = visible_pX_chain[-1], 
@@ -336,156 +350,14 @@ class GSN:
         hiddens = [x_init]+[self.H[i] for i in range(len(self.bias_list)-1)]
         sample = build_gsn_pxh(hiddens, self.weights_list, self.bias_list, add_noise, self.noiseless_h1, self.hidden_add_noise_sigma, self.input_salt_and_pepper, self.input_sampling, self.MRG, self.visible_activation, self.hidden_activation, self.walkbacks, self.logger)
         
-        log.maybeLog(self.logger, "P(X=x|H)")
+        log.debug("P(X=x|H)")
         self.pxh = theano.function(inputs = [self.X, self.H], outputs=sample, name='px_given_h ')
         
-        log.maybeLog(self.logger, "Compiling done. Took "+make_time_units_string(time.time() - t)+".\n")
+        log.debug("Compiling done. Took "+make_time_units_string(time.time() - t)+".\n")
         
         
     def train(self, train_X=None, valid_X=None, test_X=None, continue_training=False):
-        log.maybeLog(self.logger, "\nTraining---------\n")
-        if train_X is None:
-            log.maybeLog(self.logger, "Training using data given during initialization of GSN class.\n")
-            if self.train_X is None:
-                log.maybeLog(self.logger, "\nPlease provide a training dataset!\n")
-                raise AssertionError("Please provide a training dataset!")
-        else:
-            log.maybeLog(self.logger, "Training using data provided to training function.\n")
-            self.train_X = train_X
-        if valid_X is not None:
-            self.valid_X = valid_X
-        if test_X is not None:
-            self.test_X  = test_X
-            
-        # Input data
-        self.train_X = raise_to_list(self.train_X)
-        self.valid_X = raise_to_list(self.valid_X)
-        self.test_X  = raise_to_list(self.test_X)
-        
-        ########################################################
-        # Compile training functions to use indexing for speed #
-        ########################################################
-#         log.maybeLog(self.logger, "Compiling training functions...")
-#         t = time.time()
-#         self.compile_train_functions(train_X, valid_X, test_X)
-#         log.maybeLog(self.logger, "Compiling done. Took "+make_time_units_string(time.time() - t)+".\n")
-        
-            
-        
-        ############
-        # TRAINING #
-        ############
-        log.maybeLog(self.logger, "-----------TRAINING GSN FOR {0!s} EPOCHS-----------".format(self.n_epoch))
-        STOP        = False
-        counter     = 0
-        if not continue_training:
-            self.learning_rate.set_value(self.init_learn_rate)  # learning rate
-        times       = []
-        best_cost   = float('inf')
-        best_params = None
-        patience    = 0
-                    
-        x_shape = self.train_X[0].get_value(borrow=True).shape
-        log.maybeLog(self.logger, ['train X size:',str(x_shape)])
-        if self.valid_X is not None:
-            vx_shape = self.valid_X[0].get_value(borrow=True).shape
-            log.maybeLog(self.logger, ['valid X size:',str(vx_shape)])
-        if self.test_X is not None:
-            tx_shape = self.test_X[0].get_value(borrow=True).shape
-            log.maybeLog(self.logger, ['test X size:',str(tx_shape)])
-        
-        if self.vis_init:
-            self.bias_list[0].set_value(logit(numpy.clip(0.9,0.001,self.train_X[0].get_value(borrow=True).mean(axis=0))))
-            
-        start_time = time.time()
-    
-        while not STOP:
-            counter += 1
-            t = time.time()
-            log.maybeAppend(self.logger, [counter,'\t'])
-            
-            #shuffle the data
-#             data.shuffle_data(self.train_X)
-#             data.shuffle_data(self.valid_X)
-#             data.shuffle_data(self.test_X)
-            
-            #train
-            train_costs = []
-            for train_data in self.train_X:
-                train_costs.extend(data.apply_cost_function_to_dataset(self.f_learn, train_data, self.batch_size))
-#             train_costs = data.apply_indexed_cost_function_to_dataset(self.f_learn, x_shape[0], self.batch_size)
-            log.maybeAppend(self.logger, ['Train:',trunc(numpy.mean(train_costs)), '\t'])
-    
-            #valid
-            if self.valid_X is not None:
-                valid_costs = []
-                for valid_data in self.valid_X:
-                    valid_costs.extend(data.apply_cost_function_to_dataset(self.f_cost, valid_data, self.batch_size))
-#                 valid_costs = data.apply_indexed_cost_function_to_dataset(self.f_valid, vx_shape[0], self.batch_size)
-                log.maybeAppend(self.logger, ['Valid:',trunc(numpy.mean(valid_costs)), '\t'])
-    
-            #test
-            if self.test_X is not None:
-                test_costs = []
-                for test_data in self.test_X:
-                    test_costs.extend(data.apply_cost_function_to_dataset(self.f_cost, test_data, self.batch_size))
-#                 test_costs = data.apply_indexed_cost_function_to_dataset(self.f_test, tx_shape[0], self.batch_size)
-                log.maybeAppend(self.logger, ['Test:',trunc(numpy.mean(test_costs)), '\t'])
-                
-            #check for early stopping
-            if self.valid_X is not None:
-                cost = numpy.sum(valid_costs)
-            else:
-                cost = numpy.sum(train_costs)
-            if cost < best_cost*self.early_stop_threshold:
-                patience = 0
-                best_cost = cost
-                # save the parameters that made it the best
-                best_params = copy_params(self.params)
-            else:
-                patience += 1
-    
-            if counter >= self.n_epoch or patience >= self.early_stop_length:
-                STOP = True
-                if best_params is not None:
-                    restore_params(self.params, best_params)
-                self.save_params(counter, self.params)
-    
-            timing = time.time() - t
-            times.append(timing)
-    
-            log.maybeAppend(self.logger, 'time: '+make_time_units_string(timing)+'\t')
-            
-            log.maybeLog(self.logger, 'remaining: '+make_time_units_string((self.n_epoch - counter) * numpy.mean(times)))
-        
-            if (counter % self.save_frequency) == 0 or STOP is True:
-                if self.is_image:
-                    n_examples = 100
-                    tests = self.test_X[0].get_value(borrow=True)[0:n_examples]
-                    noisy_tests = self.f_noise(self.test_X[0].get_value(borrow=True)[0:n_examples])
-                    _, reconstructed = self.f_recon(noisy_tests) 
-                    # Concatenate stuff if it is an image
-                    stacked = numpy.vstack([numpy.vstack([tests[i*10 : (i+1)*10], noisy_tests[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10]]) for i in range(10)])
-                    number_reconstruction = PIL.Image.fromarray(tile_raster_images(stacked, (self.image_height,self.image_width), (10,30)))
-                    
-                    number_reconstruction.save(self.outdir+'gsn_image_reconstruction_epoch_'+str(counter)+'.png')
-                    
-                    self.plot_samples(counter, "gsn", 1000)
-        
-                #save gsn_params
-                self.save_params(counter, self.params)
-         
-            # ANNEAL!
-            new_lr = self.learning_rate.get_value() * self.annealing
-            self.learning_rate.set_value(new_lr)
-            
-#             new_hidden_sigma = self.hidden_add_noise_sigma.get_value() * self.noise_annealing
-#             self.hidden_add_noise_sigma.set_value(new_hidden_sigma)
-            
-            new_salt_pepper = self.input_salt_and_pepper.get_value() * self.noise_annealing
-            self.input_salt_and_pepper.set_value(new_salt_pepper)
-        
-        log.maybeLog(self.logger, "\n------------TOTAL GSN TRAIN TIME TOOK {0!s}---------\n\n".format(make_time_units_string(time.time()-start_time)))
+
             
         
     
@@ -1096,9 +968,7 @@ def main():
     args.output_path = outdir
     
     # Create the logger
-    logger = log.Logger(outdir)
-    logger.log("---------CREATING GSN------------\n\n")
-    logger.log(args)
+    log("---------CREATING GSN------------\n\n")
     
     # See if we should load args from a previous config file (during testing)
     config_filename = outdir+'config'
