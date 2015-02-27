@@ -1,5 +1,5 @@
 '''
-Object for the MNIST handwritten digit dataset
+Dataset object wrapper for something given in memory (array of arrays, numpy matrix)
 '''
 __authors__ = "Markus Beissinger"
 __copyright__ = "Copyright 2015, Vitruvian Science"
@@ -10,10 +10,10 @@ __email__ = "dev@opendeep.org"
 
 # standard libraries
 import logging
-import cPickle
-import gzip
+# third party libraries
 import numpy
 # internal imports
+from opendeep.utils.utils import sharedX
 import opendeep.data.dataset as datasets
 from opendeep.data.dataset import Dataset
 import opendeep.utils.file_ops as files
@@ -21,46 +21,34 @@ from opendeep.utils.utils import make_shared_variables
 
 log = logging.getLogger(__name__)
 
-class MNIST(Dataset):
+class MemoryMatrix(Dataset):
     '''
-    Object for the MNIST handwritten digit dataset. Pickled file provided by Montreal's LISA lab into train, valid, and test sets.
+    Dataset object wrapper for something given in memory (numpy matrix, theano matrix)
     '''
-    def __init__(self, binary=False, filename='mnist.pkl.gz', source='http://www.iro.umontreal.ca/~lisa/deep/data/mnist/mnist.pkl.gz'):
-        # instantiate the Dataset class to install the dataset from the url
-        log.info('Loading MNIST with binary=%s', str(binary))
-        super(self.__class__, self).__init__(filename, source)
-        # self.dataset_location now contains the os path to the dataset file
-        # self.file_type tells how to load the dataset
-        # load the dataset into memory
-        if self.file_type is files.GZ:
-            (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = cPickle.load(gzip.open(self.dataset_location, 'rb'))
-        else:
-            (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = cPickle.load(open(self.dataset_location, 'r'))
+    def __init__(self, train_X, train_Y=None, valid_X=None, valid_Y=None, test_X=None, test_Y=None):
+        log.info('Wrapping matrix from memory')
+        super(self.__class__, self).__init__()
 
-        # make optional binary
-        if binary:
-            _binary_cutoff = 0.5
-            log.debug('Making MNIST X values binary with cutoff %s', str(_binary_cutoff))
-            train_X = (train_X > _binary_cutoff).astype('float32')
-            valid_X = (valid_X > _binary_cutoff).astype('float32')
-            test_X  = (test_X > _binary_cutoff).astype('float32')
-
-        log.debug('Concatenating train and valid sets together...')
-        train_X = numpy.concatenate((train_X, valid_X))
-        train_Y = numpy.concatenate((train_Y, valid_Y))
-
+        # make sure the inputs are arrays
+        train_X = numpy.array(train_X)
         self._train_shape = train_X.shape
-        self._valid_shape = valid_X.shape
-        self._test_shape  = test_X.shape
-        log.debug('Train shape is: %s', str(self._train_shape))
-        log.debug('Valid shape is: %s', str(self._valid_shape))
-        log.debug('Test shape is: %s', str(self._test_shape))
-        # transfer the datasets into theano shared variables
-        log.debug('Loading MNIST into theano shared variables')
-        (self.train_X, self.train_Y,
-         self.valid_X, self.valid_Y,
-         self.test_X, self.test_Y) = make_shared_variables((train_X, train_Y, valid_X, valid_Y, test_X, test_Y), borrow=True)
+        self.train_X = sharedX(train_X)
+        if train_Y:
+            self.train_Y = sharedX(numpy.array(train_Y))
 
+        if valid_X:
+            valid_X = numpy.array(valid_X)
+            self._valid_shape = valid_X.shape
+            self.valid_X = sharedX(valid_X)
+        if valid_Y:
+            self.valid_Y = sharedX(numpy.array(valid_Y))
+
+        if test_X:
+            test_X = numpy.array(test_X)
+            self._test_shape = test_X.shape
+            self.test_X = sharedX(test_X)
+        if test_Y:
+            self.test_Y = sharedX(numpy.array(test_Y))
 
     def getDataByIndices(self, indices, subset):
         '''

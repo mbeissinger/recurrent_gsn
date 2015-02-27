@@ -60,70 +60,71 @@ class Dataset(object):
         '''
         Method to both download and extract the dataset from the internet (if there) or verify connection settings
         '''
-        log.info('Installing dataset %s', str(type(self)))
-        # construct the actual path to the dataset
-        prevdir = os.getcwd()
-        os.chdir(os.path.split(os.path.realpath(__file__))[0])
-        self.dataset_dir = os.path.realpath(self.dataset_dir)
-        try:
-            mkdir_p(self.dataset_dir)
-            self.dataset_location = os.path.join(self.dataset_dir, self.filename)
-        except:
-            log.exception("Couldn't make the dataset path for %s with directory %s and filename %s",
-                          str(type(self)),
-                          self.dataset_dir,
-                          str(self.filename))
-            self.dataset_location = None
-        finally:
-            os.chdir(prevdir)
+        if self.filename is not None and self.source is not None:
+            log.info('Installing dataset %s', str(type(self)))
+            # construct the actual path to the dataset
+            prevdir = os.getcwd()
+            os.chdir(os.path.split(os.path.realpath(__file__))[0])
+            self.dataset_dir = os.path.realpath(self.dataset_dir)
+            try:
+                mkdir_p(self.dataset_dir)
+                self.dataset_location = os.path.join(self.dataset_dir, self.filename)
+            except:
+                log.exception("Couldn't make the dataset path for %s with directory %s and filename %s",
+                              str(type(self)),
+                              self.dataset_dir,
+                              str(self.filename))
+                self.dataset_location = None
+            finally:
+                os.chdir(prevdir)
 
-        # check if the dataset is already in the source, otherwise download it.
-        # first check if the base filename exists - without all the extensions.
-        # then, add each extension on and keep checking until the upper level, when you download from http.
-        if self.dataset_location is not None:
-            (dirs, fname) = os.path.split(self.dataset_location)
-            split_fname = fname.split('.')
-            accumulated_name = split_fname[0]
-            found = False
-            # first check if the filename was a directory (like for the midi datasets)
-            if os.path.exists(os.path.join(dirs, accumulated_name)):
-                found = True
-                self.file_type = get_file_type(os.path.join(dirs, accumulated_name))
-                self.dataset_location = os.path.join(dirs, accumulated_name)
-                log.debug('Found file %s', self.dataset_location)
-            # now go through the file extensions starting with the lowest level and check if the file exists
-            if not found and len(split_fname)>1:
-                for chunk in split_fname[1:]:
-                    accumulated_name = '.'.join((accumulated_name, chunk))
+            # check if the dataset is already in the source, otherwise download it.
+            # first check if the base filename exists - without all the extensions.
+            # then, add each extension on and keep checking until the upper level, when you download from http.
+            if self.dataset_location is not None:
+                (dirs, fname) = os.path.split(self.dataset_location)
+                split_fname = fname.split('.')
+                accumulated_name = split_fname[0]
+                found = False
+                # first check if the filename was a directory (like for the midi datasets)
+                if os.path.exists(os.path.join(dirs, accumulated_name)):
+                    found = True
                     self.file_type = get_file_type(os.path.join(dirs, accumulated_name))
-                    if self.file_type is not None:
-                        self.dataset_location = os.path.join(dirs, accumulated_name)
-                        log.debug('Found file %s', self.dataset_location)
-                        break
+                    self.dataset_location = os.path.join(dirs, accumulated_name)
+                    log.debug('Found file %s', self.dataset_location)
+                # now go through the file extensions starting with the lowest level and check if the file exists
+                if not found and len(split_fname)>1:
+                    for chunk in split_fname[1:]:
+                        accumulated_name = '.'.join((accumulated_name, chunk))
+                        self.file_type = get_file_type(os.path.join(dirs, accumulated_name))
+                        if self.file_type is not None:
+                            self.dataset_location = os.path.join(dirs, accumulated_name)
+                            log.debug('Found file %s', self.dataset_location)
+                            break
 
-        # if the file wasn't found, download it.
-        download_success = True
-        if self.file_type is None:
-            download_success = download_file(self.source, self.dataset_location)
-            self.file_type = get_file_type(self.dataset_location)
-
-        # if the file type is a zip, unzip it.
-        unzip_success = True
-        if self.file_type is files.ZIP:
-            (dirs, fname) = os.path.split(self.dataset_location)
-            post_unzip = os.path.join(dirs, '.'.join(fname.split('.')[0:-1]))
-            unzip_success = files.unzip(self.dataset_location, post_unzip)
-            # if the unzip was successful
-            if unzip_success:
-                # remove the zipfile and update the dataset location and file type
-                log.debug('Removing file %s', self.dataset_location)
-                os.remove(self.dataset_location)
-                self.dataset_location = post_unzip
+            # if the file wasn't found, download it.
+            download_success = True
+            if self.file_type is None:
+                download_success = download_file(self.source, self.dataset_location)
                 self.file_type = get_file_type(self.dataset_location)
-        if download_success and unzip_success:
-            log.info('Installation complete for %s. Yay!', str(type(self)))
-        else:
-            log.warning('Something went wrong installing dataset %s. Boo :(', str(type(self)))
+
+            # if the file type is a zip, unzip it.
+            unzip_success = True
+            if self.file_type is files.ZIP:
+                (dirs, fname) = os.path.split(self.dataset_location)
+                post_unzip = os.path.join(dirs, '.'.join(fname.split('.')[0:-1]))
+                unzip_success = files.unzip(self.dataset_location, post_unzip)
+                # if the unzip was successful
+                if unzip_success:
+                    # remove the zipfile and update the dataset location and file type
+                    log.debug('Removing file %s', self.dataset_location)
+                    os.remove(self.dataset_location)
+                    self.dataset_location = post_unzip
+                    self.file_type = get_file_type(self.dataset_location)
+            if download_success and unzip_success:
+                log.info('Installation complete for %s. Yay!', str(type(self)))
+            else:
+                log.warning('Something went wrong installing dataset %s. Boo :(', str(type(self)))
 
 
     def uninstall(self):

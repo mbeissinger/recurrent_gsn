@@ -42,10 +42,10 @@ import theano.sandbox.rng_mrg as RNG_MRG
 from theano.compat.python2x import OrderedDict #use this OrderedDict instead
 import PIL.Image
 # internal references
+from opendeep import cast32
 from opendeep.models.model import Model
 from opendeep.utils import data_tools as data
 from opendeep.utils.image_tiler import tile_raster_images
-from opendeep.utils.utils import cast32, logit, trunc
 from opendeep.utils.utils import get_shared_weights, get_shared_bias, salt_and_pepper, add_gaussian_noise
 from opendeep.utils.utils import make_time_units_string, load_from_config, get_activation_function, get_cost_function, copy_params, restore_params
 from opendeep.utils.utils import raise_to_list, concatenate_list, closest_to_square_factors
@@ -63,14 +63,6 @@ defaults = {# gsn parameters
             "MRG": RNG_MRG.MRG_RandomStreams(1),
             # training parameters
             "cost_function": 'binary_crossentropy',
-            "n_epoch": 1000,
-            "batch_size": 100,
-            "save_frequency": 10,
-            "early_stop_threshold": .9995,
-            "early_stop_length": 30,
-            "learning_rate": 0.25,
-            "annealing": 0.995,
-            "momentum": 0.5,
             # noise parameters
             "noise_annealing": 1.0, #no noise schedule by default
             "add_noise": True,
@@ -82,14 +74,27 @@ defaults = {# gsn parameters
             "is_image": True,
             "vis_init": False}
 
+train_args = {"n_epoch": 1000,
+            "batch_size": 128,
+            "save_frequency": 10,
+            "early_stop_threshold": .9995,
+            "early_stop_length": 30,
+            "learning_rate": 0.25,
+            "annealing": 0.995,
+            "momentum": 0.5
+}
+
 
 class GSN(Model):
     '''
     Class for creating a new Generative Stochastic Network (GSN)
     '''
-    def __init__(self, train_X=None, valid_X=None, test_X=None, config=None, logger=None):
-        # init model
+    def __init__(self, config=None):
+        # init Model
         super(self.__class__, self).__init__(config, defaults)
+        # now we can access all parameters with self.args! Huzzah!
+
+
         self.outdir = self.args.get("output_path")
         if self.outdir[-1] != '/':
             self.outdir = self.outdir+'/'
@@ -100,12 +105,7 @@ class GSN(Model):
         log.debug('Saving config as %s', config_filename)
         with open(config_filename, 'w') as f:
             f.write(str(self.config))
-        
-        # Input data        
-        self.train_X = raise_to_list(train_X)
-        self.valid_X = raise_to_list(valid_X)
-        self.test_X  = raise_to_list(test_X)
-        
+
         # variables from the dataset that are used for initialization and image reconstruction
         if self.train_X is None:
             self.N_input = self.args.get("input_size")
