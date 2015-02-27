@@ -6,13 +6,15 @@ __copyright__ = "Copyright 2015, Vitruvian Science"
 __credits__ = ["Markus Beissinger"]
 __license__ = "Apache"
 __maintainer__ = "OpenDeep"
-__email__ = "dev@opendeep.com"
+__email__ = "dev@opendeep.org"
 
 # standard libraries
 import logging
 import time
+import os
+import cPickle
 # internal references
-from opendeep import function
+from opendeep import function  # use this wrapper for theano.function - it removes errors when inputs aren't used.
 from opendeep.utils.config_tools import create_dictionary_like
 from opendeep.utils.utils import make_time_units_string
 from opendeep.optimization.optimizer import Optimizer
@@ -22,83 +24,243 @@ log = logging.getLogger(__name__)
 
 class Model(object):
     '''
-    Default interface for creating a model (or any sub-component of one). Contains the barebones methods that should be implemented.
+    Default interface for creating a model (or any sub-component of one).
     Think of it like legos.
     '''
 
-    def __init__(self, config=None, defaults=None):
+    def __init__(self, config=None, defaults=None, input_hook=None):
         '''
-        :param config: a dictionary-like object containing all the necessary parameters for the model. Could be a dictionary-like object, .json file, or .yaml file.
-        :param defaults: a dictionary-like object containing all the necessary default parameters for the model. Could be a dictionary-like object, .json file, or .yaml file.
-        '''
-        self.config = create_dictionary_like(config)
-        self.defaults = create_dictionary_like(defaults)
+        This sets up the model's configuration options into a self.args dictionary-like object.
+        Further, it should establish all variables and parameters needed, and put them in the self object.
 
-    def get_input_variables(self):
-        # This should return the symbolic variable(s) that are the inputs to this model.
-        # Used whenever a theano function for this model is created.
-        log.critical("The Model %s does not have a get_input_variables function!", str(type(self)))
-        raise NotImplementedError()
+        Finally, the initialization should also include creating the computational graph, where you write the
+        calculations transforming the input into the output. The end of this should include compiling the theano
+        function (wrapped by opendeep.function) self.f_predict, which calculates the output given the input.
+
+        :param config: a dictionary-like object containing all the necessary parameters for the model.
+        Could be a dictionary-like object, .json file, or .yaml file.
+        :param defaults: a dictionary-like object containing all the necessary default parameters for the model.
+        Could be a dictionary-like object, .json file, or .yaml file.
+        :return: None
+        '''
+        # make sure the config is like a dictionary
+        config_dict = create_dictionary_like(config)
+        # make sure the defaults is like a dictionary
+        defaults_dict = create_dictionary_like(defaults)
+        # override any default values with the config (after making sure they parsed correctly)
+        if config_dict and defaults_dict:
+            defaults_dict.update(config_dict)
+        # set this update combination to the model arguments
+        self.args = defaults_dict
+
+        # this establishes if the inputs should be set from a previous layer
+        # input_hook is the input that should be used instead of initializing a new theano variable.
+        self.input = input_hook
+
+    def get_input(self):
+        '''
+        This should return the input to the model's computation graph - what was used as the inputs= in the
+        theano f_predict function created during __init__.
+
+        :return: theano variable
+        It should be the same as was passed to updates= in the self.f_predict function.
+        '''
+        # by default, try to return self.input
+        if self.input is not None:
+            return self.input
+        else:
+            log.critical("The Model %s does not have a get_input function (of self.input parameter)!", str(type(self)))
+            raise NotImplementedError()
 
     def get_updates(self):
-        # This should return any theano updates from the model (used for things like rng's). Most often comes from theano's 'scan' op. Check out documentation.
-        # This is used with the optimizer to create the training function - the 'updates' part of the theano function.
+        '''
+        This should return any theano updates from the model (used for things like random number generators).
+        Most often comes from theano's 'scan' op. Check out its documentation.
+        This is used with the optimizer to create the training function - the 'updates' part of the theano function.
 
-        # log.critical("The Model %s does not have a get_updates function!", str(type(self)))
-        # raise NotImplementedError()
-
-        # by default, assume the model doesn't have updates - it is the job of the creator to return them in this method.
+        :return: updates from the theano computation for the model performed in __init__.
+        It should be the same as was passed to updates= in the self.f_predict function.
+        '''
+        # by default, assume the model doesn't have updates - it's the job of the creator to return them in this method.
         return None
 
-    def get_output_variables(self):
-        # Returns the variable(s) that are the outputs of the model.
-        # Used for hooking up simple layers/modules/models together. These output variables become the input to the next component.
-        log.critical("The Model %s does not have a get_output_variables method!", str(type(self)))
+    def get_train_cost(self):
+        '''
+        This returns the expression that represents the cost given an input, which is used for the optimizer during
+        training. The reason we can't just compile a f_train theano function is because updates need to be calculated
+        for the parameters during gradient descent - and these updates are created in the optimizer object.
+
+        :return: expression (theano tensor)
+        an expression giving the cost of the model for training.
+        '''
+        log.critical("The Model %s does not have a get_train_cost function!", str(type(self)))
         raise NotImplementedError()
 
-    def get_cost(self):
-        # Return the cost expression for this model. Used with the optimizer for training.
-        log.critical("The Model %s does not have a get_cost method!", str(type(self)))
+    def get_train_params(self):
+        '''
+        This returns a list of the model parameters to be trained by the optimizer.
+
+        :return: list
+        Model parameters to be trained.
+        '''
+        log.critical("The Model %s does not have get_train_params!", str(type(self)))
         raise NotImplementedError()
+
+    def get_decay_params(self):
+        '''
+        This returns a list of the opendeep.utils.decay_functions on internal parameters to decay each time step.
+        Used with the optimizer, for example, to decay things like GSN noise over time (noise scheduling).
+        '''
+        # by default, there are most likely no model params to decay during training.
+        return []
 
     def get_monitors(self):
         '''
         :return: list
-        A list of the theano variables to use as the monitors during training - the model variables you want to check periodically.
+        A list of the theano variables to use as the monitors during training - the model variables you want to check
+        periodically during training.
         '''
-        log.critical("The Model %s does not have a monitors method!", str(type(self)))
-        raise NotImplementedError()
+
+        # by default, return the cost expression used during training.
+        return [self.get_train_cost()]
 
     def get_monitor_function(self):
-        # Creates a theano function returning the value of the monitor variables. This function will be called during the optimizer's train method to output monitor values.
+        '''
+        Creates a theano function returning the value of the monitor variables. This function will be called during
+        the optimizer's train method to output monitor values on the train, valid, and test sets.
+
+        :return: theano function
+        '''
         if not hasattr(self, 'f_monitors'):
             log.info('Compiling f_monitor function for model %s...', str(type(self)))
             t = time.time()
-            self.f_monitors = function(inputs  = self.get_input_variables(),
+            self.f_monitors = function(inputs  = self.get_input(),
                                        updates = self.get_updates(),
                                        outputs = self.get_monitors(),
                                        name    = 'f_monitors')
             log.info('f_monitor compilation took %s', make_time_units_string(time.time() - t))
         return self.f_monitors
 
-    def load_params(self, param_file):
-        # for loading saved parameters for this model.
-        log.critical("The Model %s does not have load_params!!", str(type(self)))
+    def get_output(self):
+        '''
+        This returns the output of the model's computation - what is in the outputs= of f_predict.
+        Used for hooking up layers together - setting the input to the previous layer's get_output.
+
+        :return: theano variable
+        It should be the same as was passed to outputs= in the self.f_predict function.
+        '''
+        # by default, try to return self.output
+        if hasattr(self, 'output') and self.output is not None:
+            return self.output
+        else:
+            log.critical("The Model %s does not have a get_output function (of self.output parameter)!", str(type(self)))
+            raise NotImplementedError()
+
+    def generate_without_input(self, values=None):
+        '''
+        This should generate model outputs (if a generative model) without a specific input given. In most cases (like
+        gsn), this means providing the model's hidden values. In other cases (like rbm), this means setting input to
+        zero.
+
+        :param values: list
+        The values given to the model to start generating from.
+        :return: theano variable
+        The expression of the outputs from the starting point given with values.
+        '''
+        log.critical("The Model %s does not have a generate_output function!", str(type(self)))
         raise NotImplementedError()
+
+    def get_params(self):
+        '''
+        This gives a list of the model parameters
+
+        :return: list
+        List of the model parameters (still as shared variables).
+        '''
+        # try to return self.params by default
+        try:
+            return self.params
+        except AttributeError:
+            log.critical("The Model %s does not have get_params (or a self.params variable)!!", str(type(self)))
+            raise NotImplementedError()
+
+    def get_param_values(self, borrow=False):
+        '''
+        This gives a list of the model parameters as actual values
+
+        :return: list
+        List of the model parameter values.
+        '''
+        # try to return self.params by default
+        try:
+            # try to return the .get_value() of the parameter if it is theano shared - otherwise just return it.
+            return [param.get_value(borrow=borrow) if hasattr(param, 'get_value') else param for param in self.get_params()]
+        except AttributeError:
+            log.critical("The Model %s does not have get_params (or a self.params variable)!!", str(type(self)))
+            raise NotImplementedError()
+
+    def set_params(self, values, borrow=False):
+        '''
+        This sets the list of the model parameters as actual values
+
+        :return: Boolean
+        If the operation was successful
+        '''
+        try:
+            # try to set the parameters found from self.get_params()
+            params = self.get_params()
+            assert len(params) == len(values), "Model %s params length %s while values length %s in set_params" % (str(type(self)), str(len(params)), str(len(values)))
+            log.debug("setting model %s parameters to given values...", str(type(self)))
+            for param, value in zip(params, values):
+                param.set_value(value, borrow=borrow)
+            log.debug("done setting parameters.", str(type(self)))
+            return True
+        except AttributeError:
+            log.critical("The Model %s does not have get_params (or a self.params variable) (or some param doesn't have set_value()!!", str(type(self)))
+            raise NotImplementedError()
+
+    def load_params(self, param_file):
+        '''
+        This loads and sets the model paramaters found in the param_file (pickle file)
+
+        :param param_file: filename of pickled params file
+        :return: Boolean
+        whether successful
+        '''
+        if os.path.isfile(param_file):
+            _, extension = os.path.splitext(param_file)
+            if extension.lower() is '.pickle' or extension.lower() is '.pkl':
+                log.debug("loading model %s parameters from %s...", str(type(self)), str(param_file))
+                with open(param_file, 'r') as f:
+                    loaded_params = cPickle.load(f)
+                self.set_params(loaded_params, borrow=False)
+                return True
+            else:
+                log.error('Param file %s doesn\'t have a supported extension! Must be a pickle file with .pickle or .pkl', str(param_file))
+                return False
+        else:
+            log.error('Param file %s couldn\'t be found!', str(param_file))
+            return False
 
     def save_params(self, param_file):
-        # for saving the parameters for this model.
-        log.critical("The Model %s does not have save_params!", str(type(self)))
-        raise NotImplementedError()
+        '''
+        This saves the model paramaters to the param_file (pickle file)
 
-    def get_train_params(self):
-        # return a list of the parameter variables. Used with the optimizer for training these params.
-        log.critical("The Model %s does not have get_train_params!", str(type(self)))
-        raise NotImplementedError()
-
-    def get_decay_params(self):
-        # return a list of the decay functions on internal parameters to decay each time step. Used with the optimizer.
-        return []
+        :param param_file: filename of pickled params file
+        :return: Boolean
+        whether successful
+        '''
+        params = self.get_param_values()
+        log.debug('Saving model %s parameters to %s...', str(type(self)), str(param_file))
+        with open(param_file, 'wb') as f:
+            try:
+                cPickle.dump(params, f, protocol=cPickle.HIGHEST_PROTOCOL)
+            except Exception:
+                log.error("Some issue saving model %s parameters to %s!", str(type(self)), str(param_file))
+                return False
+            finally:
+                f.close()
+        return True
 
     def score(self, X):
         """
@@ -129,6 +291,21 @@ class Model(object):
         raise NotImplementedError()
 
     def train(self, dataset, optimizer=None, optimizer_config=None, rng=None):
+        '''
+        The method to train this model, given a dataset object (and an optimizer).
+        Use generic Stochastic Gradient Descent by default (although look into using ADADELTA by default because it is
+        easier without learning rate parameter)
+
+        :param dataset: opendeep.data.dataset
+        The dataset object to train on.
+        :param optimizer: opendeep.optimization.optimizer
+        The optimizer object to train with.
+        :param optimizer_config: dictionary-like or json/yaml file
+        The configuration for the optimizer
+        :param rng: rng-like object
+        The random number generator (same interface as numpy's random)
+        :return: None
+        '''
         # use stochastic gradient descent by default
         if optimizer is None:
             optimizer = SGD
@@ -139,3 +316,4 @@ class Model(object):
 
         optimizer.train()
 
+        self.save_params('{0!s}_trained_params.pkl'.format(str(type(self))))

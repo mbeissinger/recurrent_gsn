@@ -25,7 +25,7 @@ __copyright__ = "Copyright 2015, Vitruvian Science"
 __credits__ = ["Markus Beissinger"]
 __license__ = "Apache"
 __maintainer__ = "OpenDeep"
-__email__ = "dev@opendeep.com"
+__email__ = "dev@opendeep.org"
 
 # standard libraries
 import os
@@ -90,7 +90,7 @@ class GSN(Model):
     def __init__(self, train_X=None, valid_X=None, test_X=None, config=None, logger=None):
         # init model
         super(self.__class__, self).__init__(config, defaults)
-        self.outdir = self.config.get("output_path", self.defaults["output_path"])
+        self.outdir = self.args.get("output_path")
         if self.outdir[-1] != '/':
             self.outdir = self.outdir+'/'
         data.mkdir_p(self.outdir)
@@ -108,88 +108,63 @@ class GSN(Model):
         
         # variables from the dataset that are used for initialization and image reconstruction
         if self.train_X is None:
-            self.N_input = self.config.get("input_size")
-            if self.config.get("input_size") is None:
+            self.N_input = self.args.get("input_size")
+            if self.args.get("input_size") is None:
                 raise AssertionError("Please either specify input_size in the arguments or provide an example train_X for input dimensionality.")
         else:
             self.N_input = self.train_X[0].get_value(borrow=True).shape[1]
         
-        self.is_image = self.config.get('is_image', self.defaults['is_image'])
+        self.is_image = self.args.get('is_image')
         if self.is_image:
             (_h, _w) = closest_to_square_factors(self.N_input)
-            self.image_width  = self.config.get('width', _w)
-            self.image_height = self.config.get('height', _h)
+            self.image_width  = self.args.get('width', _w)
+            self.image_height = self.args.get('height', _h)
         
         #######################################
         # Network and training specifications #
         #######################################
-        self.layers          = self.config.get('layers', self.defaults['layers']) # number hidden layers
-        self.walkbacks       = self.config.get('walkbacks', self.defaults['walkbacks']) # number of walkbacks
-        self.learning_rate   = theano.shared(cast32(self.config.get('learning_rate', self.defaults['learning_rate'])))  # learning rate
-        self.init_learn_rate = cast32(self.config.get('learning_rate', self.defaults['learning_rate']))
-        self.momentum        = theano.shared(cast32(self.config.get('momentum', self.defaults['momentum']))) # momentum term
-        self.annealing       = cast32(self.config.get('annealing', self.defaults['annealing'])) # exponential annealing coefficient
-        self.noise_annealing = cast32(self.config.get('noise_annealing', self.defaults['noise_annealing'])) # exponential noise annealing coefficient
-        self.batch_size      = self.config.get('batch_size', self.defaults['batch_size'])
-        self.n_epoch         = self.config.get('n_epoch', self.defaults['n_epoch'])
-        self.early_stop_threshold = self.config.get('early_stop_threshold', self.defaults['early_stop_threshold'])
-        self.early_stop_length = self.config.get('early_stop_length', self.defaults['early_stop_length'])
-        self.save_frequency  = self.config.get('save_frequency', self.defaults['save_frequency'])
+        self.layers          = self.args.get('layers') # number hidden layers
+        self.walkbacks       = self.args.get('walkbacks') # number of walkbacks
+        self.learning_rate   = theano.shared(cast32(self.args.get('learning_rate')))  # learning rate
+        self.init_learn_rate = cast32(self.args.get('learning_rate'))
+        self.momentum        = theano.shared(cast32(self.args.get('momentum'))) # momentum term
+        self.annealing       = cast32(self.args.get('annealing')) # exponential annealing coefficient
+        self.noise_annealing = cast32(self.args.get('noise_annealing')) # exponential noise annealing coefficient
+        self.batch_size      = self.args.get('batch_size')
+        self.n_epoch         = self.args.get('n_epoch')
+        self.early_stop_threshold = self.args.get('early_stop_threshold')
+        self.early_stop_length = self.args.get('early_stop_length')
+        self.save_frequency  = self.args.get('save_frequency')
         
-        self.noiseless_h1           = self.config.get('noiseless_h1', self.defaults["noiseless_h1"])
-        self.hidden_add_noise_sigma = theano.shared(cast32(self.config.get('hidden_add_noise_sigma', self.defaults["hidden_add_noise_sigma"])))
-        self.input_salt_and_pepper  = theano.shared(cast32(self.config.get('input_salt_and_pepper', self.defaults["input_salt_and_pepper"])))
-        self.input_sampling         = self.config.get('input_sampling', self.defaults["input_sampling"])
-        self.vis_init               = self.config.get('vis_init', self.defaults['vis_init'])
+        self.noiseless_h1           = self.args.get('noiseless_h1')
+        self.hidden_add_noise_sigma = theano.shared(cast32(self.args.get('hidden_add_noise_sigma')))
+        self.input_salt_and_pepper  = theano.shared(cast32(self.args.get('input_salt_and_pepper')))
+        self.input_sampling         = self.args.get('input_sampling')
+        self.vis_init               = self.args.get('vis_init')
         
-        self.hidden_size = self.config.get('hidden_size', self.defaults['hidden_size'])
+        self.hidden_size = self.args.get('hidden_size')
         self.layer_sizes = [self.N_input] + [self.hidden_size] * self.layers # layer sizes, from h0 to hK (h0 is the visible layer)
         
         self.f_recon = None
         self.f_noise = None
         
         # Activation functions!            
-        if self.config.get('hidden_activation') is not None and callable(self.config.get('hidden_activation')):
+        if callable(self.args.get('hidden_activation')):
             log.debug('Using specified activation for hiddens')
-            self.hidden_activation = self.config.get('hidden_activation')
-        elif isinstance(self.config.get('hidden_activation'), basestring):
-            self.hidden_activation = get_activation_function(self.config.get('hidden_activation'))
-            log.debug('Using {0!s} activation for hiddens'.format(self.config.get('hidden_activation')))
-        else:
-            log.debug("Using default activation for hiddens")
-            self.hidden_activation = get_activation_function(self.defaults['hidden_activation'])
-            
+            self.hidden_activation = self.args.get('hidden_activation')
+        elif isinstance(self.args.get('hidden_activation'), basestring):
+            self.hidden_activation = get_activation_function(self.args.get('hidden_activation'))
+            log.debug('Using %s activation for hiddens', self.args.get('hidden_activation'))
+
         # Visible layer activation
-        if self.config.get('visible_activation') is not None:
+        if callable(self.args.get('visible_activation')):
             log.debug('Using specified activation for visible layer')
-            self.visible_activation = self.config.get('visible_activation')
-        elif self.config.get('visible_act') is not None:
-            self.visible_activation = get_activation_function(self.config.get('visible_act'))
-            log.debug('Using {0!s} activation for visible layer'.format(self.config.get('visible_act')))
-        else:
-            log.debug('Using default activation for visible layer')
-            self.visible_activation = self.defaults['visible_activation']
-            
-        # Cost function!
-        if self.config.get('cost_function') is not None:
-            log.debug('\nUsing specified cost function for training\n')
-            self.cost_function = self.config.get('cost_function')
-        elif self.config.get('cost_funct') is not None:
-            self.cost_function = get_cost_function(self.config.get('cost_funct'))
-            log.debug('Using {0!s} for cost function'.format(self.config.get('cost_funct')))
-        else:
-            log.debug('\nUsing default cost function for training\n')
-            self.cost_function = self.defaults['cost_function']
-        # # Cost function - what to use when comparing network outputs to the targets
-        # if config.get('cost_function') is not None:
-        #     log.debug('Using specified cost function for SGD')
-        #     self.cost_function = config.get('cost_function')
-        # elif config.get('cost_funct') is not None:
-        #     self.cost_function = get_cost_function(config.get('cost_funct'))
-        #     log.debug('Using %s for SGD cost function', config.get('cost_funct'))
-        # else:
-        #     log.debug('Using default cost function for SGD')
-        #     self.cost_function = get_cost_function(self.defaults['cost_function'])
+            self.visible_activation = self.args.get('visible_activation')
+        elif isinstance(self.args.get('visible_activation'), basestring):
+            self.visible_activation = get_activation_function(self.args.get('visible_activation'))
+            log.debug('Using %s activation for visible layer', self.args.get('visible_activation'))
+
+
         
         ############################
         # Theano variables and RNG #

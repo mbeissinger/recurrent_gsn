@@ -6,7 +6,7 @@ __copyright__ = "Copyright 2015, Vitruvian Science"
 __credits__ = ["Markus Beissinger"]
 __license__ = "Apache"
 __maintainer__ = "OpenDeep"
-__email__ = "dev@opendeep.com"
+__email__ = "dev@opendeep.org"
 
 # standard libraries
 import logging
@@ -14,7 +14,12 @@ import collections
 import os
 import json
 # third-party libraries
-import yaml
+# check if pyyaml is installed
+try:
+    import yaml
+    has_pyyaml = True
+except ImportError, e:
+    has_pyyaml = False
 
 log = logging.getLogger(__name__)
 
@@ -30,12 +35,17 @@ def create_dictionary_like(_input):
             with open(_input, 'r') as json_data:
                 return json.load(json_data)
         # if ends in .yaml
-        elif extension.lower() is '.yaml':
+        elif (extension.lower() is '.yaml' or extension.lower() is '.yml') and has_pyyaml:
             with open(_input, 'r') as yaml_data:
                 return yaml.load(yaml_data)
         else:
             log.critical('Configuration file %s with extension %s not supported', str(_input), extension)
+            if not has_pyyaml:
+                log.critical('Please install pyyaml with "pip install pyyaml" to parse yaml files.')
             return False
+    elif _input is None:
+        log.critical('Config was None.')
+        return False
     # otherwise not recognized/supported:
     else:
         log.critical('Could not find config. Either was not collections.Mapping object or not found in filesystem.')

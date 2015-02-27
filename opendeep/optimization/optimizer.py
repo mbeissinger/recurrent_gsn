@@ -20,7 +20,7 @@ __copyright__ = "Copyright 2015, Vitruvian Science"
 __credits__ = ["Markus Beissinger"]
 __license__ = "Apache"
 __maintainer__ = "OpenDeep"
-__email__ = "dev@opendeep.com"
+__email__ = "dev@opendeep.org"
 
 # standard libraries
 import logging
