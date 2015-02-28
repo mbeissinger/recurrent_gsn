@@ -31,9 +31,10 @@ class Optimizer(object):
     '''
     Default interface for an optimizer implementation - to train a model on a dataset
     '''
-    def __init__(self, model, dataset, config, rng=None):
+    def __init__(self, model, dataset, iteratorClass, config, rng=None):
         self.model = model
         self.dataset = dataset
+        self.iterator = iteratorClass
         self.config = config
         self.rng = rng
 

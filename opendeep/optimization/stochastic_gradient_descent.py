@@ -11,13 +11,12 @@ __email__ = "dev@opendeep.org"
 # standard libraries
 import logging
 import time
-#from collections import OrderedDict
 # third party libraries
 import numpy
 import numpy.random as random
 import theano
 import theano.tensor as T
-from theano.compat.python2x import OrderedDict
+from theano.compat.python2x import OrderedDict  # use this compatability OrderedDict
 # internal references
 from opendeep.optimization.optimizer import Optimizer
 from opendeep.utils.decay_functions import get_decay_function
@@ -28,8 +27,7 @@ from opendeep.utils.utils import cast32, make_time_units_string, copy_params, re
 log = logging.getLogger(__name__)
 
 # Default values to use for some training parameters
-defaults = {"cost_function": 'binary_crossentropy',
-            "n_epoch": 1000,
+defaults = {"n_epoch": 1000,
             "batch_size": 100,
             "minimum_batch_size": 1,
             "save_frequency": 10,
@@ -38,15 +36,14 @@ defaults = {"cost_function": 'binary_crossentropy',
             "learning_rate": 0.25,
             "lr_decay": "exponential",
             "lr_factor": .995,
-            "momentum": 0.5,
-            "iterator": SequentialIterator}
+            "momentum": 0.5}
 
 class SGD(Optimizer):
     '''
     Stochastic gradient descent for training a model - includes early stopping, momentum, and annealing
     '''
 
-    def __init__(self, model, dataset, config=dict(), rng=None):
+    def __init__(self, model, dataset, iteratorClass=SequentialIterator, config=dict(), rng=None):
         super(self.__class__, self).__init__(model, dataset, config, rng)
         # grab parameters from the config if it exists, otherwise use the defaults
         # Training epochs - how many times to iterate over the whole dataset
@@ -72,9 +69,6 @@ class SGD(Optimizer):
 
         # Momentum - smoothing over the parameter changes (see Hinton)
         self.momentum = config.get('momentum', defaults['momentum'])
-
-        # Iterator - what class of dataset iterator to use
-        self.iterator = config.get('iterator', defaults['iterator'])
 
         self.params = self.model.get_params()
 

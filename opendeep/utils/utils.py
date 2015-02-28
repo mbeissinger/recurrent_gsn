@@ -49,29 +49,6 @@ def get_shared_regression_weights(hidden_size, name="V"):
     val = cast32(val)
     val = theano.shared(value = val, name = name)
     return val
-    
-def get_activation_function(name):
-    if name == 'sigmoid':
-        return T.nnet.sigmoid
-    elif name == 'rectifier':
-        return lambda x : T.maximum(cast32(0), x)
-    elif name == 'tanh':
-        return lambda x : T.tanh(x)
-    else:
-        raise NotImplementedError("Did not recognize activation {0!s}, please use tanh, rectifier, or sigmoid".format(name))
-
-def get_cost_function(name):
-    eps = 1e-6
-    if name == 'binary_crossentropy':
-        return lambda x,y: T.mean(T.nnet.binary_crossentropy(x,y))
-    elif name == 'square':
-        #return lambda x,y: T.log(T.mean(T.sqr(x-y)))
-        #return lambda x,y: T.log(T.sum(T.pow((x-y),2)))
-        return lambda x,y: T.mean(T.sqr(x-y))
-    elif name == 'pseudo_log':
-        return lambda y,x: T.sum(T.xlogx.xlogy0(x, y+eps) + T.xlogx.xlogy0(1-x, 1-y+eps)) / x.shape[0]
-    else:
-        raise NotImplementedError("Did not recognize cost function {0!s}, please use binary_crossentropy, square, or pseudo_log".format(name))
 
 
 def dropout(IN, p = 0.5, MRG=None):

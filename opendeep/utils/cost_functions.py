@@ -19,6 +19,10 @@ def binary_crossentropy(x, y):
     cost = T.mean(T.nnet.binary_crossentropy(x, y))
     return cost
 
+def crossentropy(x, y):
+    cost = T.mean(T.nnet.categorical_crossentropy(x, y))
+    return cost
+
 def square(x, y):
     #cost = T.log(T.mean(T.sqr(x-y)))
     #cost = T.log(T.sum(T.pow((x-y),2)))
@@ -34,10 +38,12 @@ def get_cost_function(name):
     name = name.lower()
     if name == 'binary_crossentropy':
         return lambda x, y: binary_crossentropy(x, y)
+    elif name == 'crossentropy':
+        return lambda x, y: crossentropy(x, y)
     elif name == 'square':
         return lambda x, y: square(x, y)
     elif name == 'pseudo_log':
         return lambda y, x: pseudo_log(x, y)
     else:
-        log.critical("Did not recognize cost function %s, please use binary_crossentropy, square, or pseudo_log", name)
-        raise NotImplementedError("Did not recognize cost function {0!s}, please use binary_crossentropy, square, or pseudo_log".format(name))
+        log.critical("Did not recognize cost function %s, please use binary_crossentropy, crossentropy, square, or pseudo_log", name)
+        raise NotImplementedError("Did not recognize cost function {0!s}. Please use binary_crossentropy, crossentropy, square, or pseudo_log".format(name))

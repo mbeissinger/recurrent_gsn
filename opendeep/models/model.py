@@ -28,7 +28,7 @@ class Model(object):
     Think of it like legos.
     '''
 
-    def __init__(self, config=None, defaults=None, input_hook=None):
+    def __init__(self, config=None, defaults=None, input_hook=None, dataset=None):
         '''
         This sets up the model's configuration options into a self.args dictionary-like object.
         Further, it should establish all variables and parameters needed, and put them in the self object.
@@ -56,6 +56,9 @@ class Model(object):
         # this establishes if the inputs should be set from a previous layer
         # input_hook is the input that should be used instead of initializing a new theano variable.
         self.input = input_hook
+
+        # this is the dataset you will want to train on (given here so input size can be set automatically)
+        self.dataset = dataset
 
     def get_input(self):
         '''
@@ -310,9 +313,13 @@ class Model(object):
         if optimizer is None:
             optimizer = SGD
 
+        # use self's dataset if it exists - this was given during initialization
+        if self.dataset:
+            dataset = self.dataset
+
         assert isinstance(optimizer, Optimizer), "Model %s optimizer during train() is not an instance of Optimizer" % str(type(self))
         assert callable(optimizer), "Model %s optimizer during train() is not a callable class" % str(type(self))
-        optimizer = optimizer(self, dataset, optimizer_config, rng)
+        optimizer = optimizer(model=self, dataset=dataset, config=optimizer_config, rng=rng)
 
         optimizer.train()
 
