@@ -53,6 +53,8 @@ class Model(object):
         # set this update combination to the model arguments
         self.args = defaults_dict
 
+        log.debug("ARGS: %s", str(self.args))
+
         # this establishes if the inputs should be set from a previous layer
         # input_hook is the input that should be used instead of initializing a new theano variable.
         self.input = input_hook
@@ -60,7 +62,7 @@ class Model(object):
         # this is the dataset you will want to train on (given here so input size can be set automatically)
         self.dataset = dataset
 
-    def get_input(self):
+    def get_inputs(self):
         '''
         This should return the input to the model's computation graph - what was used as the inputs= in the
         theano f_predict function created during __init__.
@@ -70,9 +72,9 @@ class Model(object):
         '''
         # by default, try to return self.input
         if self.input is not None:
-            return self.input
+            return [self.input]
         else:
-            log.critical("The Model %s does not have a get_input function (of self.input parameter)!", str(type(self)))
+            log.critical("The Model %s does not have a get_inputs function (of self.input parameter)!", str(type(self)))
             raise NotImplementedError()
 
     def get_updates(self):
@@ -137,7 +139,7 @@ class Model(object):
         if not hasattr(self, 'f_monitors'):
             log.info('Compiling f_monitor function for model %s...', str(type(self)))
             t = time.time()
-            self.f_monitors = function(inputs  = self.get_input(),
+            self.f_monitors = function(inputs  = self.get_inputs(),
                                        updates = self.get_updates(),
                                        outputs = self.get_monitors(),
                                        name    = 'f_monitors')
@@ -317,7 +319,6 @@ class Model(object):
         if self.dataset:
             dataset = self.dataset
 
-        assert isinstance(optimizer, Optimizer), "Model %s optimizer during train() is not an instance of Optimizer" % str(type(self))
         assert callable(optimizer), "Model %s optimizer during train() is not a callable class" % str(type(self))
         optimizer = optimizer(model=self, dataset=dataset, config=optimizer_config, rng=rng)
 

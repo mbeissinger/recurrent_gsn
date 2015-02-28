@@ -53,7 +53,7 @@ class RandomIterator(Iterator):
         if self.iteration_index < self.iterations:
             # convert the iteration index into the start and end indices for the batch in the dataset
             _start_index = self.iteration_index*self.batch_size
-            _end_index   = (self.iteration_index+1)*self.batch_size
+            _end_index   = _start_index + self.iterations[self.iteration_index]
             indices_this_step = self.indices[_start_index:_end_index]
             # increment the iteration index
             self.iteration_index += 1
@@ -62,6 +62,7 @@ class RandomIterator(Iterator):
                                                  subset=self.subset)
             labels = self.dataset.getLabelsByIndices(indices=indices_this_step,
                                                      subset=self.subset)
+
             return data, labels
         else:
             raise StopIteration()

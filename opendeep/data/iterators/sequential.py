@@ -10,6 +10,8 @@ __email__ = "dev@opendeep.org"
 
 # standard libraries
 import logging
+# third party libraries
+import numpy
 # internal references
 from opendeep.data.iterators.iterator import Iterator
 import opendeep.data.dataset as datasets
@@ -36,10 +38,10 @@ class SequentialIterator(Iterator):
         The intention of the protocol is that once an iterator's next() method raises StopIteration, it will continue
         to do so on subsequent calls. Implementations that do not obey this property are deemed broken.
         '''
-        if self.iteration_index < self.iterations:
+        if self.iteration_index < len(self.iterations):
             # convert the iteration index into the start and end indices for the batch in the dataset
             _start_index = self.iteration_index*self.batch_size
-            _end_index   = (self.iteration_index+1)*self.batch_size
+            _end_index   = _start_index + self.iterations[self.iteration_index]
             # increment the iteration index
             self.iteration_index += 1
             # grab the data and labels to return
@@ -47,6 +49,7 @@ class SequentialIterator(Iterator):
                                                  subset=self.subset)
             labels = self.dataset.getLabelsByIndices(indices=list(range(_start_index, _end_index)),
                                                      subset=self.subset)
+
             return data, labels
         else:
             raise StopIteration()

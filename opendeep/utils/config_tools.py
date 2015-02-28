@@ -24,8 +24,11 @@ except ImportError, e:
 log = logging.getLogger(__name__)
 
 def create_dictionary_like(_input):
+    if _input is None:
+        log.critical('Config was None.')
+        return False
     # check if it is a dictionary-like object (implements collections.Mapping)
-    if isinstance(_input, collections.Mapping):
+    elif isinstance(_input, collections.Mapping):
         return _input
     # otherwise, check if it is a filename to a .json or .yaml
     elif os.path.isfile(_input):
@@ -43,9 +46,6 @@ def create_dictionary_like(_input):
             if not has_pyyaml:
                 log.critical('Please install pyyaml with "pip install pyyaml" to parse yaml files.')
             return False
-    elif _input is None:
-        log.critical('Config was None.')
-        return False
     # otherwise not recognized/supported:
     else:
         log.critical('Could not find config. Either was not collections.Mapping object or not found in filesystem.')

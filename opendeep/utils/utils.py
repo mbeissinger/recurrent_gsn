@@ -7,6 +7,8 @@ https://github.com/yaoli/GSN
 
 As well as Pylearn2.utils
 '''
+# standard libraries
+import logging
 # third party libraries
 import numpy
 import theano
@@ -15,10 +17,10 @@ import theano.sandbox.rng_mrg as RNG_MRG
 # internal imports
 from opendeep import cast32, trunc
 
-
+log = logging.getLogger(__name__)
 
 def make_shared_variables(variable_list, borrow=True):
-    return (sharedX(variable, borrow=borrow) if variable else None for variable in variable_list)
+    return (sharedX(variable, borrow=borrow) if variable is not None else None for variable in variable_list)
 
 def get_shared_weights(n_in, n_out, interval=None, name="W"):
     if interval is None:
@@ -61,7 +63,7 @@ def dropout(IN, p = 0.5, MRG=None):
 def add_gaussian_noise(IN, std = 1, MRG=None):
     if MRG is None:
         MRG = RNG_MRG.MRG_RandomStreams(1)
-    print 'GAUSSIAN NOISE : ', std
+    log.debug('GAUSSIAN NOISE : %s', str(std))
     noise   =   MRG.normal(avg  = 0, std  = std, size = IN.shape, dtype='float32')
     OUT     =   IN + noise
     return OUT
@@ -106,7 +108,7 @@ def restore_params(params, values):
         params[i].set_value(values[i])
 
 def load_from_config(config_filename):
-    print 'Loading local config file'
+    log.debug('Loading local config file')
     config_file =   open(config_filename, 'r')
     config      =   config_file.readlines()
     try:

@@ -37,10 +37,12 @@ class Iterator(object):
         # determine the number of possible iterations given the batch size, minimum batch size, dataset, and subset
         self.data_len = self.dataset.getDataShape(self.subset)[0]
         batches = self.data_len/self.batch_size
+        self.iterations = batches*[batch_size]
+
         remainder = numpy.remainder(self.data_len, self.batch_size)
         if remainder >= self.minimum_batch_size:
-            batches += 1
-        self.iterations = batches
+            self.iterations.append(remainder)
+
         self.iteration_index = 0
 
     def __iter__(self):

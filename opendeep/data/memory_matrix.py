@@ -61,11 +61,11 @@ class MemoryMatrix(Dataset):
         The dataset values at the index (indices)
         '''
         if subset is datasets.TRAIN:
-            return self.train_X[indices]
+            return self.train_X.get_value(borrow=True)[indices]
         elif subset is datasets.VALID and hasattr(self, 'valid_X') and self.valid_X:
-            return self.valid_X[indices]
+            return self.valid_X.get_value(borrow=True)[indices]
         elif subset is datasets.TEST and hasattr(self, 'test_X') and self.test_X:
-            return self.test_X[indices]
+            return self.test_X.get_value(borrow=True)[indices]
         else:
             return None
 
@@ -80,10 +80,10 @@ class MemoryMatrix(Dataset):
         The dataset labels at the index (indices)
         '''
         if subset is datasets.TRAIN and hasattr(self, 'train_Y') and self.train_Y:
-            return self.train_Y[indices]
+            return self.train_Y.get_value(borrow=True)[indices]
         elif subset is datasets.VALID and hasattr(self, 'valid_Y') and self.valid_Y:
-            return self.valid_Y[indices]
+            return self.valid_Y.get_value(borrow=True)[indices]
         elif subset is datasets.TEST and hasattr(self, 'test_Y') and self.test_Y:
-            return self.test_Y[indices]
+            return self.test_Y.get_value(borrow=True)[indices]
         else:
             return None

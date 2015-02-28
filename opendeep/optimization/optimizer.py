@@ -24,6 +24,8 @@ __email__ = "dev@opendeep.org"
 
 # standard libraries
 import logging
+# internal references
+from opendeep.utils.config_tools import create_dictionary_like
 
 log = logging.getLogger(__name__)
 
@@ -31,11 +33,22 @@ class Optimizer(object):
     '''
     Default interface for an optimizer implementation - to train a model on a dataset
     '''
-    def __init__(self, model, dataset, iteratorClass, config, rng=None):
+    def __init__(self, model, dataset, iteratorClass, config, defaults, rng=None):
+        # make sure the config is like a dictionary
+        config_dict = create_dictionary_like(config)
+        # make sure the defaults is like a dictionary
+        defaults_dict = create_dictionary_like(defaults)
+        # override any default values with the config (after making sure they parsed correctly)
+        if config_dict and defaults_dict:
+            defaults_dict.update(config_dict)
+        # set this update combination to the model arguments
+        self.args = defaults_dict
+
+        log.debug("ARGS: %s", str(self.args))
+
         self.model = model
         self.dataset = dataset
         self.iterator = iteratorClass
-        self.config = config
         self.rng = rng
 
     def train(self):

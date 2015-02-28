@@ -39,6 +39,7 @@ import theano.tensor as T
 import theano.sandbox.rng_mrg as RNG_MRG
 import PIL.Image
 # internal references
+import opendeep.log.logger as logger
 from opendeep import cast32, function
 from opendeep.data.image.mnist import MNIST
 from opendeep.models.model import Model
@@ -86,7 +87,8 @@ _train_args = {"n_epoch": 1000,
                "lr_decay": "exponential",
                "lr_factor": .995,
                "annealing": 0.995,
-               "momentum": 0.5}
+               "momentum": 0.5,
+               "unsupervised": True}
 
 
 class GSN(Model):
@@ -469,7 +471,7 @@ class GSN(Model):
     #############################
     # Save the model parameters #
     #############################
-    def save_params(self, n='na', params=[]):
+    def save_params(self, n='', params=[]):
         '''
         This saves the model paramaters to the param_file (pickle file)
 
@@ -477,8 +479,8 @@ class GSN(Model):
         :return: Boolean
         whether successful
         '''
-        log.maybeLog(self.logger, 'saving parameters...')
-        save_path = self.outdir+'gsn_params_epoch_'+str(n)+'.pkl'
+        log.info('saving parameters...')
+        save_path = self.outdir+'gsn_params'+n+'.pkl'
         f = open(save_path, 'wb')
         try:
             cPickle.dump(params, f, protocol=cPickle.HIGHEST_PROTOCOL)
@@ -494,13 +496,13 @@ class GSN(Model):
         whether successful
         '''
         if os.path.isfile(filename):
-            log.maybeLog(self.logger, "\nLoading existing GSN parameters...")
+            log.info("Loading existing GSN parameters...")
             loaded_params = cPickle.load(open(filename,'r'))
             [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[:len(self.weights_list)], self.weights_list)]
             [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(self.weights_list):], self.bias_list)]
-            log.maybeLog(self.logger, "Parameters loaded.\n")
+            log.info("Parameters loaded.")
         else:
-            log.maybeLog(self.logger, "\n\nCould not find existing GSN parameter file {}.\n\n".format(filename))
+            log.info("Could not find existing GSN parameter file %s.", filename)
         
 
 
@@ -897,6 +899,7 @@ def main():
     ########################################
     # Initialization things with arguments #
     ########################################
+    logger.config_root_logger()
     log.info("Creating a new GSN")
 
     data = MNIST()
