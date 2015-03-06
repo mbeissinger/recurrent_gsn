@@ -11,6 +11,7 @@ import os
 import cPickle
 # internal references
 from opendeep.utils.config_tools import create_dictionary_like
+from opendeep.utils import file_ops
 from opendeep.optimization.optimizer import Optimizer
 from opendeep.optimization.adadelta import AdaDelta  # Use AdaDelta by default - safer than picking momentum for SGD
 
@@ -248,7 +249,7 @@ class Model(object):
         values.
         :rtype: (iterable over pairs (shared_variable, new_expression). List, tuple, or dict.)
         """
-        # TODO: CHECK IF THIS METHOD CAN INCLUDE THE PARAMETERS TO DECAY THAT ARE CURRENTLY BEING RETURNED BY get_decay_params()
+        # TODO: should we do the parameter decays from get_decay_params() in the model updates? Right now I'm not because it seems less modular
         # by default, assume the model doesn't have updates - it's your job to return them in this method.
         return None
 
@@ -379,6 +380,13 @@ class Model(object):
         # By default, try to dump all the values from get_param_values into a pickle file.
         params = self.get_param_values()
 
+        param_file = os.path.realpath(param_file)
+
+        # force extension to be .pkl if it isn't a pickle file
+        _, extension = os.path.splitext(param_file)
+        if extension.lower() != ".pkl" or extension.lower() != ".pickle" or extension.lower() != ".p":
+            ''.join([param_file, '.pkl'])
+
         log.debug('Saving %s parameters to %s...',
                   str(type(self)), str(param_file))
         # try to dump the param values
@@ -406,22 +414,23 @@ class Model(object):
         :return: whether or not successful
         :rtype: Boolean
         """
-        # try to grab the pickled params from the specified param_file path
-        if os.path.isfile(param_file):
-            _, extension = os.path.splitext(param_file)
-            # make sure it is a pickle
-            if extension.lower() is '.pickle' or extension.lower() is '.pkl':
-                log.debug("loading model %s parameters from %s...",
-                          str(type(self)), str(param_file))
+        param_file = os.path.realpath(param_file)
 
-                with open(param_file, 'r') as f:
-                    loaded_params = cPickle.load(f)
-                self.set_param_values(loaded_params)
-                return True
-
-            else:
-                log.error("Param file %s doesn't have a supported extension! Must be a pickle file with .pickle or .pkl", str(param_file))
-                return False
+        # make sure it is a pickle file
+        ftype = file_ops.get_file_type(param_file)
+        if ftype == file_ops.PKL:
+            log.debug("loading model %s parameters from %s...",
+                      str(type(self)), str(param_file))
+            # try to grab the pickled params from the specified param_file path
+            with open(param_file, 'r') as f:
+                loaded_params = cPickle.load(f)
+            self.set_param_values(loaded_params)
+            return True
+        # if get_file_type didn't return pkl or none, it wasn't a pickle file
+        elif ftype:
+            log.error("Param file %s doesn't have a supported pickle extension!", str(param_file))
+            return False
+        # if get_file_type returned none, it couldn't find the file
         else:
             log.error("Param file %s couldn't be found!", str(param_file))
             return False

@@ -23,14 +23,13 @@ http://arxiv.org/abs/1312.5578
 '''
 __authors__ = "Markus Beissinger"
 __copyright__ = "Copyright 2015, Vitruvian Science"
-__credits__ = ["Markus Beissinger"]
+__credits__ = ["Markus Beissinger", "Li Yao"]
 __license__ = "Apache"
 __maintainer__ = "OpenDeep"
 __email__ = "dev@opendeep.org"
 
 # standard libraries
 import os
-import cPickle
 import time
 import logging
 # third-party libraries
@@ -48,7 +47,7 @@ from opendeep.models.model import Model
 from opendeep.utils.decay_functions import get_decay_function
 from opendeep.utils.activation_functions import get_activation_function
 from opendeep.utils.cost_functions import get_cost_function
-from opendeep.utils import data_tools
+from opendeep.utils import file_ops
 from opendeep.utils.image_tiler import tile_raster_images
 from opendeep.utils.utils import get_shared_weights, get_shared_bias, salt_and_pepper, add_gaussian_noise
 from opendeep.utils.utils import make_time_units_string
@@ -114,7 +113,7 @@ class GSN(Model):
         self.outdir = self.args.get("output_path")
         if self.outdir[-1] != '/':
             self.outdir = self.outdir+'/'
-        data_tools.mkdir_p(self.outdir)
+        file_ops.mkdir_p(self.outdir)
 
         # variables from the dataset that are used for initialization and image reconstruction
         if inputs_hook is None:
@@ -197,7 +196,6 @@ class GSN(Model):
             log.critical('Missing a cost function!')
             raise NotImplementedError()
 
-
         ############################
         # Theano variables and RNG #
         ############################
@@ -210,23 +208,27 @@ class GSN(Model):
         # initialize and seed rng
         self.MRG = RNG_MRG.MRG_RandomStreams(1)
         rng.seed(1)
-        
+
         ###############
         # Parameters! #
         ###############
         # initialize a list of weights and biases based on layer_sizes for the GSN
-        self.weights_list = [get_shared_weights(self.layer_sizes[layer], self.layer_sizes[layer+1], name="W_{0!s}_{1!s}".format(layer,layer+1)) for layer in range(self.layers)]  # initialize each layer to uniform sample from sqrt(6. / (n_in + n_out))
-        self.bias_list    = [get_shared_bias(self.layer_sizes[layer], name='b_'+str(layer)) for layer in range(self.layers + 1)]  # initialize each layer to 0's.
+        # initialize each layer to uniform sample from sqrt(6. / (n_in + n_out))
+        self.weights_list = [get_shared_weights(self.layer_sizes[i], self.layer_sizes[i + 1], name="W_{0!s}_{1!s}".format(i, i + 1))
+                             for i in range(self.layers)]
+        # initialize each layer bias to 0's.
+        self.bias_list = [get_shared_bias(self.layer_sizes[i], name='b_' + str(i))
+                          for i in range(self.layers + 1)]
 
         # build the params of the model into a list
         self.params = self.weights_list + self.bias_list
         log.debug("gsn params: %s", str(self.params))
 
         # using the properties, build the computational graph
-        self.build_computation_graph(inputs_hook, hiddens_hook)
+        self.build_computation_graph(hiddens_hook)
 
 
-    def build_computation_graph(self, inputs_hook, hiddens_hook):
+    def build_computation_graph(self, hiddens_hook):
         #################
         # Build the GSN #
         #################
@@ -576,29 +578,40 @@ class GSN(Model):
 
     def pack_hiddens(self, hiddens_list):
         '''
-        This concatenates all the odd layers into a single tensor (GSNs alternate even/odd layers for storing network)
+        This concatenates all the odd layers into a single tensor (GSNs alternate even/odd layers for storing network state)
         :param hiddens_list: list of the hiddens [h0...hn] where h0 is the visible layer
+        :type hiddens_list: List(theano tensor)
+
         :return: tensor concatenating the appropriate layers
+        :rtype: theano tensor
         '''
-        raise NotImplementedError()
-        hiddens_tensor = T.concatenate([], axis=0)
+        output_list = []
+        for idx, layer in enumerate(hiddens_list):
+            # we care about the odd hidden layers (since the visible layer is h0)
+            if idx % 2 != 0:
+                output_list.append(layer)
+
+        hiddens_tensor = T.concatenate(output_list, axis=1)
+        return hiddens_tensor
 
 
     def unpack_hiddens(self, hiddens_tensor):
         '''
         This makes a tensor of the hidden layers into a list
 
-        :param hiddens_tensor:
-        :return: list of theano variables
+        :param hiddens_tensor: theano tensor containing the odd layers of the gsn concatenated
+        :type hiddens_tensor: theano tensor
+
+        :return: list of theano variables that make the hidden representation (including the even layers initialized to 0)
+        :rtype: List(theano tensor)
         '''
-        raise NotImplementedError()
         h_list = [T.zeros_like(self.X)]
-        for layer, w in enumerate(self.weights_list):
+        for idx, w in enumerate(self.weights_list):
             # we only care about the odd layers (where h0 is the input layer - which makes it even here in the hidden layer space)
-            if (layer % 2) != 0:
+            if (idx % 2) != 0:
                 h_list.append(T.zeros_like(T.dot(h_list[-1], w)))
             else:
-                h_list.append((hiddens_tensor.T[(layer/2)*self.hidden_size:(layer/2+1)*self.hidden_size]).T)
+                h_list.append((hiddens_tensor.T[(idx/2)*self.layer_sizes[idx] : (idx/2+1)*self.layer_sizes[idx+1]]).T)
 
         return h_list
 
@@ -614,6 +627,7 @@ class GSN(Model):
         :return: whether or not successful
         :rtype: Boolean
         """
+        # save to the output directory from the model config
         base = self.outdir
         filepath = os.path.join(base, param_file)
         super(GSN, self).save_params(filepath)
@@ -1015,8 +1029,8 @@ def main():
     gsn = GSN(config=config, dataset=mnist)
 
     # # Load initial weights and biases from file
-    # params_to_load = 'gsn_params.pkl'
-    # gsn.load_params(params_to_load)
+    params_to_load = '../../outputs/gsn/mnist/trained_epoch_395.pkl'
+    gsn.load_params(params_to_load)
 
     optimizer = SGD(model=gsn, dataset=mnist, iterator_class=SequentialIterator, config=_train_args)
     gsn.train(optimizer=optimizer)

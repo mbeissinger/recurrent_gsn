@@ -122,14 +122,21 @@ class SGD(Optimizer):
 
         # Determine if this function is unsupervised or not by looking at the number of inputs to the f_learn function.
         # If there is only one input, it is unsupervised, otherwise, it is supervised.
-        if len(self.f_learn.inv_finder) == 1:
-            log.debug("Is unsupervised.")
+        # This workaround was provided by Pascal Lamblin
+        num_inputs = len([i for i in self.f_learn.maker.inputs if not i.shared])
+        if num_inputs == 1:
+            log.debug("Model is unsupervised: 1 input to f_learn.")
             self.unsupervised = True
-        else:
-            log.debug("Is supervised.")
+        elif num_inputs == 2:
+            log.debug("Model is supervised: 2 inputs to f_learn.")
             self.unsupervised = False
-
-        self.unsupervised = True
+        else:
+            log.error("Number of inputs to f_learn on model %s was %s. Needs to be 1 for unsupervised or 2 for supervised.",
+                      str(type(self.model)),
+                      str(num_inputs))
+            raise AssertionError("Number of inputs to f_learn on model %s was %s. Needs to be 1 for unsupervised or 2 for supervised."%
+                                  str(type(self.model)),
+                                  str(num_inputs))
 
         self.monitors = self.model.get_monitors()
 

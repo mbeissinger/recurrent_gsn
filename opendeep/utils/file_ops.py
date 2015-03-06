@@ -87,23 +87,18 @@ def get_file_type(file_path):
             return DIRECTORY
         # otherwise if it is a file
         elif os.path.isfile(file_path):
-            (_, fname) = os.path.split(file_path)
-            split_fname = fname.split('.')
-            if len(split_fname) > 1:
-                extension = split_fname[-1]
-                if extension == 'zip':
-                    return ZIP
-                elif extension == 'gz':
-                    return GZ
-                elif extension == 'tar':
-                    return TAR
-                elif extension == 'pkl' or extension == 'p' or extension =='pickle':
-                    return PKL
-                else:
-                    log.debug('Didn\'t recognize file extension %s for file %s', extension, file_path)
-                    return UNKNOWN
+            _, extension = os.path.splitext(file_path)
+            extension = extension.lower()
+            if extension == '.zip':
+                return ZIP
+            elif extension == '.gz':
+                return GZ
+            elif extension == '.tar':
+                return TAR
+            elif extension == '.pkl' or extension == '.p' or extension =='.pickle':
+                return PKL
             else:
-                log.debug('File %s has no extension...', file_path)
+                log.debug('Didn\'t recognize file extension %s for file %s', extension, file_path)
                 return UNKNOWN
         else:
             log.debug('File %s isn\'t a file or directory, but it exists... WHAT ARE YOU?!?', file_path)
