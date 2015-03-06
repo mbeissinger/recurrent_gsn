@@ -2,11 +2,13 @@
 # University of Montreal, 2012-2013
 
 
-import numpy, sys
+import numpy
+import sys
+
 import theano
 import theano.tensor as T
 
-from hessian_free import hf_optimizer, SequenceDataset
+from opendeep.optimization.future.hessian_free import hf_optimizer, SequenceDataset
 
 
 def test_cg(n=500):

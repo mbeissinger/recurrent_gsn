@@ -1,20 +1,15 @@
-import numpy, os, sys, cPickle
+import os
+import cPickle
 import numpy.random as rng
 import random as R
-import theano
-import theano.tensor as T
-import theano.sandbox.rng_mrg as RNG_MRG
 import PIL.Image
 from collections import OrderedDict
-from utils.image_tiler import tile_raster_images
 import time
+
+from utils.image_tiler import tile_raster_images
 from utils import data_tools as data
 from utils.utils import *
-from numpy import dtype
-import warnings
 from utils.logger import Logger
-from hessian_free.hf import hf_optimizer as hf_optimizer
-from hessian_free.hf import SequenceDataset as hf_sequence_dataset
 
 
 def experiment(state, outdir_base='./'):

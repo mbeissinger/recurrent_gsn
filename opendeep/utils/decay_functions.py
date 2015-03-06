@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 class DecayFunction(object):
     '''
-    Interface for a parameter decay function
+    Interface for a parameter decay function (like learning rate, noise levels, etc.)
     '''
     def __init__(self, param, initial, reduction_factor):
         # make sure the parameter is a Theano shared variable
@@ -49,6 +49,8 @@ class DecayFunction(object):
 class Linear(DecayFunction):
     def __init__(self, param, initial, reduction_factor):
         super(self.__class__, self).__init__(param, initial, reduction_factor)
+        if self.reduction_factor is None:
+            self.reduction_factor = 0
 
     def decay(self):
         new_value = self.param.get_value() - self.reduction_factor
@@ -62,6 +64,8 @@ class Linear(DecayFunction):
 class Exponential(DecayFunction):
     def __init__(self, param, initial, reduction_factor):
         super(self.__class__, self).__init__(param, initial, reduction_factor)
+        if self.reduction_factor is None:
+            self.reduction_factor = 1
 
     def decay(self):
         new_value = self.param.get_value()*self.reduction_factor
@@ -76,6 +80,8 @@ class Montreal(DecayFunction):
     def __init__(self, param, initial, reduction_factor):
         super(self.__class__, self).__init__(param, initial, reduction_factor)
         self.epoch = 1
+        if self.reduction_factor is None:
+            self.reduction_factor = 0
 
     def decay(self):
         new_value = self.initial / (1 + self.reduction_factor*self.epoch)

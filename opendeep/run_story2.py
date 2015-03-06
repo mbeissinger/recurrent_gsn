@@ -1,5 +1,7 @@
 import argparse
-from models import rnngsn_hiddens as Story2
+
+from opendeep.models.old import rnngsn_hiddens as Story2
+
 
 def main():
     parser = argparse.ArgumentParser()

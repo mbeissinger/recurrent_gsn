@@ -10,12 +10,14 @@ __email__ = "dev@opendeep.org"
 
 # standard libraries
 import logging
+import time
 # third party libraries
 import numpy
 import numpy.random as random
 # internal references
 from opendeep.data.iterators.iterator import Iterator
 import opendeep.data.dataset as datasets
+from opendeep.utils.utils import make_time_units_string
 
 log = logging.getLogger(__name__)
 
@@ -31,12 +33,14 @@ class RandomIterator(Iterator):
         else:
             self.rng = rng
 
+        _t = time.time()
         log.debug('Initializing a %s random iterator over %s', str(type(dataset)), datasets.get_subset_strings(subset))
         super(self.__class__, self).__init__(dataset, subset, batch_size, minimum_batch_size)
 
         # randomize the indices to access
         self.indices = numpy.arange(self.data_len)
         self.rng.shuffle(self.indices)
+        log.debug('iterator took %s to make' % make_time_units_string(time.time() - _t))
 
     def next(self):
         '''
@@ -50,7 +54,7 @@ class RandomIterator(Iterator):
         The intention of the protocol is that once an iterator's next() method raises StopIteration, it will continue
         to do so on subsequent calls. Implementations that do not obey this property are deemed broken.
         '''
-        if self.iteration_index < self.iterations:
+        if self.iteration_index < len(self.iterations):
             # convert the iteration index into the start and end indices for the batch in the dataset
             _start_index = self.iteration_index*self.batch_size
             _end_index   = _start_index + self.iterations[self.iteration_index]

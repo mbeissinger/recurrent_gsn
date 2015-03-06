@@ -1,21 +1,21 @@
-import numpy, os, sys, cPickle
+import numpy
+import os
+import cPickle
 import numpy.random as rng
 import random as R
+import PIL.Image
+from collections import OrderedDict
+import time
+
 import theano
 import theano.tensor as T
 import theano.sandbox.rng_mrg as RNG_MRG
-import PIL.Image
-from collections import OrderedDict
+
 from utils.image_tiler import tile_raster_images
-import time
 from utils import data_tools as data
 from utils.utils import *
-from numpy import dtype
-import warnings
 from utils.logger import Logger
-from hessian_free.hf import hf_optimizer as hf_optimizer
-from hessian_free.hf import SequenceDataset as hf_sequence_dataset
-import gsn
+from opendeep.models import generative_stochastic_network
 
 
 def experiment(state, outdir_base='./'):
@@ -220,7 +220,7 @@ def experiment(state, outdir_base='./'):
     ##############################################       
     if train_gsn_first:
         '''Build the actual gsn training graph'''
-        p_X_chain_gsn, _ = gsn.build_gsn(X,
+        p_X_chain_gsn, _ = generative_stochastic_network.build_gsn(X,
                                       weights_list,
                                       bias_list,
                                       True,
@@ -234,7 +234,7 @@ def experiment(state, outdir_base='./'):
                                       walkbacks,
                                       logger)
         # now without noise
-        p_X_chain_gsn_recon, _ = gsn.build_gsn(X,
+        p_X_chain_gsn_recon, _ = generative_stochastic_network.build_gsn(X,
                                       weights_list,
                                       bias_list,
                                       False,
@@ -306,9 +306,9 @@ def experiment(state, outdir_base='./'):
             h_list_recon.append((h_t_recon.T[(layer/2)*state.hidden_size:(layer/2+1)*state.hidden_size]).T)
     
     #with noise
-    _, cost, show_cost = gsn.build_gsn_given_hiddens(Xs, h_list, weights_list, bias_list, True, state.noiseless_h1, state.hidden_add_noise_sigma, state.input_salt_and_pepper, state.input_sampling, MRG, visible_activation, hidden_activation, walkbacks, cost_function, logger)
+    _, cost, show_cost = generative_stochastic_network.build_gsn_given_hiddens(Xs, h_list, weights_list, bias_list, True, state.noiseless_h1, state.hidden_add_noise_sigma, state.input_salt_and_pepper, state.input_sampling, MRG, visible_activation, hidden_activation, walkbacks, cost_function, logger)
     #without noise for reconstruction
-    x_sample_recon, _, _ = gsn.build_gsn_given_hiddens(Xs, h_list_recon, weights_list, bias_list, False, state.noiseless_h1, state.hidden_add_noise_sigma, state.input_salt_and_pepper, state.input_sampling, MRG, visible_activation, hidden_activation, walkbacks, cost_function, logger)
+    x_sample_recon, _, _ = generative_stochastic_network.build_gsn_given_hiddens(Xs, h_list_recon, weights_list, bias_list, False, state.noiseless_h1, state.hidden_add_noise_sigma, state.input_salt_and_pepper, state.input_sampling, MRG, visible_activation, hidden_activation, walkbacks, cost_function, logger)
     
     updates_train = updates_recurrent
     #updates_train.update(updates_gsn)
@@ -426,7 +426,7 @@ def experiment(state, outdir_base='./'):
 
     # ONE update
     logger.log("Performing one walkback in network state sampling.")
-    gsn.update_layers(network_state_output,
+    generative_stochastic_network.update_layers(network_state_output,
                       weights_list,
                       bias_list,
                       visible_pX_chain, 

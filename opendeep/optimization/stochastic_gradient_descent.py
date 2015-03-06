@@ -15,6 +15,7 @@ import time
 import numpy
 import numpy.random as random
 from theano.compat.python2x import OrderedDict  # use this compatability OrderedDict
+import theano.compat.six as six
 # internal references
 from opendeep import function, grad, trunc
 from opendeep.optimization.optimizer import Optimizer
@@ -36,16 +37,23 @@ _defaults = {"n_epoch": 1000,
              "lr_decay": "exponential",
              "lr_factor": .995,
              "momentum": 0.5,
-             "unsupervised": False}
+             'momentum_decay': 'linear',
+             'momentum_factor': 0,
+             'nesterov_momentum': True}
 
 class SGD(Optimizer):
     '''
     Stochastic gradient descent for training a model - includes early stopping, momentum, and annealing
     '''
 
-    def __init__(self, model, dataset, iteratorClass=SequentialIterator, config=dict(), defaults=_defaults, rng=None):
-        super(self.__class__, self).__init__(model, dataset, iteratorClass, config, defaults, rng)
-        # grab parameters from the config if it exists, otherwise use the defaults
+    def __init__(self, model, dataset, iterator_class=SequentialIterator, config=None, defaults=_defaults, rng=None):
+        super(SGD, self).__init__(model, dataset, iterator_class, config, defaults, rng)
+        # config and defaults are now combined in self.args! yay!
+
+        self.model = model
+        self.dataset = dataset
+        self.iterator = iterator_class
+
         # Training epochs - how many times to iterate over the whole dataset
         self.n_epoch = self.args.get('n_epoch')
 
@@ -61,18 +69,24 @@ class SGD(Optimizer):
         self.early_stop_length    = self.args.get('early_stop_length')
 
         # Learning rate - how drastic of a step do the parameters change
-        self.learning_rate       = sharedX(cast32(self.args.get('learning_rate')), 'learning_rate')
-        self.learning_rate_decay = get_decay_function(self.args.get('lr_decay'),
-                                                      self.learning_rate,
-                                                      self.learning_rate.get_value(),
-                                                      self.args.get('lr_factor'))
+        self.learning_rate       = sharedX(self.args.get('learning_rate'), 'learning_rate')
+        self.lr_scalers = self.model.get_lr_scalers()
+        if self.args.get('lr_decay'):
+            self.learning_rate_decay = get_decay_function(self.args.get('lr_decay'),
+                                                          self.learning_rate,
+                                                          self.learning_rate.get_value(),
+                                                          self.args.get('lr_factor'))
 
         # Momentum - smoothing over the parameter changes (see Hinton)
-        self.momentum = cast32(self.args.get('momentum'))
+        self.momentum = sharedX(self.args.get('momentum'), 'momentum')
+        if self.args.get('momentum_decay'):
+            self.momentum_decay = get_decay_function(self.args.get('momentum_decay'),
+                                                     self.momentum,
+                                                     self.momentum.get_value(),
+                                                     self.args.get('momentum_factor'))
+        self.nesterov_momentum = self.args.get('nesterov_momentum')
 
         self.params = self.model.get_params()
-
-        self.unsupervised = self.args.get("unsupervised")
 
         # RNG for working on random iterator
         if rng is None:
@@ -85,12 +99,12 @@ class SGD(Optimizer):
         log.info("%s params: %s", str(type(self.model)), str(self.params))
         # Stochastic gradient descent!
         gradient        = grad(self.model.get_train_cost(), self.params)
-        gradient_buffer = [sharedX(numpy.zeros(param.get_value().shape, dtype='float32')) for param in self.params]
-        m_gradient      = [self.momentum * gb + (cast32(1) - self.momentum) * g for (gb, g) in zip(gradient_buffer, gradient)]
-        param_updates   = [(param, param - self.learning_rate * mg) for (param, mg) in zip(self.params, m_gradient)]
-        gradient_buffer_updates = zip(gradient_buffer, m_gradient)
-        gradient_updates= OrderedDict(param_updates + gradient_buffer_updates)
+        grads           = OrderedDict(zip(self.params, gradient))
 
+        # Calculate the optimizer updates each run
+        gradient_updates = self.get_updates(grads)
+
+        # Combine the updates
         train_updates = model.get_updates()
         if train_updates:
             train_updates.update(gradient_updates)
@@ -106,16 +120,82 @@ class SGD(Optimizer):
                                 name    = 'f_learn')
         log.info('f_learn compilation took %s', make_time_units_string(time.time() - t))
 
-        self.monitor_function = self.model.get_monitor_function()
+        # Determine if this function is unsupervised or not by looking at the number of inputs to the f_learn function.
+        # If there is only one input, it is unsupervised, otherwise, it is supervised.
+        if len(self.f_learn.inv_finder) == 1:
+            log.debug("Is unsupervised.")
+            self.unsupervised = True
+        else:
+            log.debug("Is supervised.")
+            self.unsupervised = False
+
+        self.unsupervised = True
+
+        self.monitors = self.model.get_monitors()
+
+
+    def get_updates(self, grads):
+        '''
+        From Pylearn2 (https://github.com/lisa-lab/pylearn2/blob/master/pylearn2/training_algorithms/learning_rule.py)
+        Implements momentum as described in Section 9 of
+        "A Practical Guide to Training Restricted Boltzmann Machines",
+        Geoffrey Hinton.
+        Parameters are updated by the formula:
+        inc := momentum * inc - learning_rate * d cost / d param
+        param := param + inc
+
+        :param grads: OrderedDict
+        An OrderedDict of (parameter, gradient) for the model's gradients
+        :return: OrderedDict
+        Updates at each training step
+        '''
+        log.debug('Setting up Stochastic Gradient Descent with momentum for optimizer...')
+        # params = grads.keys()
+        # gradients = grads.values()
+        #
+        # gradient_buffer = [sharedX(numpy.zeros(param.get_value().shape, dtype='float32')) for param in params]
+        # m_gradient      = [self.momentum * gb + (cast32(1) - self.momentum) * g for (gb, g) in zip(gradient_buffer, gradients)]
+        #
+        # param_updates   = [(param, param - self.learning_rate * mg) for (param, mg) in zip(params, m_gradient)]
+        # gradient_buffer_updates = zip(gradient_buffer, m_gradient)
+        #
+        # return OrderedDict(param_updates + gradient_buffer_updates)
+        updates = OrderedDict()
+        for (param, gradient) in six.iteritems(grads):
+            vel = sharedX(param.get_value() * 0.)
+            assert param.dtype == vel.dtype
+            assert gradient.dtype == param.dtype
+            if param.name is not None:
+                vel.name = 'vel_' + param.name
+
+            scaled_lr = self.learning_rate * self.lr_scalers.get(param, 1.)
+            updates[vel] = self.momentum * vel - scaled_lr * gradient
+
+            inc = updates[vel]
+            if self.nesterov_momentum:
+                log.debug('Using Nesterov momentum')
+                inc = self.momentum * inc - scaled_lr * gradient
+
+            assert inc.dtype == vel.dtype
+            updates[param] = param + inc
+
+        return updates
 
 
     def train(self, continue_training=False):
         log.info("-----------TRAINING %s FOR %s EPOCHS (continue_training=%s)-----------", str(type(self.model)), str(self.n_epoch), str(continue_training))
+        log.debug("Train dataset size is: %s", self.dataset.getDataShape(datasets.TRAIN))
+        if self.dataset.hasSubset(datasets.VALID):
+            log.debug("Valid dataset size is: %s", self.dataset.getDataShape(datasets.VALID))
+        if self.dataset.hasSubset(datasets.TEST):
+            log.debug("Test dataset size is: %s", self.dataset.getDataShape(datasets.TEST))
+
         self.STOP    = False
         self.epoch_counter = 0
         if not continue_training:
             # reset the learning rate
-            self.learning_rate_decay.reset()
+            if hasattr(self, 'learning_rate_decay'):
+                self.learning_rate_decay.reset()
             # reset the other model decaying functions
             for decay_param in self.model.get_decay_params():
                 decay_param.reset()
@@ -128,9 +208,20 @@ class SGD(Optimizer):
         start_time = time.time()
 
         while not self.STOP:
-            self.STOP = self._perform_one_epoch()
+            try:
+                self.STOP = self._perform_one_epoch()
+            except KeyboardInterrupt:
+                log.info("STOPPING EARLY FROM KEYBOARDINTERRUPT")
+                self.STOP = True
 
-        log.info("------------TOTAL %s SGD TRAIN TIME TOOK %s---------", str(type(self.model)), make_time_units_string(time.time()-start_time))
+        #save params
+        if self.best_params is not None:
+            log.debug("Restoring best model parameters...")
+            restore_params(self.params, self.best_params)
+        log.debug("Saving model parameters...")
+        self.model.save_params('trained_epoch_'+str(self.epoch_counter)+'.pkl')
+
+        log.info("------------TOTAL %s TRAIN TIME TOOK %s---------", str(type(self.model)), make_time_units_string(time.time()-start_time))
 
 
     def _perform_one_epoch(self):
@@ -140,43 +231,51 @@ class SGD(Optimizer):
 
             #train
             train_costs = []
-            train_monitors = []
+            train_monitors = {key: [] for key in self.monitors.keys()}
             for x, y in self.iterator(self.dataset, datasets.TRAIN, self.batch_size, self.minimum_batch_size, self.rng):
                 if self.unsupervised:
                     train_costs.append(self.f_learn(x))
-                    train_monitors.append(self.monitor_function(x))
+                    for key in self.monitors.keys():
+                        monitor_function = self.monitors[key]
+                        train_monitors[key].append(monitor_function(x))
                 else:
                     train_costs.append(self.f_learn(x, y))
-                    train_monitors.append(self.monitor_function(x, y))
+                    for key in self.monitors.keys():
+                        monitor_function = self.monitors[key]
+                        train_monitors[key].append(monitor_function(x, y))
             log.info('Train: %s', trunc(numpy.mean(train_costs, 0)))
-            log.info('Train monitors: %s', str([trunc(num) for num in numpy.mean(train_monitors, 0)]))
+            log.info('Train monitors: %s', str({key: numpy.mean(value, 0) for key, value in train_monitors.items()}))
 
             #valid
             if self.dataset.hasSubset(datasets.VALID):
-                valid_monitors = []
+                valid_monitors = {key: [] for key in self.monitors.keys()}
                 for x, y in self.iterator(self.dataset, datasets.VALID, self.batch_size, self.minimum_batch_size, self.rng):
                     if self.unsupervised:
-                        valid_monitors.append(self.monitor_function(x))
+                        for key in self.monitors.keys():
+                            monitor_function = self.monitors[key]
+                            valid_monitors[key].append(monitor_function(x))
                     else:
-                        valid_monitors.append(self.monitor_function(x, y))
-                log.info('Valid monitors: %s', str([trunc(num) for num in numpy.mean(valid_monitors, 0)]))
+                        for key in self.monitors.keys():
+                            monitor_function = self.monitors[key]
+                            valid_monitors[key].append(monitor_function(x, y))
+                log.info('Valid monitors: %s', str({key: numpy.mean(value, 0) for key, value in valid_monitors.items()}))
 
             #test
             if self.dataset.hasSubset(datasets.TEST):
-                test_monitors = []
+                test_monitors = {key: [] for key in self.monitors.keys()}
                 for x, y in self.iterator(self.dataset, datasets.TEST, self.batch_size, self.minimum_batch_size, self.rng):
                     if self.unsupervised:
-                        test_monitors.append(self.monitor_function(x))
+                        for key in self.monitors.keys():
+                            monitor_function = self.monitors[key]
+                            test_monitors[key].append(monitor_function(x))
                     else:
-                        test_monitors.append(self.monitor_function(x, y))
-                log.info('Test monitors: %s', str([trunc(num) for num in numpy.mean(test_monitors, 0)]))
+                        for key in self.monitors.keys():
+                            monitor_function = self.monitors[key]
+                            test_monitors[key].append(monitor_function(x, y))
+                log.info('Test monitors: %s', str({key: numpy.mean(value, 0) for key, value in test_monitors.items()}))
 
-            #check for early stopping
-            if self.dataset.hasSubset(datasets.VALID):
-                # use the first monitor for the cost checking
-                cost = numpy.sum(valid_monitors, 0)[0]
-            else:
-                cost = numpy.sum(train_costs)
+            # check for early stopping on train costs
+            cost = numpy.sum(train_costs)
             if cost < self.best_cost*self.early_stop_threshold:
                 self.patience = 0
                 self.best_cost = cost
@@ -186,9 +285,8 @@ class SGD(Optimizer):
                 self.patience += 1
 
             if self.epoch_counter >= self.n_epoch or self.patience >= self.early_stop_length:
+                log.info("Stopping early...")
                 self.STOP = True
-                if self.best_params is not None:
-                    restore_params(self.params, self.best_params)
 
             timing = time.time() - t
             self.times.append(timing)
@@ -197,11 +295,14 @@ class SGD(Optimizer):
 
             log.info('remaining time: '+make_time_units_string((self.n_epoch - self.epoch_counter) * numpy.mean(self.times)))
 
-            if (self.epoch_counter % self.save_frequency) == 0 or self.STOP is True:
+            if (self.epoch_counter % self.save_frequency) == 0:
                 #save params
-                self.model.save_params('_epoch_'+str(self.epoch_counter))
+                self.model.save_params('trained_epoch_'+str(self.epoch_counter)+'.pkl')
 
             # ANNEAL!
-            self.learning_rate_decay.decay()
+            if hasattr(self, 'learning_rate_decay'):
+                self.learning_rate_decay.decay()
+            if hasattr(self, 'momentum_decay'):
+                self.momentum_decay.decay()
             for decay_param in self.model.get_decay_params():
                 decay_param.decay()

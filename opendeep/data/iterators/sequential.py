@@ -10,11 +10,11 @@ __email__ = "dev@opendeep.org"
 
 # standard libraries
 import logging
-# third party libraries
-import numpy
+import time
 # internal references
 from opendeep.data.iterators.iterator import Iterator
 import opendeep.data.dataset as datasets
+from opendeep.utils.utils import make_time_units_string
 
 log = logging.getLogger(__name__)
 
@@ -23,8 +23,10 @@ class SequentialIterator(Iterator):
     An iterator that goes through a dataset in its stored sequence
     '''
     def __init__(self, dataset, subset=datasets.TRAIN, batch_size=1, minimum_batch_size=1, rng=None):
+        _t = time.time()
         log.debug('Initializing a %s sequential iterator over %s', str(type(dataset)), datasets.get_subset_strings(subset))
         super(self.__class__, self).__init__(dataset, subset, batch_size, minimum_batch_size, rng)
+        log.debug('iterator took %s to make' % make_time_units_string(time.time()-_t))
 
     def next(self):
         '''

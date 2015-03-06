@@ -1,8 +1,11 @@
 import argparse
-from models.rnngsn import RNN_GSN
+
+import theano
+
+from opendeep.models.old.rnngsn import RNN_GSN
 from utils import data_tools as data
 from utils import logger as log
-import theano
+
 
 def main():
     parser = argparse.ArgumentParser()

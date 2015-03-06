@@ -69,11 +69,12 @@ class Dataset(object):
             try:
                 mkdir_p(self.dataset_dir)
                 self.dataset_location = os.path.join(self.dataset_dir, self.filename)
-            except:
-                log.exception("Couldn't make the dataset path for %s with directory %s and filename %s",
+            except Exception as e:
+                log.error("Couldn't make the dataset path for %s with directory %s and filename %s",
                               str(type(self)),
                               self.dataset_dir,
                               str(self.filename))
+                log.exception("%s", str(e))
                 self.dataset_location = None
             finally:
                 os.chdir(prevdir)
@@ -208,6 +209,10 @@ class Dataset(object):
         else:
             log.critical('No getDataShape method implemented for %s for subset %s!', str(type(self)), get_subset_strings(subset))
             raise NotImplementedError()
+
+
+    def get_example_shape(self):
+        return self.getDataShape(TRAIN)[1]
 
 
     def scaleMeanZeroVarianceOne(self):

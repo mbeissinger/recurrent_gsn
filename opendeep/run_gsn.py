@@ -1,8 +1,14 @@
-import argparse, numpy, os, cPickle
-from models.gsn import GSN
+import argparse
+import numpy
+import os
+import cPickle
+
+from opendeep.models.generative_stochastic_network import GSN
 from utils import data_tools as data
 import utils.logger as log
 from utils.utils import load_from_config
+
+
 
 ###############################################
 # MAIN METHOD FOR RUNNING DEFAULT GSN EXAMPLE #

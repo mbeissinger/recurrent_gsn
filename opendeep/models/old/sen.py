@@ -2,37 +2,34 @@
 @author: Markus Beissinger
 University of Pennsylvania, 2014-2015
 
-This class produces the model discussed in the paper: (my rnn-gsn paper)
-
-Inspired by code for the RNN-RBM:
-http://deeplearning.net/tutorial/rnnrbm.html
+This class produces the model discussed in the paper: (my sen paper)
 
 '''
 
-import numpy, os, sys, cPickle
+import numpy
+import cPickle
 import numpy.random as rng
-import random as R
-import theano
-import theano.tensor as T
-import theano.sandbox.rng_mrg as RNG_MRG
 import PIL.Image
 from collections import OrderedDict
 import time
+
+import theano
+import theano.tensor as T
+import theano.sandbox.rng_mrg as RNG_MRG
+
 from utils import data_tools as data
-import warnings
-from utils.logger import Logger
-from hessian_free.hf import hf_optimizer as hf_optimizer
-from hessian_free.hf import SequenceDataset as hf_sequence_dataset
-import gsn
+from opendeep.models import generative_stochastic_network
 import utils.logger as log
 from utils.image_tiler import tile_raster_images
-from utils.utils import cast32, logit, trunc, get_shared_weights, get_shared_bias, salt_and_pepper, make_time_units_string, get_activation_function, get_cost_function, raise_to_list, closest_to_square_factors, copy_params, restore_params
-from numpy import ceil, sqrt
+from utils.utils import cast32, logit, trunc, get_shared_weights, get_shared_bias, salt_and_pepper, \
+    make_time_units_string
 
 
-# Default values to use for some RNN-GSN parameters
+
+
+# Default values to use for SEN parameters
 defaults = {# gsn parameters
-            "layers": 3, # number of hidden layers to use
+            "gsn_layers": 3, # number of hidden layers to use
             "walkbacks": 5, # number of walkbacks (generally 2*layers) - need enough to have info from top layer propagate to visible layer
             "hidden_size": 1500,
             "hidden_activation": lambda x: T.tanh(x),
@@ -42,8 +39,10 @@ defaults = {# gsn parameters
             # recurrent parameters
             "recurrent_hidden_size": 1500,
             "recurrent_hidden_activation": lambda x: T.tanh(x),
+            # sen parameters
+            
             # training parameters
-            "initialize_gsn": True,
+            "load_params": False,
             "cost_function": lambda x,y: T.mean(T.nnet.binary_crossentropy(x,y)),
             "n_epoch": 1000,
             "gsn_batch_size": 100,
@@ -65,12 +64,12 @@ defaults = {# gsn parameters
             # data parameters
             "is_image": True,
             "vis_init": False,
-            "output_path": '../outputs/rnn_gsn/'}
+            "output_path": '../outputs/sen/'}
 
 
-class RNN_GSN():
+class SEN():
     '''
-    Class for creating a new Recurrent Generative Stochastic Network (RNN-GSN)
+    Class for creating a new Sequence Encoder Network (SEN)
     '''
     def __init__(self, train_X=None, train_Y=None, valid_X=None, valid_Y=None, test_X=None, test_Y=None, args=None, logger=None):
         # Output logger
@@ -78,41 +77,32 @@ class RNN_GSN():
         self.outdir = args.get("output_path", defaults["output_path"])
         if self.outdir[-1] != '/':
             self.outdir = self.outdir+'/'
-            
-        data.mkdir_p(self.outdir)
+        # Input data
+        self.train_X = train_X
+        self.train_Y = train_Y
+        self.valid_X = valid_X
+        self.valid_Y = valid_Y
+        self.test_X  = test_X
+        self.test_Y  = test_Y
         
-        # Configuration
-        config_filename = self.outdir+'config'
-        logger.log('Saving config')
-        with open(config_filename, 'w') as f:
-            f.write(str(args))
- 
-        # Input data - make sure it is a list of shared datasets if it isn't. THIS WILL KEEP 'NONE' AS 'NONE' no need to worry :)
-        self.train_X = raise_to_list(train_X)
-        self.train_Y = raise_to_list(train_Y)
-        self.valid_X = raise_to_list(valid_X)
-        self.valid_Y = raise_to_list(valid_Y)
-        self.test_X  = raise_to_list(test_X)
-        self.test_Y  = raise_to_list(test_Y)
-                
         # variables from the dataset that are used for initialization and image reconstruction
-        if self.train_X is None:
+        if train_X is None:
             self.N_input = args.get("input_size")
             if args.get("input_size") is None:
                 raise AssertionError("Please either specify input_size in the arguments or provide an example train_X for input dimensionality.")
         else:
-            self.N_input = self.train_X[0].get_value(borrow=True).shape[1]
+            self.N_input = train_X.eval().shape[1]
+        self.root_N_input = numpy.sqrt(self.N_input)
         
         self.is_image = args.get('is_image', defaults['is_image'])
         if self.is_image:
-            (_h, _w) = closest_to_square_factors(self.N_input)
-            self.image_width  = args.get('width', _w)
-            self.image_height = args.get('height', _h)
+            self.image_width  = args.get('width', self.root_N_input)
+            self.image_height = args.get('height', self.root_N_input)
             
         #######################################
         # Network and training specifications #
         #######################################
-        self.layers          = args.get('layers', defaults['layers']) # number hidden layers
+        self.gsn_layers      = args.get('gsn_layers', defaults['gsn_layers']) # number hidden layers
         self.walkbacks       = args.get('walkbacks', defaults['walkbacks']) # number of walkbacks
         self.learning_rate   = theano.shared(cast32(args.get('learning_rate', defaults['learning_rate'])))  # learning rate
         self.init_learn_rate = cast32(args.get('learning_rate', defaults['learning_rate']))
@@ -131,12 +121,12 @@ class RNN_GSN():
         self.input_salt_and_pepper  = theano.shared(cast32(args.get('input_salt_and_pepper', defaults["input_salt_and_pepper"])))
         self.input_sampling         = args.get('input_sampling', defaults["input_sampling"])
         self.vis_init               = args.get('vis_init', defaults['vis_init'])
-        self.initialize_gsn         = args.get('initialize_gsn', defaults['initialize_gsn'])
+        self.load_params            = args.get('load_params', defaults['load_params'])
         self.hessian_free           = args.get('hessian_free', defaults['hessian_free'])
         
-        self.hidden_size = args.get('hidden_size', defaults['hidden_size'])
-        self.layer_sizes = [self.N_input] + [self.hidden_size] * self.layers # layer sizes, from h0 to hK (h0 is the visible layer)
+        self.layer_sizes = [self.N_input] + [args.get('hidden_size', defaults['hidden_size'])] * self.gsn_layers # layer sizes, from h0 to hK (h0 is the visible layer)
         self.recurrent_hidden_size = args.get('recurrent_hidden_size', defaults['recurrent_hidden_size'])
+        self.top_layer_sizes = [self.recurrent_hidden_size] + [args.get('hidden_size', defaults['hidden_size'])] * self.gsn_layers # layer sizes, from h0 to hK (h0 is the visible layer)
         
         self.f_recon = None
         self.f_noise = None
@@ -146,31 +136,53 @@ class RNN_GSN():
         if args.get('hidden_activation') is not None:
             log.maybeLog(self.logger, 'Using specified activation for GSN hiddens')
             self.hidden_activation = args.get('hidden_activation')
+        elif args.get('hidden_act') == 'sigmoid':
+            log.maybeLog(self.logger, 'Using sigmoid activation for GSN hiddens')
+            self.hidden_activation = T.nnet.sigmoid
+        elif args.get('hidden_act') == 'rectifier':
+            log.maybeLog(self.logger, 'Using rectifier activation for GSN hiddens')
+            self.hidden_activation = lambda x : T.maximum(cast32(0), x)
+        elif args.get('hidden_act') == 'tanh':
+            log.maybeLog(self.logger, 'Using hyperbolic tangent activation for GSN hiddens')
+            self.hidden_activation = lambda x : T.tanh(x)
         elif args.get('hidden_act') is not None:
-            self.hidden_activation = get_activation_function(args.get('hidden_act'))
-            log.maybeLog(self.logger, 'Using {0!s} activation for GSN hiddens'.format(args.get('hidden_act')))
+            log.maybeLog(self.logger, "Did not recognize hidden activation {0!s}, please use tanh, rectifier, or sigmoid for GSN hiddens".format(args.get('hidden_act')))
+            raise NotImplementedError("Did not recognize hidden activation {0!s}, please use tanh, rectifier, or sigmoid for GSN hiddens".format(args.get('hidden_act')))
         else:
             log.maybeLog(self.logger, "Using default activation for GSN hiddens")
             self.hidden_activation = defaults['hidden_activation']
-            
         # For the RNN:
         if args.get('recurrent_hidden_activation') is not None:
             log.maybeLog(self.logger, 'Using specified activation for RNN hiddens')
             self.recurrent_hidden_activation = args.get('recurrent_hidden_activation')
+        elif args.get('recurrent_hidden_act') == 'sigmoid':
+            log.maybeLog(self.logger, 'Using sigmoid activation for RNN hiddens')
+            self.recurrent_hidden_activation = T.nnet.sigmoid
+        elif args.get('recurrent_hidden_act') == 'rectifier':
+            log.maybeLog(self.logger, 'Using rectifier activation for RNN hiddens')
+            self.recurrent_hidden_activation = lambda x : T.maximum(cast32(0), x)
+        elif args.get('recurrent_hidden_act') == 'tanh':
+            log.maybeLog(self.logger, 'Using hyperbolic tangent activation for RNN hiddens')
+            self.recurrent_hidden_activation = lambda x : T.tanh(x)
         elif args.get('recurrent_hidden_act') is not None:
-            self.recurrent_hidden_activation = get_activation_function(args.get('recurrent_hidden_act'))
-            log.maybeLog(self.logger, 'Using {0!s} activation for RNN hiddens'.format(args.get('recurrent_hidden_act')))
+            log.maybeLog(self.logger, "Did not recognize hidden activation {0!s}, please use tanh, rectifier, or sigmoid for RNN hiddens".format(args.get('hidden_act')))
+            raise NotImplementedError("Did not recognize hidden activation {0!s}, please use tanh, rectifier, or sigmoid for RNN hiddens".format(args.get('hidden_act')))
         else:
             log.maybeLog(self.logger, "Using default activation for RNN hiddens")
             self.recurrent_hidden_activation = defaults['recurrent_hidden_activation']
-            
         # Visible layer activation
         if args.get('visible_activation') is not None:
             log.maybeLog(self.logger, 'Using specified activation for visible layer')
             self.visible_activation = args.get('visible_activation')
+        elif args.get('visible_act') == 'sigmoid':
+            log.maybeLog(self.logger, 'Using sigmoid activation for visible layer')
+            self.visible_activation = T.nnet.sigmoid
+        elif args.get('visible_act') == 'softmax':
+            log.maybeLog(self.logger, 'Using softmax activation for visible layer')
+            self.visible_activation = T.nnet.softmax
         elif args.get('visible_act') is not None:
-            self.visible_activation = get_activation_function(args.get('visible_act'))
-            log.maybeLog(self.logger, 'Using {0!s} activation for visible layer'.format(args.get('visible_act')))
+            log.maybeLog(self.logger, "Did not recognize visible activation {0!s}, please use sigmoid or softmax".format(args.get('visible_act')))
+            raise NotImplementedError("Did not recognize visible activation {0!s}, please use sigmoid or softmax".format(args.get('visible_act')))
         else:
             log.maybeLog(self.logger, 'Using default activation for visible layer')
             self.visible_activation = defaults['visible_activation']
@@ -179,9 +191,16 @@ class RNN_GSN():
         if args.get('cost_function') is not None:
             log.maybeLog(self.logger, '\nUsing specified cost function for GSN training\n')
             self.cost_function = args.get('cost_function')
+        elif args.get('cost_funct') == 'binary_crossentropy':
+            log.maybeLog(self.logger, '\nUsing binary cross-entropy cost!\n')
+            self.cost_function = lambda x,y: T.mean(T.nnet.binary_crossentropy(x,y))
+        elif args.get('cost_funct') == 'square':
+            log.maybeLog(self.logger, "\nUsing square error cost!\n")
+            #cost_function = lambda x,y: T.log(T.mean(T.sqr(x-y)))
+            self.cost_function = lambda x,y: T.log(T.sum(T.pow((x-y),2)))
         elif args.get('cost_funct') is not None:
-            self.cost_function = get_cost_function(args.get('cost_funct'))
-            log.maybeLog(self.logger, 'Using {0!s} for cost function'.format(args.get('cost_funct')))
+            log.maybeLog(self.logger, "\nDid not recognize cost function {0!s}, please use binary_crossentropy or square\n".format(args.get('cost_funct')))
+            raise NotImplementedError("Did not recognize cost function {0!s}, please use binary_crossentropy or square".format(args.get('cost_funct')))
         else:
             log.maybeLog(self.logger, '\nUsing default cost function for GSN training\n')
             self.cost_function = defaults['cost_function']
@@ -190,50 +209,91 @@ class RNN_GSN():
         # Theano variables and RNG #
         ############################
         self.X = T.fmatrix('X') #single (batch) for training gsn
-        self.Xs = T.fmatrix('Xs') #sequence for training rnn-gsn
+        self.Xs = T.fmatrix('Xs') #sequence for training rnn
         self.MRG = RNG_MRG.MRG_RandomStreams(1)
         
         ###############
         # Parameters! #
         ###############
-        #gsn
-        self.weights_list = [get_shared_weights(self.layer_sizes[i], self.layer_sizes[i+1], name="W_{0!s}_{1!s}".format(i,i+1)) for i in range(self.layers)] # initialize each layer to uniform sample from sqrt(6. / (n_in + n_out))
-        self.bias_list    = [get_shared_bias(self.layer_sizes[i], name='b_'+str(i)) for i in range(self.layers + 1)] # initialize each layer to 0's.
+        #visible gsn
+        self.weights_list = [get_shared_weights(self.layer_sizes[i], self.layer_sizes[i+1], name="W_{0!s}_{1!s}".format(i,i+1)) for i in range(self.gsn_layers)] # initialize each layer to uniform sample from sqrt(6. / (n_in + n_out))
+        self.bias_list    = [get_shared_bias(self.layer_sizes[i], name='b_'+str(i)) for i in range(self.gsn_layers + 1)] # initialize each layer to 0's.
         
         #recurrent
-        self.recurrent_to_gsn_weights_list = [get_shared_weights(self.recurrent_hidden_size, self.layer_sizes[layer], name="W_u_h{0!s}".format(layer)) for layer in range(self.layers+1) if layer%2 != 0]
+        self.recurrent_to_gsn_weights_list = [get_shared_weights(self.recurrent_hidden_size, self.layer_sizes[layer], name="W_u_h{0!s}".format(layer)) for layer in range(self.gsn_layers+1) if layer%2 != 0]
         self.W_u_u = get_shared_weights(self.recurrent_hidden_size, self.recurrent_hidden_size, name="W_u_u")
-        self.W_x_u = get_shared_weights(self.N_input, self.recurrent_hidden_size, name="W_x_u")
+        self.W_ins_u = get_shared_weights(args.get('hidden_size', defaults['hidden_size']), self.recurrent_hidden_size, name="W_ins_u")
         self.recurrent_bias = get_shared_bias(self.recurrent_hidden_size, name='b_u')
+        
+        #top layer gsn
+        self.top_weights_list = [get_shared_weights(self.top_layer_sizes[i], self.top_layer_sizes[i+1], name="Wtop_{0!s}_{1!s}".format(i,i+1)) for i in range(self.gsn_layers)] # initialize each layer to uniform sample from sqrt(6. / (n_in + n_out))
+        self.top_bias_list    = [get_shared_bias(self.top_layer_sizes[i], name='btop_'+str(i)) for i in range(self.gsn_layers + 1)] # initialize each layer to 0's.
         
         #lists for use with gradients
         self.gsn_params = self.weights_list + self.bias_list
-        self.u_params   = [self.W_u_u, self.W_x_u, self.recurrent_bias]
-        self.params     = self.gsn_params + self.recurrent_to_gsn_weights_list + self.u_params
+        self.u_params   = [self.W_u_u, self.W_ins_u, self.recurrent_bias]
+        self.top_params = self.top_weights_list + self.top_bias_list
+        self.params     = self.gsn_params + self.recurrent_to_gsn_weights_list + self.u_params + self.top_params
         
-        ###########################################################
-        #           load initial parameters of gsn                #
-        ###########################################################
-        self.train_gsn_first = False
-        if self.initialize_gsn:
+        ###################################################
+        #          load initial parameters                #
+        ###################################################
+        if self.load_params:
             params_to_load = 'gsn_params.pkl'
-            if not os.path.isfile(params_to_load):
-                self.train_gsn_first = True 
-            else:
-                log.maybeLog(self.logger, "\nLoading existing GSN parameters\n")
-                loaded_params = cPickle.load(open(params_to_load,'r'))
-                [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[:len(self.weights_list)], self.weights_list)]
-                [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(self.weights_list):], self.bias_list)]
+            log.maybeLog(self.logger, "\nLoading existing GSN parameters\n")
+            loaded_params = cPickle.load(open(params_to_load,'r'))
+            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[:len(self.weights_list)], self.weights_list)]
+            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(self.weights_list):], self.bias_list)]
+            
+            params_to_load = 'rnn_params.pkl'
+            log.maybeLog(self.logger, "\nLoading existing RNN parameters\n")
+            loaded_params = cPickle.load(open(params_to_load,'r'))
+            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[:len(self.recurrent_to_gsn_weights_list)], self.recurrent_to_gsn_weights_list)]
+            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(self.recurrent_to_gsn_weights_list):len(self.recurrent_to_gsn_weights_list)+1], self.W_u_u)]
+            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(self.recurrent_to_gsn_weights_list)+1:len(self.recurrent_to_gsn_weights_list)+2], self.W_ins_u)]
+            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(self.recurrent_to_gsn_weights_list)+2:], self.recurrent_bias)]
+            
+            params_to_load = 'top_gsn_params.pkl'
+            log.maybeLog(self.logger, "\nLoading existing top level GSN parameters\n")
+            loaded_params = cPickle.load(open(params_to_load,'r'))
+            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[:len(self.top_weights_list)], self.top_weights_list)]
+            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[len(self.top_weights_list):], self.top_bias_list)]
                 
-        if self.initialize_gsn:
-            self.gsn_args = {'weights_list':       self.weights_list,
-                             'bias_list':          self.bias_list,
+        self.gsn_args = {'weights_list':       self.weights_list,
+                         'bias_list':          self.bias_list,
+                         'hidden_activation':  self.hidden_activation,
+                         'visible_activation': self.visible_activation,
+                         'cost_function':      self.cost_function,
+                         'layers':             self.gsn_layers,
+                         'walkbacks':          self.walkbacks,
+                         'hidden_size':        args.get('hidden_size', defaults['hidden_size']),
+                         'learning_rate':      args.get('learning_rate', defaults['learning_rate']),
+                         'momentum':           args.get('momentum', defaults['momentum']),
+                         'annealing':          self.annealing,
+                         'noise_annealing':    self.noise_annealing,
+                         'batch_size':         self.gsn_batch_size,
+                         'n_epoch':            self.n_epoch,
+                         'early_stop_threshold':   self.early_stop_threshold,
+                         'early_stop_length':      self.early_stop_length,
+                         'save_frequency':         self.save_frequency,
+                         'noiseless_h1':           self.noiseless_h1,
+                         'hidden_add_noise_sigma': args.get('hidden_add_noise_sigma', defaults['hidden_add_noise_sigma']),
+                         'input_salt_and_pepper':  args.get('input_salt_and_pepper', defaults['input_salt_and_pepper']),
+                         'input_sampling':      self.input_sampling,
+                         'vis_init':            self.vis_init,
+                         'output_path':         self.outdir+'gsn/',
+                         'is_image':            self.is_image,
+                         'input_size':          self.N_input
+                         }
+        
+        self.top_gsn_args = {'weights_list':       self.top_weights_list,
+                             'bias_list':          self.top_bias_list,
                              'hidden_activation':  self.hidden_activation,
-                             'visible_activation': self.visible_activation,
+                             'visible_activation': self.recurrent_hidden_activation,
                              'cost_function':      self.cost_function,
-                             'layers':             self.layers,
+                             'layers':             self.gsn_layers,
                              'walkbacks':          self.walkbacks,
-                             'hidden_size':        self.hidden_size,
+                             'hidden_size':        args.get('hidden_size', defaults['hidden_size']),
                              'learning_rate':      args.get('learning_rate', defaults['learning_rate']),
                              'momentum':           args.get('momentum', defaults['momentum']),
                              'annealing':          self.annealing,
@@ -248,9 +308,9 @@ class RNN_GSN():
                              'input_salt_and_pepper':  args.get('input_salt_and_pepper', defaults['input_salt_and_pepper']),
                              'input_sampling':      self.input_sampling,
                              'vis_init':            self.vis_init,
-                             'output_path':         self.outdir+'gsn/',
-                             'is_image':            self.is_image,
-                             'input_size':          self.N_input
+                             'output_path':         self.outdir+'top_gsn/',
+                             'is_image':            False,
+                             'input_size':          self.recurrent_hidden_size
                              }
             
         ############
@@ -258,7 +318,7 @@ class RNN_GSN():
         ############
         # the input to the sampling function
         X_sample = T.fmatrix("X_sampling")
-        self.network_state_input = [X_sample] + [T.fmatrix("H_sampling_"+str(i+1)) for i in range(self.layers)]
+        self.network_state_input = [X_sample] + [T.fmatrix("H_sampling_"+str(i+1)) for i in range(self.gsn_layers)]
        
         # "Output" state of the network (noisy)
         # initialized with input, then we apply updates
@@ -266,13 +326,12 @@ class RNN_GSN():
         visible_pX_chain = []
     
         # ONE update
-        _add_noise = True
         log.maybeLog(self.logger, "Performing one walkback in network state sampling.")
-        gsn.update_layers(self.network_state_output,
+        generative_stochastic_network.update_layers(self.network_state_output,
                           self.weights_list,
                           self.bias_list,
                           visible_pX_chain, 
-                          _add_noise,
+                          True,
                           self.noiseless_h1,
                           self.hidden_add_noise_sigma,
                           self.input_salt_and_pepper,
@@ -283,30 +342,25 @@ class RNN_GSN():
                           self.logger)
     
                
-        #############################################
-        #      Build the graphs for the RNN-GSN     #
-        #############################################
+        ##############################################
+        #        Build the graphs for the SEN        #
+        ##############################################
         # If `x_t` is given, deterministic recurrence to compute the u_t. Otherwise, first generate
         def recurrent_step(x_t, u_tm1, add_noise):
             # Make current guess for hiddens based on U
-            for i in range(self.layers):
+            for i in range(self.gsn_layers):
                 if i%2 == 0:
                     log.maybeLog(self.logger, "Using {0!s} and {1!s}".format(self.recurrent_to_gsn_weights_list[(i+1)/2],self.bias_list[i+1]))
-            h_t = T.concatenate([self.hidden_activation(self.bias_list[i+1] + T.dot(u_tm1, self.recurrent_to_gsn_weights_list[(i+1)/2])) for i in range(self.layers) if i%2 == 0],axis=0)
-            
-            generate = x_t is None
-            if generate:
-                pass
+            h_t = T.concatenate([self.hidden_activation(self.bias_list[i+1] + T.dot(u_tm1, self.recurrent_to_gsn_weights_list[(i+1)/2])) for i in range(self.gsn_layers) if i%2 == 0],axis=0)
             
             # Make a GSN to update U
-    #         chain, hs = gsn.build_gsn(x_t, weights_list, bias_list, add_noise, state.noiseless_h1, state.hidden_add_noise_sigma, state.input_salt_and_pepper, state.input_sampling, MRG, visible_activation, hidden_activation, walkbacks, logger)
-    #         htop_t = hs[-1]
-    #         denoised_x_t = chain[-1]
-            # Update U
-    #         ua_t = T.dot(denoised_x_t, W_x_u) + T.dot(htop_t, W_h_u) + T.dot(u_tm1, W_u_u) + recurrent_bias
-            ua_t = T.dot(x_t, self.W_x_u) + T.dot(u_tm1, self.W_u_u) + self.recurrent_bias
+            _, hs = generative_stochastic_network.build_gsn(x_t, self.weights_list, self.bias_list, add_noise, self.noiseless_h1, self.hidden_add_noise_sigma, self.input_salt_and_pepper, self.input_sampling, self.MRG, self.visible_activation, self.hidden_activation, self.walkbacks, self.logger)
+            htop_t = hs[-1]
+            ins_t = htop_t
+            
+            ua_t = T.dot(ins_t, self.W_ins_u) + T.dot(u_tm1, self.W_u_u) + self.recurrent_bias
             u_t = self.recurrent_hidden_activation(ua_t)
-            return None if generate else [ua_t, u_t, h_t]
+            return [ua_t, u_t, h_t]
         
         log.maybeLog(self.logger, "\nCreating recurrent step scan.")
         # For training, the deterministic recurrence is used to compute all the
@@ -339,9 +393,9 @@ class RNN_GSN():
                 h_list_recon.append((h_t_recon.T[(layer/2)*self.hidden_size:(layer/2+1)*self.hidden_size]).T)
         
         #with noise
-        _, cost, show_cost = gsn.build_gsn_given_hiddens(self.Xs, h_list, self.weights_list, self.bias_list, True, self.noiseless_h1, self.hidden_add_noise_sigma, self.input_salt_and_pepper, self.input_sampling, self.MRG, self.visible_activation, self.hidden_activation, self.walkbacks, self.cost_function, self.logger)
+        _, cost, show_cost = generative_stochastic_network.build_gsn_given_hiddens(self.Xs, h_list, self.weights_list, self.bias_list, True, self.noiseless_h1, self.hidden_add_noise_sigma, self.input_salt_and_pepper, self.input_sampling, self.MRG, self.visible_activation, self.hidden_activation, self.walkbacks, self.cost_function, self.logger)
         #without noise for reconstruction
-        x_sample_recon, _, recon_show_cost = gsn.build_gsn_given_hiddens(self.Xs, h_list_recon, self.weights_list, self.bias_list, False, self.noiseless_h1, self.hidden_add_noise_sigma, self.input_salt_and_pepper, self.input_sampling, self.MRG, self.visible_activation, self.hidden_activation, self.walkbacks, self.cost_function, self.logger)
+        x_sample_recon, _, _ = generative_stochastic_network.build_gsn_given_hiddens(self.Xs, h_list_recon, self.weights_list, self.bias_list, False, self.noiseless_h1, self.hidden_add_noise_sigma, self.input_salt_and_pepper, self.input_sampling, self.MRG, self.visible_activation, self.hidden_activation, self.walkbacks, self.cost_function, self.logger)
         
         updates_train = updates_recurrent
         updates_cost = updates_recurrent
@@ -383,7 +437,8 @@ class RNN_GSN():
         # Denoise some numbers : show number, noisy number, predicted number, reconstructed number
         log.maybeLog(self.logger, "Creating graph for noisy reconstruction function at checkpoints during training.")
         self.f_recon = theano.function(inputs=[self.Xs],
-                                       outputs=[x_sample_recon[-1], recon_show_cost],
+                                       outputs=x_sample_recon[-1],
+                                       updates=updates_recurrent_recon,
                                        name='rnngsn_f_recon')
         
         # a function to add salt and pepper noise
@@ -392,16 +447,19 @@ class RNN_GSN():
                                        name='rnngsn_f_noise')
         # Sampling functions
         log.maybeLog(self.logger, "Creating sampling function...")
-        if self.layers == 1: 
+        if self.gsn_layers == 1: 
             self.f_sample = theano.function(inputs = [X_sample],
                                             outputs = visible_pX_chain[-1],
                                             name='rnngsn_f_sample_single_layer')
         else:
+            # WHY IS THERE A WARNING????
+            # because the first odd layers are not used -> directly computed FROM THE EVEN layers
+            # unused input = warn
             self.f_sample = theano.function(inputs = self.network_state_input,
                                             outputs = self.network_state_output + visible_pX_chain,
                                             on_unused_input='warn',
                                             name='rnngsn_f_sample')
-        
+         
     
         log.maybeLog(self.logger, "Done compiling all functions.")
         compilation_time = time.time() - start_functions_time
@@ -428,21 +486,34 @@ class RNN_GSN():
             test_X  = self.test_X
             test_Y  = self.test_Y
             
-        # Input data - make sure it is a list of shared datasets
-        train_X = raise_to_list(train_X)
-        train_Y = raise_to_list(train_Y)
-        valid_X = raise_to_list(valid_X)
-        valid_Y = raise_to_list(valid_Y)
-        test_X  = raise_to_list(test_X)
-        test_Y =  raise_to_list(test_Y)
-            
         ##########################################################
         # Train the GSN first to get good weights initialization #
         ##########################################################
         if self.train_gsn_first:
             log.maybeLog(self.logger, "\n\n----------Initially training the GSN---------\n\n")
-            init_gsn = gsn.GSN(train_X=train_X, valid_X=valid_X, test_X=test_X, args=self.gsn_args, logger=self.logger)
+            init_gsn = generative_stochastic_network.GSN(train_X=train_X, valid_X=valid_X, test_X=test_X, args=self.gsn_args, logger=self.logger)
             init_gsn.train()
+    
+        #############################
+        # Save the model parameters #
+        #############################
+        def save_params_to_file(name, n, gsn_params):
+            pass
+            print 'saving parameters...'
+            save_path = self.outdir+name+'_params_epoch_'+str(n)+'.pkl'
+            f = open(save_path, 'wb')
+            try:
+                cPickle.dump(gsn_params, f, protocol=cPickle.HIGHEST_PROTOCOL)
+            finally:
+                f.close()
+                
+        def save_params(params):
+            values = [param.get_value(borrow=True) for param in params]
+            return values
+        
+        def restore_params(params, values):
+            for i in range(len(params)):
+                params[i].set_value(values[i])
     
         
         #########################################
@@ -473,58 +544,48 @@ class RNN_GSN():
             best_params = None
             patience = 0
                         
-            log.maybeLog(self.logger, ['train X size:',str(train_X[0].get_value(borrow=True).shape)])
+            log.maybeLog(self.logger, ['train X size:',str(train_X.shape.eval())])
             if valid_X is not None:
-                log.maybeLog(self.logger, ['valid X size:',str(valid_X[0].get_value(borrow=True).shape)])
+                log.maybeLog(self.logger, ['valid X size:',str(valid_X.shape.eval())])
             if test_X is not None:
-                log.maybeLog(self.logger, ['test X size:',str(test_X[0].get_value(borrow=True).shape)])
+                log.maybeLog(self.logger, ['test X size:',str(test_X.shape.eval())])
             
             if self.vis_init:
-                self.bias_list[0].set_value(logit(numpy.clip(0.9,0.001,train_X[0].get_value(borrow=True).mean(axis=0))))
-                
-            start_time = time.time()
+                self.bias_list[0].set_value(logit(numpy.clip(0.9,0.001,train_X.get_value().mean(axis=0))))
         
             while not STOP:
                 counter += 1
                 t = time.time()
                 log.maybeAppend(self.logger, [counter,'\t'])
                     
-#                 if is_artificial:
-#                     data.sequence_mnist_data(train_X[0], train_Y[0], valid_X[0], valid_Y[0], test_X[0], test_Y[0], artificial_sequence, rng)
+                if is_artificial:
+                    data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, artificial_sequence, rng)
                      
                 #train
-                train_costs = []
-                for train_data in train_X:
-                    train_costs.extend(data.apply_cost_function_to_dataset(self.f_learn, train_data, self.batch_size))
-                log.maybeAppend(self.logger, ['Train:',trunc(numpy.mean(train_costs)),'\t'])
+                train_costs = data.apply_cost_function_to_dataset(self.f_learn, train_X, self.batch_size)
+                # record it
+                log.maybeAppend(self.logger, ['Train:',trunc(train_costs),'\t'])
          
          
                 #valid
-                if valid_X is not None:
-                    valid_costs = []
-                    for valid_data in valid_X:
-                        valid_costs.extend(data.apply_cost_function_to_dataset(self.f_cost, valid_data, self.batch_size))
-                    log.maybeAppend(self.logger, ['Valid:',trunc(numpy.mean(valid_costs)), '\t'])
+                valid_costs = data.apply_cost_function_to_dataset(self.f_cost, valid_X, self.batch_size)
+                # record it
+                log.maybeAppend(self.logger, ['Valid:',trunc(valid_costs), '\t'])
          
          
                 #test
-                if test_X is not None:
-                    test_costs = []
-                    for test_data in test_X:
-                        test_costs.extend(data.apply_cost_function_to_dataset(self.f_cost, test_data, self.batch_size))
-                    log.maybeAppend(self.logger, ['Test:',trunc(numpy.mean(test_costs)), '\t'])
-                
+                test_costs = data.apply_cost_function_to_dataset(self.f_cost, test_X, self.batch_size)
+                # record it 
+                log.maybeAppend(self.logger, ['Test:',trunc(test_costs), '\t'])
+                 
                  
                 #check for early stopping
-                if valid_X is not None:
-                    cost = numpy.sum(valid_costs)
-                else:
-                    cost = numpy.sum(train_costs)
+                cost = numpy.sum(valid_costs)
                 if cost < best_cost*self.early_stop_threshold:
                     patience = 0
                     best_cost = cost
                     # save the parameters that made it the best
-                    best_params = copy_params(self.params)
+                    best_params = save_params(self.params)
                 else:
                     patience += 1
          
@@ -532,7 +593,7 @@ class RNN_GSN():
                     STOP = True
                     if best_params is not None:
                         restore_params(self.params, best_params)
-                    self.save_params('all', counter, self.params)
+                    save_params_to_file('all', counter, self.params)
          
                 timing = time.time() - t
                 times.append(timing)
@@ -543,35 +604,28 @@ class RNN_GSN():
         
                 if (counter % self.save_frequency) == 0 or STOP is True:
                     n_examples = 100
-                    xs_test = test_X[0].get_value(borrow=True)[range(n_examples)]
-                    noisy_xs_test = self.f_noise(test_X[0].get_value(borrow=True)[range(n_examples)])
+                    nums = test_X.get_value(borrow=True)[range(n_examples)]
+                    noisy_nums = self.f_noise(test_X.get_value(borrow=True)[range(n_examples)])
                     reconstructions = []
-                    for i in xrange(0, len(noisy_xs_test)):
-                        recon, recon_cost = self.f_recon(noisy_xs_test[max(0,(i+1)-self.batch_size):i+1])
+                    for i in xrange(0, len(noisy_nums)):
+                        recon = self.f_recon(noisy_nums[max(0,(i+1)-self.batch_size):i+1])
                         reconstructions.append(recon)
                     reconstructed = numpy.array(reconstructions)
-                    if (self.is_image):
-                        # Concatenate stuff
-                        stacked = numpy.vstack([numpy.vstack([xs_test[i*10 : (i+1)*10], noisy_xs_test[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10]]) for i in range(10)])
-                        number_reconstruction = PIL.Image.fromarray(tile_raster_images(stacked, (self.image_height, self.image_width), (10,30)))
-                            
-                        number_reconstruction.save(self.outdir+'rnngsn_reconstruction_epoch_'+str(counter)+'.png')
-            
-                        #sample_numbers(counter, 'seven')
-#                         plot_samples(counter, 'rnngsn')
-            
+
+                    # Concatenate stuff
+                    stacked = numpy.vstack([numpy.vstack([nums[i*10 : (i+1)*10], noisy_nums[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10]]) for i in range(10)])
+                    number_reconstruction = PIL.Image.fromarray(tile_raster_images(stacked, (self.root_N_input,self.root_N_input), (10,30)))
+                        
+                    number_reconstruction.save(self.outdir+'rnngsn_number_reconstruction_epoch_'+str(counter)+'.png')
+                    
                     #save params
-                    self.save_params('all', counter, self.params)
+                    save_params_to_file('all', counter, self.params)
              
                 # ANNEAL!
                 new_lr = self.learning_rate.get_value() * self.annealing
                 self.learning_rate.set_value(new_lr)
-                
-                new_noise = self.input_salt_and_pepper.get_value() * self.noise_annealing
-                self.input_salt_and_pepper.set_value(new_noise)
-                
-            log.maybeLog(self.logger, "\n------------TOTAL RNN-GSN TRAIN TIME TOOK {0!s}---------".format(make_time_units_string(time.time()-start_time)))
     
+            
 
     
     
@@ -580,127 +634,7 @@ class RNN_GSN():
     
     
     
-    def gen_10k_samples(self):
-        for i,x in enumerate(self.test_X):
-            log.maybeLog(self.logger, 'Generating 10,000 samples {0!s}/{1!s}'.format(i,len(self.test_X)))
-            samples, _ = self.sample(x.get_value()[1:2], 1000, 1)
-            f_samples = 'samples_test{0!s}.npy'.format(i)
-            numpy.save(f_samples, samples)
-            log.maybeLog(self.logger, 'saved digits')
     
-    def sample(self, initial, n_samples=400, k=1):
-        log.maybeLog(self.logger, "Starting sampling...")
-        def sample_some_numbers_single_layer(n_samples):
-            x0 = initial
-            samples = [x0]
-            x = self.f_noise(x0)
-            for _ in xrange(n_samples-1):
-                x = self.f_sample(x)
-                samples.append(x)
-                x = rng.binomial(n=1, p=x, size=x.shape).astype('float32')
-                x = self.f_noise(x)
-            
-            log.maybeLog(self.logger, "Sampling done.")
-            return numpy.vstack(samples), None
-                
-        def sampling_wrapper(NSI):
-            # * is the "splat" operator: It takes a list as input, and expands it into actual positional arguments in the function call.
-            out = self.f_sample(*NSI)
-            NSO = out[:len(self.network_state_output)]
-            vis_pX_chain = out[len(self.network_state_output):]
-            return NSO, vis_pX_chain
-    
-        def sample_some_numbers(n_samples):
-            # The network's initial state
-            init_vis       = initial
-            noisy_init_vis = self.f_noise(init_vis)
-            
-            network_state  = [[noisy_init_vis] + [numpy.zeros((initial.shape[0],self.hidden_size), dtype='float32') for _ in self.bias_list[1:]]]
-            
-            visible_chain  = [init_vis]
-            noisy_h0_chain = [noisy_init_vis]
-            sampled_h = []
-            
-            times = []
-            for i in xrange(n_samples-1):
-                _t = time.time()
-               
-                # feed the last state into the network, compute new state, and obtain visible units expectation chain 
-                net_state_out, vis_pX_chain = sampling_wrapper(network_state[-1])
-    
-                # append to the visible chain
-                visible_chain += vis_pX_chain
-    
-                # append state output to the network state chain
-                network_state.append(net_state_out)
-                
-                noisy_h0_chain.append(net_state_out[0])
-                
-                if i%k == 0:
-                    sampled_h.append(T.stack(net_state_out[1:]))
-                    if i == k:
-                        log.maybeLog(self.logger, "About "+make_time_units_string(numpy.mean(times)*(n_samples-1-i))+" remaining...")
-                    
-                times.append(time.time() - _t)
-    
-            log.maybeLog(self.logger, "Sampling done.")
-            return numpy.vstack(visible_chain), sampled_h
-        
-        if self.layers == 1:
-            return sample_some_numbers_single_layer(n_samples)
-        else:
-            return sample_some_numbers(n_samples)
-        
-    def plot_samples(self, epoch_number="", leading_text="", n_samples=400):
-        to_sample = time.time()
-        initial = self.test_X.get_value(borrow=True)[:1]
-        rand_idx = numpy.random.choice(range(self.test_X.get_value(borrow=True).shape[0]))
-        rand_init = self.test_X.get_value(borrow=True)[rand_idx:rand_idx+1]
-        
-        V, _ = self.sample(initial, n_samples)
-        rand_V, _ = self.sample(rand_init, n_samples)
-        
-        img_samples = PIL.Image.fromarray(tile_raster_images(V, (self.image_height, self.image_width), closest_to_square_factors(n_samples)))
-        rand_img_samples = PIL.Image.fromarray(tile_raster_images(rand_V, (self.image_height, self.image_width), closest_to_square_factors(n_samples)))
-        
-        fname = self.outdir+leading_text+'samples_epoch_'+str(epoch_number)+'.png'
-        img_samples.save(fname)
-        rfname = self.outdir+leading_text+'samples_rand_epoch_'+str(epoch_number)+'.png'
-        rand_img_samples.save(rfname) 
-        log.maybeLog(self.logger, 'Took ' + make_time_units_string(time.time() - to_sample) + ' to sample '+str(n_samples*2)+' numbers')
-        
-    #############################
-    # Save the model parameters #
-    #############################                       
-    def save_params(self, name, n, params):
-        log.maybeLog(self.logger, 'saving parameters...')
-        save_path = self.outdir+name+'_params_epoch_'+str(n)+'.pkl'
-        f = open(save_path, 'wb')
-        try:
-            cPickle.dump(params, f, protocol=cPickle.HIGHEST_PROTOCOL)
-        finally:
-            f.close()
-            
-    def load_params(self, filename):
-        '''
-        self.params = self.weights_list + self.bias_list + self.recurrent_to_gsn_weights_list + [self.W_u_u, self.W_x_u, self.recurrent_bias]
-        '''
-        def set_param(loaded_params, start, param):
-            [p.set_value(lp.get_value(borrow=False)) for lp, p in zip(loaded_params[start:start+len(param)], param)]
-            return start + len(param)
-            
-        if os.path.isfile(filename):
-            log.maybeLog(self.logger, "\nLoading existing RNN-GSN parameters...")
-            loaded_params = cPickle.load(open(filename,'r'))
-            start = 0
-            start = set_param(loaded_params, start, self.weights_list)
-            start = set_param(loaded_params, start, self.bias_list)
-            start = set_param(loaded_params, start, self.recurrent_to_gsn_weights_list)
-            set_param(loaded_params, start, self.u_params)
-            log.maybeLog(self.logger, "Parameters loaded.\n")
-        else:
-            log.maybeLog(self.logger, "\n\nCould not find existing RNN-GSN parameter file {}.\n\n".format(filename))
-        
                 
     
     
