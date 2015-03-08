@@ -13,11 +13,11 @@ import logging
 # third party libraries
 import numpy
 # internal imports
-from opendeep.utils.utils import sharedX
+from opendeep.utils.nnet import sharedX
 import opendeep.data.dataset as datasets
 from opendeep.data.dataset import Dataset
 import opendeep.utils.file_ops as files
-from opendeep.utils.utils import make_shared_variables
+from opendeep.utils.nnet import make_shared_variables
 
 log = logging.getLogger(__name__)
 

@@ -1,9 +1,11 @@
 # import data_provider
-import data_tools
+import numpy
+
 import theano
 import theano.tensor as T
-import numpy
-import sys
+
+from opendeep.old import data_tools
+
 
 '''
 Code from Li Yao (University of Montreal)

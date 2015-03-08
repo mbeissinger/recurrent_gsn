@@ -25,7 +25,7 @@ __email__ = "dev@opendeep.org"
 # standard libraries
 import logging
 # internal references
-from opendeep.utils.config_tools import create_dictionary_like
+from opendeep.utils.config import create_dictionary_like
 
 log = logging.getLogger(__name__)
 

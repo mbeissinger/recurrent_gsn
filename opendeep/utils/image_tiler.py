@@ -1,4 +1,6 @@
 """ 
+.. module:: image_tiler
+
 This file contains different utility functions that are not connected
 in anyway to the networks presented in the tutorials, but rather help in
 processing the outputs into a more understandable way.
@@ -9,14 +11,18 @@ image from a set of samples or weights.
 Written by Li Yao (University of Montreal)
 https://github.com/yaoli/GSN
 """
+__authors__ = "Li Yao"
+__copyright__ = "Copyright 2015, Vitruvian Science"
+__credits__ = ["Li Yao"]
+__license__ = "Apache"
+__maintainer__ = "OpenDeep"
+__email__ = "dev@opendeep.org"
 
-
-import numpy, os
-from PIL import Image
-import data_tools as data
+# third party libraries
+import numpy
 
 def scale_to_unit_interval(ndar, eps=1e-8):
-    """ Scales all values in the ndarray ndar to be between 0 and 1 """
+    """ Scales all values in the ndarray 'ndar' to be between 0 and 1 """
     ndar = ndar.copy()
     ndar -= ndar.min()
     ndar *= 1.0 / (ndar.max() + eps)
@@ -54,7 +60,6 @@ def tile_raster_images(X, img_shape, tile_shape, tile_spacing=(0, 0),
     :returns: array suitable for viewing as an image.
     (See:`PIL.Image.fromarray`.)
     :rtype: a 2-d array with same dtype as X.
-
     """
 
     assert len(img_shape) == 2
@@ -138,24 +143,3 @@ def tile_raster_images(X, img_shape, tile_shape, tile_spacing=(0, 0),
                         tile_col * (W + Ws): tile_col * (W + Ws) + W
                         ] = this_img * c
         return out_array
-
-def visualize_mnist():
-    (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = data.load_mnist('../data')
-    design_matrix = train_X
-    images = design_matrix[0:2500, :]
-    channel_length = 28 * 28
-    to_visualize = images
-                    
-    image_data = tile_raster_images(to_visualize,
-                                    img_shape=[28,28],
-                                    tile_shape=[50,50],
-                                    tile_spacing=(2,2))
-    im_new = Image.fromarray(numpy.uint8(image_data))
-    im_new.save('samples_mnist.png')
-    os.system('eog samples_mnist.png')
-    
-if __name__ == '__main__':
-    visualize_mnist()
-    
-
-    

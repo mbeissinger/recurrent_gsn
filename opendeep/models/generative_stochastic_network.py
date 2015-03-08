@@ -44,14 +44,14 @@ import opendeep.log.logger as logger
 from opendeep import cast32, function
 from opendeep.data.image.mnist import MNIST
 from opendeep.models.model import Model
-from opendeep.utils.decay_functions import get_decay_function
-from opendeep.utils.activation_functions import get_activation_function
-from opendeep.utils.cost_functions import get_cost_function
+from opendeep.utils.decay import get_decay_function
+from opendeep.utils.activation import get_activation_function
+from opendeep.utils.cost import get_cost_function
 from opendeep.utils import file_ops
 from opendeep.utils.image_tiler import tile_raster_images
-from opendeep.utils.utils import get_shared_weights, get_shared_bias, salt_and_pepper, add_gaussian_noise
-from opendeep.utils.utils import make_time_units_string
-from opendeep.utils.utils import sharedX, closest_to_square_factors
+from opendeep.utils.nnet import get_shared_weights, get_shared_bias, salt_and_pepper, add_gaussian_noise
+from opendeep.utils.nnet import make_time_units_string
+from opendeep.utils.nnet import sharedX, closest_to_square_factors
 from opendeep.data.iterators.sequential import SequentialIterator
 from opendeep.optimization.stochastic_gradient_descent import SGD
 

@@ -6,10 +6,6 @@ Matthew D. Zeiler
 http://www.matthewzeiler.com/pubs/googleTR2012/googleTR2012.pdf
 '''
 
-
-# TODO: SHOULD THIS BE AN ADAPTIVE LEARNING RATE OBJECT FOR SGD LIKE PYLEARN2 DOES IT??
-
-
 __authors__ = "Markus Beissinger"
 __copyright__ = "Copyright 2015, Vitruvian Science"
 __credits__ = ["Markus Beissinger"]
@@ -23,7 +19,7 @@ from collections import OrderedDict
 # third party libraries
 import theano.tensor as T
 # internal references
-from opendeep.utils.utils import sharedX
+from opendeep.utils.nnet import sharedX
 from opendeep.optimization.stochastic_gradient_descent import SGD
 from opendeep.data.iterators.sequential import SequentialIterator
 
@@ -40,7 +36,7 @@ _defaults = {'decay': 0.95, # in this case, decay is rho from the paper
              "learning_rate": 1e-6, # in this case, learning_rate is epsilon from the paper
              "unsupervised": False}
 
-# All adadelta needs to do is implement the get_updates() method for stochastic gradient descent
+# All AdaDelta needs to do is implement the get_updates() method for stochastic gradient descent
 class AdaDelta(SGD):
     """
     From Pylearn2 (https://github.com/lisa-lab/pylearn2/blob/master/pylearn2/training_algorithms/learning_rule.py)

@@ -7,9 +7,11 @@ import time
 
 import theano
 from theano import tensor as T
-from data_tools import load_datasets
+
+from opendeep.old.data_tools import load_datasets
 from utils import make_time_units_string, raise_to_list
 import logger as log
+
 
 def local_contrast_normalization(patches):
     patches = patches.reshape((patches.shape[0], -1))

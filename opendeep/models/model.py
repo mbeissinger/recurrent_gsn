@@ -10,7 +10,7 @@ import logging
 import os
 import cPickle
 # internal references
-from opendeep.utils.config_tools import create_dictionary_like
+from opendeep.utils.config import create_dictionary_like
 from opendeep.utils import file_ops
 from opendeep.optimization.optimizer import Optimizer
 from opendeep.optimization.adadelta import AdaDelta  # Use AdaDelta by default - safer than picking momentum for SGD

@@ -14,15 +14,15 @@ import time
 # third party libraries
 import numpy
 import numpy.random as random
-from theano.compat.python2x import OrderedDict  # use this compatability OrderedDict
+from theano.compat.python2x import OrderedDict  # use this compatibility OrderedDict
 import theano.compat.six as six
 # internal references
 from opendeep import function, grad, trunc
 from opendeep.optimization.optimizer import Optimizer
-from opendeep.utils.decay_functions import get_decay_function
+from opendeep.utils.decay import get_decay_function
 from opendeep.data.iterators.sequential import SequentialIterator
 import opendeep.data.dataset as datasets
-from opendeep.utils.utils import cast32, make_time_units_string, copy_params, restore_params, sharedX
+from opendeep.utils.nnet import make_time_units_string, copy_params, restore_params, sharedX
 
 log = logging.getLogger(__name__)
 
@@ -98,10 +98,11 @@ class SGD(Optimizer):
         # Now create the training cost function for the model to use while training - update parameters
         log.info("%s params: %s", str(type(self.model)), str(self.params))
         # Stochastic gradient descent!
-        gradient        = grad(self.model.get_train_cost(), self.params)
-        grads           = OrderedDict(zip(self.params, gradient))
+        gradient = grad(self.model.get_train_cost(), self.params)
+        grads    = OrderedDict(zip(self.params, gradient))
 
         # Calculate the optimizer updates each run
+        # This is where the magic happens for a lot of sub-implementations of SGD, including AdaDelta!
         gradient_updates = self.get_updates(grads)
 
         # Combine the updates
@@ -142,8 +143,9 @@ class SGD(Optimizer):
 
 
     def get_updates(self, grads):
-        '''
+        """
         From Pylearn2 (https://github.com/lisa-lab/pylearn2/blob/master/pylearn2/training_algorithms/learning_rule.py)
+
         Implements momentum as described in Section 9 of
         "A Practical Guide to Training Restricted Boltzmann Machines",
         Geoffrey Hinton.
@@ -151,11 +153,13 @@ class SGD(Optimizer):
         inc := momentum * inc - learning_rate * d cost / d param
         param := param + inc
 
+        Also has the option to implement Nesterov momentum (accelerated momentum), which works better in a lot of cases.
+
         :param grads: OrderedDict
         An OrderedDict of (parameter, gradient) for the model's gradients
         :return: OrderedDict
         Updates at each training step
-        '''
+        """
         log.debug('Setting up Stochastic Gradient Descent with momentum for optimizer...')
         # params = grads.keys()
         # gradients = grads.values()

@@ -17,8 +17,8 @@ import cPickle
 from theano.compat.python2x import OrderedDict
 # internal references
 from opendeep import function  # use this wrapper for theano.function - it removes errors when inputs aren't used.
-from opendeep.utils.config_tools import create_dictionary_like
-from opendeep.utils.utils import make_time_units_string
+from opendeep.utils.config import create_dictionary_like
+from opendeep.utils.nnet import make_time_units_string
 # from opendeep.optimization.stochastic_gradient_descent import SGD
 from opendeep.optimization.adadelta import AdaDelta # Use AdaDelta by default - safer than picking momentum for SGD
 from opendeep.data.iterators.sequential import SequentialIterator
