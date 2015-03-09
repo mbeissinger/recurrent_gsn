@@ -14,10 +14,10 @@ import cPickle
 import gzip
 import numpy
 # internal imports
+from opendeep import make_shared_variables
 import opendeep.data.dataset as datasets
 from opendeep.data.dataset import Dataset
-import opendeep.utils.file_ops as files
-from opendeep.utils.nnet import make_shared_variables
+from opendeep.utils import file_ops
 
 log = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class MNIST(Dataset):
         # self.dataset_location now contains the os path to the dataset file
         # self.file_type tells how to load the dataset
         # load the dataset into memory
-        if self.file_type is files.GZ:
+        if self.file_type is file_ops.GZ:
             (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = cPickle.load(gzip.open(self.dataset_location, 'rb'))
         else:
             (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = cPickle.load(open(self.dataset_location, 'r'))

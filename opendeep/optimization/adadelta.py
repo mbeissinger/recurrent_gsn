@@ -19,7 +19,7 @@ from collections import OrderedDict
 # third party libraries
 import theano.tensor as T
 # internal references
-from opendeep.utils.nnet import sharedX
+from opendeep import sharedX
 from opendeep.optimization.stochastic_gradient_descent import SGD
 from opendeep.data.iterators.sequential import SequentialIterator
 

@@ -18,10 +18,8 @@ import logging
 # third party libraries
 import numpy
 import theano
-import theano.tensor as T
-import theano.sandbox.rng_mrg as RNG_MRG
 # internal imports
-from opendeep import cast32, trunc
+from opendeep import cast_floatX
 
 log = logging.getLogger(__name__)
 
@@ -85,7 +83,7 @@ def get_weights_uniform(shape, interval='good', name="W", rng=None):
     else:
         log.debug("Creating weights with shape %s from Uniform distribution with given interval +- %s", str(shape), str(interval))
     # build the uniform weights tensor
-    val = rng.uniform(low=-interval, high=interval, size=shape, dtype=theano.config.floatX)
+    val = cast_floatX(rng.uniform(low=-interval, high=interval, size=shape))
     return theano.shared(value=val, name=name)
 
 def get_weights_gaussian(shape, mean=0, std=0.05, name="W", rng=None):
@@ -117,7 +115,7 @@ def get_weights_gaussian(shape, mean=0, std=0.05, name="W", rng=None):
     if std != 0:
         val = numpy.asarray(rng.normal(loc=mean, scale=std, size=shape), dtype=theano.config.floatX)
     else:
-        val = numpy.cast[theano.config.floatX](mean * numpy.ones(shape, dtype=theano.config.floatX))
+        val = cast_floatX(mean * numpy.ones(shape, dtype=theano.config.floatX))
 
     return theano.shared(value=val, name=name)
 

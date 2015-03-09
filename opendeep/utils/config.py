@@ -66,4 +66,35 @@ def create_dictionary_like(input):
         log.critical('Could not find config. Either was not collections.Mapping object or not found in filesystem.')
         return None
 
+def combine_config_and_defaults(config=None, defaults=None):
+    """
+    This method takes two configuration dictionaries (or JSON/YAML filenames), and combines them. One will serve as the 'defaults'
+    for the configuration, while the other will override any defaults when combined.
 
+    :param config: dictionary-like object or filepath to a JSON or YAML configuration file
+    :type config: collections.Mapping or String
+
+    :param defaults: dictionary-like object or filepath to a JSON or YAML configuration file
+    :type defaults: collections.Mapping or String
+
+    :return: dictionary-like object that combines the defaults and the config
+    :rtype: collections.Mapping
+    """
+    # make sure the config is like a dictionary
+    config_dict = create_dictionary_like(config)
+    # make sure the defaults is like a dictionary
+    defaults_dict = create_dictionary_like(defaults)
+    # override any default values with the config (after making sure they parsed correctly)
+    if config_dict and defaults_dict:
+        defaults_dict.update(config_dict)
+    # if there are no configuration options, give a warning because args will be None.
+    elif not config_dict and not defaults_dict:
+        log.warning("Both the config and defaults are None! Please supply at least one.")
+
+    # set args to either the combined defaults and config, or just config if that is only one provided.
+    if defaults_dict:
+        args = defaults_dict
+    else:
+        args = config_dict
+
+    return args

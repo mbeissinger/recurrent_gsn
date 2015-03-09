@@ -32,7 +32,7 @@ def make_time_units_string(time):
     :rtype: String
     """
     # Show the time with appropriate units.
-    if time < 0:
+    if time < 1:
         return trunc(time*1000)+" milliseconds"
     elif time < 60:
         return trunc(time)+" seconds"

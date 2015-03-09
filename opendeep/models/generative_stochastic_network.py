@@ -1,6 +1,7 @@
 '''
-author: Markus Beissinger
-University of Pennsylvania, 2014-2015
+.. module: generative_stochastic_network
+
+This module gives an implementation of the Generative Stochastic Network model.
 
 Based on code from Li Yao (University of Montreal)
 https://github.com/yaoli/GSN
@@ -40,20 +41,20 @@ import theano.sandbox.rng_mrg as RNG_MRG
 from theano.compat.python2x import OrderedDict
 import PIL.Image
 # internal references
-import opendeep.log.logger as logger
-from opendeep import cast32, function
+from opendeep import cast32, function, sharedX
 from opendeep.data.image.mnist import MNIST
+from opendeep.data.iterators.sequential import SequentialIterator
+import opendeep.log.logger as logger
 from opendeep.models.model import Model
+from opendeep.optimization.stochastic_gradient_descent import SGD
+from opendeep.utils import file_ops
 from opendeep.utils.decay import get_decay_function
 from opendeep.utils.activation import get_activation_function
 from opendeep.utils.cost import get_cost_function
-from opendeep.utils import file_ops
-from opendeep.utils.image_tiler import tile_raster_images
-from opendeep.utils.nnet import get_shared_weights, get_shared_bias, salt_and_pepper, add_gaussian_noise
-from opendeep.utils.nnet import make_time_units_string
-from opendeep.utils.nnet import sharedX, closest_to_square_factors
-from opendeep.data.iterators.sequential import SequentialIterator
-from opendeep.optimization.stochastic_gradient_descent import SGD
+from opendeep.utils.image import tile_raster_images
+from opendeep.utils.misc import closest_to_square_factors, make_time_units_string
+from opendeep.utils.nnet import get_weights_uniform, get_bias
+from opendeep.utils.noise import salt_and_pepper, add_gaussian
 
 log = logging.getLogger(__name__)
 
@@ -140,8 +141,8 @@ class GSN(Model):
         ##########################
         # Network specifications #
         ##########################
-        self.layers          = self.args.get('layers')  # number hidden layers
-        self.walkbacks       = self.args.get('walkbacks')  # number of walkbacks
+        self.layers    = self.args.get('layers')  # number hidden layers
+        self.walkbacks = self.args.get('walkbacks')  # number of walkbacks
         # generally, walkbacks should be 2*layers
         if self.layers % 2 == 0:
             if self.walkbacks < 2*self.layers:
@@ -162,8 +163,11 @@ class GSN(Model):
         self.hidden_size = self.args.get('hidden_size')
         # determine the sizes of each layer in a list.
         self.layer_sizes = [self.N_input] + [self.hidden_size] * self.layers  # layer sizes, from h0 to hK (h0 is the visible layer)
-        
-        # Activation functions!            
+
+        #########################
+        # Activation functions! #
+        #########################
+        # hidden unit activation
         if callable(self.args.get('hidden_activation')):
             log.debug('Using specified activation for hiddens')
             self.hidden_activation = self.args.get('hidden_activation')
@@ -214,10 +218,13 @@ class GSN(Model):
         ###############
         # initialize a list of weights and biases based on layer_sizes for the GSN
         # initialize each layer to uniform sample from sqrt(6. / (n_in + n_out))
-        self.weights_list = [get_shared_weights(self.layer_sizes[i], self.layer_sizes[i + 1], name="W_{0!s}_{1!s}".format(i, i + 1))
+        self.weights_list = [get_weights_uniform(shape=(self.layer_sizes[i], self.layer_sizes[i + 1]),
+                                                 name="W_{0!s}_{1!s}".format(i, i + 1),
+                                                 interval='good')
                              for i in range(self.layers)]
         # initialize each layer bias to 0's.
-        self.bias_list = [get_shared_bias(self.layer_sizes[i], name='b_' + str(i))
+        self.bias_list = [get_bias(shape=(self.layer_sizes[i],),
+                                   name='b_' + str(i))
                           for i in range(self.layers + 1)]
 
         # build the params of the model into a list
@@ -413,29 +420,6 @@ class GSN(Model):
 
         log.debug("GSN compiling done. Took %s", make_time_units_string(time.time() - t))
 
-
-    def get_train_cost(self):
-        """
-        This returns the expression that represents the cost given an input, which is used for the Optimizer during
-        training. The reason we can't just compile a f_train theano function is because updates need to be calculated
-        for the parameters during gradient descent - and these updates are created in the Optimizer object.
-        ------------------
-
-        :return: theano expression of the model's training cost, from which parameter gradients will be computed.
-        :rtype: theano tensor
-        """
-        return self.cost
-
-    def get_params(self):
-        """
-        This returns the list of theano shared variables that will be trained by the Optimizer. These parameters are used in the gradient.
-        ------------------
-
-        :return: flattened list of theano shared variables to be trained
-        :rtype: List(shared_variables)
-        """
-        return self.params
-
     def get_inputs(self):
         """
         This should return the input(s) to the model's computation graph. This is called by the Optimizer when creating
@@ -450,6 +434,74 @@ class GSN(Model):
         """
         return [self.X]
 
+    def get_hiddens(self):
+        """
+        This method will return the model's hidden representation expression (if applicable) from the computational graph.
+
+        This will also be used for creating hooks to link models together, where these hidden variables can be strung as the inputs or
+        hiddens to another model :)
+        ------------------
+
+        :return: theano expression of the hidden representation from this model's computation
+        :rtype: theano tensor (expression)
+        """
+        if not hasattr(self, 'hiddens'):
+            log.error("Missing self.hiddens - make sure you ran self.build_computation_graph()! This should have run during initialization....")
+            raise NotImplementedError()
+        return self.pack_hiddens(self.hiddens)
+
+    def get_outputs(self):
+        """
+        This method will return the model's output variable expression from the computational graph. This should be what is given for the
+        outputs= part of the 'f_predict' function from self.predict().
+
+        This will be used for creating hooks to link models together, where these outputs can be strung as the inputs or hiddens to another
+        model :)
+        ------------------
+
+        :return: theano expression of the outputs from this model's computation
+        :rtype: theano tensor (expression)
+        """
+        if not hasattr(self, 'output'):
+            log.error(
+                "Missing self.output - make sure you ran self.build_computation_graph()! This should have run during initialization....")
+            raise NotImplementedError()
+        return self.output
+
+    def predict(self, input):
+        """
+        This method will return the model's output (run through the function), given an input. In the case that
+        input_hooks or hidden_hooks are used, the function should use them appropriately and assume they are the input.
+
+        Try to avoid re-compiling the theano function created for predict - check a hasattr(self, 'f_predict') or
+        something similar first. I recommend creating your theano f_predict in a create_computation_graph method
+        to be called after the class initializes.
+        ------------------
+
+        :param input: Theano/numpy tensor-like object that is the input into the model's computation graph.
+        :type input: tensor
+
+        :return: Theano/numpy tensor-like object that is the output of the model's computation graph.
+        :rtype: tensor
+        """
+        if not hasattr(self, 'f_predict'):
+            log.error(
+                "Missing self.f_predict - make sure you ran self.build_computation_graph()! This should have run during initialization....")
+            raise NotImplementedError()
+        return self.f_predict(input)
+
+
+    def get_train_cost(self):
+        """
+        This returns the expression that represents the cost given an input, which is used for the Optimizer during
+        training. The reason we can't just compile a f_train theano function is because updates need to be calculated
+        for the parameters during gradient descent - and these updates are created in the Optimizer object.
+        ------------------
+
+        :return: theano expression of the model's training cost, from which parameter gradients will be computed.
+        :rtype: theano tensor
+        """
+        return self.cost
 
     def get_monitors(self):
         """
@@ -482,10 +534,20 @@ class GSN(Model):
         :rtype: List
         """
         # noise scheduling
-        noise_schedule = get_decay_function('exponential', self.input_salt_and_pepper, self.args.get('input_salt_and_pepper'), self.noise_annealing)
+        noise_schedule = get_decay_function('exponential', self.input_salt_and_pepper, self.args.get('input_salt_and_pepper'),
+                                            self.noise_annealing)
         return [noise_schedule]
 
-    
+    def get_params(self):
+        """
+        This returns the list of theano shared variables that will be trained by the Optimizer. These parameters are used in the gradient.
+        ------------------
+
+        :return: flattened list of theano shared variables to be trained
+        :rtype: List(shared_variables)
+        """
+        return self.params
+
     
     # def gen_10k_samples(self):
     #     log.info('Generating 10,000 samples')
@@ -800,7 +862,7 @@ class GSN(Model):
         # pre activation noise
         if i != 0 and add_noise:
             log.debug('Adding pre-activation gaussian noise for layer %s', str(i))
-            hiddens[i] = add_gaussian_noise(hiddens[i], hidden_add_noise_sigma, MRG)
+            hiddens[i] = add_gaussian(hiddens[i], std=hidden_add_noise_sigma, MRG=MRG)
 
         # ACTIVATION!
         if i == 0:
@@ -814,7 +876,7 @@ class GSN(Model):
         # why is there post activation noise? Because there is already pre-activation noise, this just doubles the amount of noise between each activation of the hiddens.
         if i != 0 and add_noise:
             log.debug('Adding post-activation gaussian noise for layer %s', str(i))
-            hiddens[i] = add_gaussian_noise(hiddens[i], hidden_add_noise_sigma, MRG)
+            hiddens[i] = add_gaussian(hiddens[i], std=hidden_add_noise_sigma, MRG=MRG)
 
         # build the reconstruction chain if updating the visible layer X
         if i == 0:
@@ -824,7 +886,7 @@ class GSN(Model):
             # sample from p(X|H...) - SAMPLING NEEDS TO BE CORRECT FOR INPUT TYPES I.E. FOR BINARY MNIST SAMPLING IS BINOMIAL. real-valued inputs should be gaussian
             if input_sampling:
                 log.debug('Sampling from input')
-                sampled = MRG.binomial(p = hiddens[i], size=hiddens[i].shape, dtype='float32')
+                sampled = MRG.binomial(p=hiddens[i], size=hiddens[i].shape, dtype='float32')
             else:
                 log.debug('>>NO input sampling')
                 sampled = hiddens[i]
@@ -1032,8 +1094,11 @@ def main():
     params_to_load = '../../outputs/gsn/mnist/trained_epoch_395.pkl'
     gsn.load_params(params_to_load)
 
-    optimizer = SGD(model=gsn, dataset=mnist, iterator_class=SequentialIterator, config=_train_args)
+    from opendeep.data.iterators.random import RandomIterator
+
+    optimizer = SGD(model=gsn, dataset=mnist, iterator_class=RandomIterator, config=_train_args)
     gsn.train(optimizer=optimizer)
+    # or, alternatively, optimizer.train()
 
 
 if __name__ == '__main__':

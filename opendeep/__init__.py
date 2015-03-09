@@ -18,11 +18,12 @@ __email__ = "dev@opendeep.org"
 import theano
 import numpy
 
-cast32   = lambda x: numpy.cast['float32'](x)
-trunc    = lambda x: str(x)[:8]
-logit    = lambda p: numpy.log(p / (1 - p))
-binarize = lambda x: cast32(x >= 0.5)
-sigmoid  = lambda x: cast32(1. / (1 + numpy.exp(-x)))
+cast32      = lambda x: numpy.cast['float32'](x)
+cast_floatX = lambda x: numpy.cast[theano.config.floatX](x)
+trunc       = lambda x: str(x)[:8]
+logit       = lambda p: numpy.log(p / (1 - p))
+binarize    = lambda x: cast32(x >= 0.5)
+sigmoid     = lambda x: cast32(1. / (1 + numpy.exp(-x)))
 
 def function(*args, **kwargs):
     """

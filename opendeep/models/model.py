@@ -1,3 +1,10 @@
+"""
+.. module:: model
+
+This module defines the generic Model class - which represents everything from a single layer to a full-blown deep network.
+Models are the reusable, modular building blocks for the deep networks.
+"""
+
 __authors__ = "Markus Beissinger"
 __copyright__ = "Copyright 2015, Vitruvian Science"
 __credits__ = ["Markus Beissinger"]
@@ -10,7 +17,7 @@ import logging
 import os
 import cPickle
 # internal references
-from opendeep.utils.config import create_dictionary_like
+from opendeep.utils.config import combine_config_and_defaults
 from opendeep.utils import file_ops
 from opendeep.optimization.optimizer import Optimizer
 from opendeep.optimization.adadelta import AdaDelta  # Use AdaDelta by default - safer than picking momentum for SGD
@@ -19,13 +26,16 @@ log = logging.getLogger(__name__)
 
 class Model(object):
     """
-    The Model is a generic class for everything from a single layer to complex multi-layer behemoths (which can be a
-    combination of multiple models linked through input_hooks and hidden_hooks.
+    The :class:`Model` is a generic class for everything from a single layer to complex multi-layer behemoths (which can be a
+    combination of multiple models linked through input_hooks and hidden_hooks).
 
-    Think of a Model like Legos.
+    Think of a Model like Legos - you can attach single pieces together as well as multi-piece units together. The main vision
+    of OpenDeep is to provide a lightweight, highly modular structure that makes creating and experimenting with new models
+    as easy as possible. Much of current deep learning progress has come from combining multiple deep models together for complex
+    tasks - such as the image captioning system with convolutional networks + recurrent networks.
 
-    When creating Theano functions inside of models, use the opendeep.function wrapper instead - this changes
-    unused inputs from an error to a warning. Most likely, unused inputs shouldn't be a breaking error.
+    When creating Theano functions inside of models, use the opendeep.function wrapper instead of the basic theano.function -
+    this changes unused inputs from an error to a warning. Most likely, unused inputs shouldn't be a breaking error.
     """
 
     def __init__(self, config=None, defaults=None, inputs_hook=None, hiddens_hook=None, dataset=None):
@@ -68,25 +78,62 @@ class Model(object):
         :type dataset: opendeep.data.Dataset
         """
         log.info("Creating a new instance of %s", str(type(self)))
-        # make sure the config is like a dictionary
-        config_dict = create_dictionary_like(config)
-        # make sure the defaults is like a dictionary
-        defaults_dict = create_dictionary_like(defaults)
-        # override any default values with the config (after making sure they parsed correctly)
-        if config_dict and defaults_dict:
-            defaults_dict.update(config_dict)
-        # if there are no configuration options, give a warning because self.args will be None.
-        elif not config_dict and not defaults_dict:
-            log.warning("Both the config and defaults for %s are None! Please supply at least one.", str(type(self)))
 
-        # set self.args to either the combined defaults and config, or just config if that is only one provided.
-        if defaults_dict:
-            self.args = defaults_dict
-        else:
-            self.args = config_dict
+        # set self.args to be the combination of the defaults and the config dictionaries
+        self.args = combine_config_and_defaults(config, defaults)
 
         # log the arguments.
         log.debug("%s self.args: %s", str(type(self)), str(self.args))
+
+
+    ######################################################################
+    # Methods for the symbolic inputs, hiddens, and outputs of the model #
+    ######################################################################
+    def get_inputs(self):
+        """
+        This should return the input(s) to the model's computation graph. This is called by the Optimizer when creating
+        the theano train function on the cost expression returned by get_train_cost().
+
+        This should normally return the same theano variable list that is used in the inputs= argument to the f_predict
+        function.
+        ------------------
+
+        :return: Theano variables representing the input(s) to the training function.
+        :rtype: List(theano variable)
+        """
+        log.critical("%s does not have a get_inputs function!", str(type(self)))
+        raise NotImplementedError("Please implement a get_inputs method for %s" % str(type(self)))
+
+
+    def get_hiddens(self):
+        """
+        This method will return the model's hidden representation expression (if applicable) from the computational graph.
+
+        This will also be used for creating hooks to link models together, where these hidden variables can be strung as the inputs or
+        hiddens to another model :)
+        ------------------
+
+        :return: theano expression of the hidden representation from this model's computation
+        :rtype: theano tensor (expression)
+        """
+        log.critical("%s get_hiddens method not implemented!", str(type(self)))
+        raise NotImplementedError("Please implement a get_hiddens method for %s" % str(type(self)))
+
+
+    def get_outputs(self):
+        """
+        This method will return the model's output variable expression from the computational graph. This should be what is given for the
+        outputs= part of the 'f_predict' function from self.predict().
+
+        This will be used for creating hooks to link models together, where these outputs can be strung as the inputs or hiddens to another
+        model :)
+        ------------------
+
+        :return: theano expression of the outputs from this model's computation
+        :rtype: theano tensor (expression)
+        """
+        log.critical("%s get_outputs method not implemented!", str(type(self)))
+        raise NotImplementedError("Please implement a get_outputs method for %s" % str(type(self)))
 
 
     #############################################
@@ -110,37 +157,6 @@ class Model(object):
         """
         log.critical("%s predict method not implemented!", str(type(self)))
         raise NotImplementedError("Please implement a predict method for %s" % str(type(self)))
-
-
-    def get_outputs(self):
-        """
-        This method will return the model's output variable expression from the computational graph. This should be what is given for the
-        outputs= part of the 'f_predict' function from self.predict().
-
-        This will be used for creating hooks to link models together, where these outputs can be strung as the inputs or hiddens to another
-        model :)
-        ------------------
-
-        :return: theano expression of the outputs from this model's computation
-        :rtype: theano tensor (expression)
-        """
-        log.critical("%s get_outputs method not implemented!", str(type(self)))
-        raise NotImplementedError("Please implement a get_outputs method for %s" % str(type(self)))
-
-
-    def get_hiddens(self):
-        """
-        This method will return the model's hidden representation expression (if applicable) from the computational graph.
-
-        This will also be used for creating hooks to link models together, where these hidden variables can be strung as the inputs or
-        hiddens to another model :)
-        ------------------
-
-        :return: theano expression of the hidden representation from this model's computation
-        :rtype: theano tensor (expression)
-        """
-        log.critical("%s get_hiddens method not implemented!", str(type(self)))
-        raise NotImplementedError("Please implement a get_hiddens method for %s" % str(type(self)))
 
 
     ###########################################################
@@ -209,34 +225,6 @@ class Model(object):
         raise NotImplementedError("Please implement a get_train_cost method for %s" % str(type(self)))
 
 
-    def get_params(self):
-        """
-        This returns the list of theano shared variables that will be trained by the Optimizer. These parameters are used in the gradient.
-        ------------------
-
-        :return: flattened list of theano shared variables to be trained
-        :rtype: List(shared_variables)
-        """
-        log.critical("%s does not have a get_params function!", str(type(self)))
-        raise NotImplementedError("Please implement a get_params method for %s" % str(type(self)))
-
-
-    def get_inputs(self):
-        """
-        This should return the input(s) to the model's computation graph. This is called by the Optimizer when creating
-        the theano train function on the cost expression returned by get_train_cost().
-
-        This should normally return the same theano variable list that is used in the inputs= argument to the f_predict
-        function.
-        ------------------
-
-        :return: Theano variables representing the input(s) to the training function.
-        :rtype: List(theano variable)
-        """
-        log.critical("%s does not have a get_inputs function!", str(type(self)))
-        raise NotImplementedError("Please implement a get_inputs method for %s" % str(type(self)))
-
-
     def get_updates(self):
         """
         This should return any theano updates from the model (used for things like random number generators).
@@ -301,9 +289,21 @@ class Model(object):
         return {}
 
 
-    ##################################################################
-    # Methods to do with saving and loading parameters for the model #
-    ##################################################################
+    #######################################
+    # Methods to do with model parameters #
+    #######################################
+    def get_params(self):
+        """
+        This returns the list of theano shared variables that will be trained by the Optimizer. These parameters are used in the gradient.
+        ------------------
+
+        :return: flattened list of theano shared variables to be trained
+        :rtype: List(shared_variables)
+        """
+        log.critical("%s does not have a get_params function!", str(type(self)))
+        raise NotImplementedError("Please implement a get_params method for %s" % str(type(self)))
+
+
     def get_param_values(self, borrow=True):
         """
         This returns a list of the parameter values for the model.
@@ -358,13 +358,14 @@ class Model(object):
         # for each parameter and value in order, set the value!
         for (param, value) in zip(params, param_values):
             try:
-                param.set_value(value=value, borrow=borrow)
+                param.set_value(value, borrow=borrow)
             except AttributeError as e:
                 log.exception("%s cannot set parameters, there was an AttributeError %s",
                               str(type(self)), str(e))
                 return False
 
         return True
+
 
     def save_params(self, param_file):
         """

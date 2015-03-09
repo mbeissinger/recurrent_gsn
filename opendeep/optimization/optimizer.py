@@ -25,7 +25,7 @@ __email__ = "dev@opendeep.org"
 # standard libraries
 import logging
 # internal references
-from opendeep.utils.config import create_dictionary_like
+from opendeep.utils.config import combine_config_and_defaults
 
 log = logging.getLogger(__name__)
 
@@ -34,22 +34,8 @@ class Optimizer(object):
     Default interface for an optimizer implementation - to train a model on a dataset
     '''
     def __init__(self, model, dataset, iterator_class, config=None, defaults=None, rng=None):
-        # make sure the config is like a dictionary
-        config_dict = create_dictionary_like(config)
-        # make sure the defaults is like a dictionary
-        defaults_dict = create_dictionary_like(defaults)
-        # override any default values with the config (after making sure they parsed correctly)
-        if config_dict and defaults_dict:
-            defaults_dict.update(config_dict)
-        # if there are no configuration options, give a warning because self.args will be None.
-        elif not config_dict and not defaults_dict:
-            log.warning("Both the config and defaults for %s are None! Please supply at least one.", str(type(self)))
-
-        # set self.args to either the combined defaults and config, or just config if that is only one provided.
-        if defaults_dict:
-            self.args = defaults_dict
-        else:
-            self.args = config_dict
+        # set self.args to be the combination of the defaults and the config dictionaries
+        self.args = combine_config_and_defaults(config, defaults)
 
         # log the arguments
         log.debug("ARGS: %s", str(self.args))

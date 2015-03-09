@@ -17,7 +17,7 @@ import numpy.random as random
 # internal references
 from opendeep.data.iterators.iterator import Iterator
 import opendeep.data.dataset as datasets
-from opendeep.utils.nnet import make_time_units_string
+from opendeep.utils.misc import make_time_units_string
 
 log = logging.getLogger(__name__)
 
