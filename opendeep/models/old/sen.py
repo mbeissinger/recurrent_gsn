@@ -18,11 +18,12 @@ import theano.tensor as T
 import theano.sandbox.rng_mrg as RNG_MRG
 
 from utils import data_tools as data
-from opendeep.models import generative_stochastic_network
+from opendeep.models.multi_layer import generative_stochastic_network
 import utils.logger as log
 from utils.image_tiler import tile_raster_images
 from utils.utils import cast32, logit, trunc, get_shared_weights, get_shared_bias, salt_and_pepper, \
     make_time_units_string
+
 
 
 

@@ -15,7 +15,7 @@ from utils.image_tiler import tile_raster_images
 from utils import data_tools as data
 from utils.utils import *
 from utils.logger import Logger
-from opendeep.models import generative_stochastic_network
+from opendeep.models.multi_layer import generative_stochastic_network
 
 
 def experiment(state, outdir_base='./'):

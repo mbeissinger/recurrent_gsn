@@ -1087,16 +1087,14 @@ def main():
     log.info("Creating a new GSN")
 
     mnist = MNIST()
-    config = {"output_path": '../../outputs/gsn/mnist/'}
+    config = {"output_path": '../../../outputs/gsn/mnist/'}
     gsn = GSN(config=config, dataset=mnist)
 
-    # # Load initial weights and biases from file
-    params_to_load = '../../outputs/gsn/mnist/trained_epoch_395.pkl'
+    # Load initial weights and biases from file
+    params_to_load = '../../../outputs/gsn/mnist/trained_epoch_395.pkl'
     gsn.load_params(params_to_load)
 
-    from opendeep.data.iterators.random import RandomIterator
-
-    optimizer = SGD(model=gsn, dataset=mnist, iterator_class=RandomIterator, config=_train_args)
+    optimizer = SGD(model=gsn, dataset=mnist, iterator_class=SequentialIterator, config=_train_args)
     gsn.train(optimizer=optimizer)
     # or, alternatively, optimizer.train()
 

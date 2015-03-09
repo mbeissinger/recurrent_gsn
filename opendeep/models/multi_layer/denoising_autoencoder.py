@@ -19,7 +19,7 @@ import theano.sandbox.rng_mrg as RNG_MRG
 # internal references
 import opendeep.log.logger as logger
 from opendeep.models.model import Model
-from opendeep.models.generative_stochastic_network import GSN
+from opendeep.models.multi_layer.generative_stochastic_network import GSN
 from opendeep.data.image.mnist import MNIST
 
 log = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ def main():
     log.info("Creating a new DAE")
 
     mnist = MNIST()
-    config = {"output_path": '../../outputs/dae/mnist/'}
+    config = {"output_path": '../../../outputs/dae/mnist/'}
     dae = DAE(config=config, dataset=mnist)
 
     # # Load initial weights and biases from file

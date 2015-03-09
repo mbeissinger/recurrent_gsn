@@ -20,8 +20,6 @@ import logging
 import theano
 import theano.tensor as T
 import theano.sandbox.rng_mrg as RNG_MRG
-# internal imports
-from opendeep import cast32
 
 log = logging.getLogger(__name__)
 
@@ -44,8 +42,8 @@ def dropout(IN, corruption_level=0.5, MRG=None):
     if MRG is None:
         MRG = RNG_MRG.MRG_RandomStreams(1)
 
-    noise = MRG.binomial(p=(1 - corruption_level), n=1, size=IN.shape, dtype=theano.config.floatX)
-    OUT = (IN * noise) / cast32(corruption_level)
+    mask = MRG.binomial(p=(1 - corruption_level), n=1, size=IN.shape)
+    OUT = (IN * T.cast(mask, 'float32')) #/ cast32(corruption_level)
     return OUT
 
 def add_gaussian(IN, std=1, MRG=None):
@@ -70,29 +68,6 @@ def add_gaussian(IN, std=1, MRG=None):
     noise = MRG.normal(avg=0, std=std, size=IN.shape, dtype=theano.config.floatX)
     OUT = IN + noise
     return OUT
-
-def masking(IN, corruption_level=0.5, MRG=None):
-    """
-    This applies binary masking noise to the input tensor.
-
-    :param IN: tensor to add binary masking noise to
-    :type IN: tensor
-
-    :param corruption_level: the amount of noise to add
-    :type corruption_level: float
-
-    :param MRG: random number generator with .binomial method
-    :type MRG: random
-
-    :return: tensor with binary masking noise
-    :rtype: tensor
-    """
-    if MRG is None:
-        MRG = RNG_MRG.MRG_RandomStreams(1)
-    # salt and pepper? masking?
-    noise = MRG.binomial(p=(1-corruption_level), n=1, size=IN.shape, dtype=theano.config.floatX)
-    IN = IN * noise
-    return IN
 
 def salt_and_pepper(IN, corruption_level=0.2, MRG=None):
     """

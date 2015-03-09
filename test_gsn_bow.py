@@ -5,7 +5,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 from opendeep.log.logger import config_root_logger
 from datasets.util import FileParser
 from opendeep.data.memory_matrix import MemoryMatrix
-from opendeep.models.generative_stochastic_network import GSN
+from opendeep.models.multi_layer.generative_stochastic_network import GSN
 
 log = logging.getLogger(__name__)
 

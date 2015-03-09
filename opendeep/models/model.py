@@ -19,6 +19,7 @@ import cPickle
 # internal references
 from opendeep.utils.config import combine_config_and_defaults
 from opendeep.utils import file_ops
+from opendeep.utils.misc import set_shared_values, get_shared_values
 from opendeep.optimization.optimizer import Optimizer
 from opendeep.optimization.adadelta import AdaDelta  # Use AdaDelta by default - safer than picking momentum for SGD
 
@@ -38,7 +39,7 @@ class Model(object):
     this changes unused inputs from an error to a warning. Most likely, unused inputs shouldn't be a breaking error.
     """
 
-    def __init__(self, config=None, defaults=None, inputs_hook=None, hiddens_hook=None, dataset=None):
+    def __init__(self, config=None, defaults=None, inputs_hook=None, hiddens_hook=None, params_hook=None, dataset=None):
         """
         This creates the model's combined configuration params from config and defaults into a self.args dictionary-like
         object (meaning it implements collections.Mapping and you can use self.args.get('parameter') to access something).
@@ -71,6 +72,12 @@ class Model(object):
         This is used for linking different models together (e.g. setting the GSN model's hidden layers to the RNN's
         output layer gives the RNN-GSN model, a deep recurrent model.)
         :type hiddens_hook: Tuple of (shape, variable)
+
+        :param params_hook: A list of model parameters (shared theano variables) that you should use when constructing
+        this model. This parameter is useful when you want to have two versions of the model that use the same parameters -
+        such as a training model with dropout applied to layers and one without for testing, where the parameters are shared
+        between the two.
+        :type params_hook: List(theano shared variable)
 
         :param dataset: An example dataset that this model is created for. Use this dataset to grab an example input
         if you need to set the model's input size (without having to grab a parameter from self.args). This makes the
@@ -319,7 +326,7 @@ class Model(object):
         """
         # try to use theano's get_value() on each parameter returned by get_params()
         try:
-            params = [param.get_value(borrow=borrow) for param in self.get_params()]
+            params = get_shared_values(self.get_params(), borrow=borrow)
         except NotImplementedError:
             log.exception("%s cannot get parameters, is missing get_params() method!", str(type(self)))
             raise
@@ -356,13 +363,12 @@ class Model(object):
             return False
 
         # for each parameter and value in order, set the value!
-        for (param, value) in zip(params, param_values):
-            try:
-                param.set_value(value, borrow=borrow)
-            except AttributeError as e:
-                log.exception("%s cannot set parameters, there was an AttributeError %s",
-                              str(type(self)), str(e))
-                return False
+        try:
+            set_shared_values(params, param_values, borrow=borrow)
+        except Exception, e:
+            log.exception("%s had Exception %s",
+                          str(type(self)), str(e))
+            return False
 
         return True
 

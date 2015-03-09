@@ -2,10 +2,11 @@ import argparse
 import numpy
 import os
 
-from opendeep.models.generative_stochastic_network import GSN
+from opendeep.models.multi_layer.generative_stochastic_network import GSN
 from utils import data_tools as data
 import utils.logger as log
 from utils.utils import load_from_config
+
 
 
 

@@ -18,6 +18,7 @@ import logging
 # third party libraries
 import numpy
 import theano
+import theano.tensor as T
 # internal imports
 from opendeep import cast_floatX
 
@@ -119,7 +120,7 @@ def get_weights_gaussian(shape, mean=0, std=0.05, name="W", rng=None):
 
     return theano.shared(value=val, name=name)
 
-def get_bias(shape, name="b", offset=0):
+def get_bias(shape, name="b", init_values=0):
     """
     This creates a theano shared variable for the bias parameter - normally initialized to zeros, but you can specify other values
 
@@ -137,5 +138,53 @@ def get_bias(shape, name="b", offset=0):
     """
     log.debug("Initializing bias variable with shape %s" % str(shape))
     # init to zeros plus the offset
-    val = numpy.zeros(shape=shape, dtype=theano.config.floatX) + offset
+    val = cast_floatX(numpy.ones(shape=shape, dtype=theano.config.floatX) * init_values)
     return theano.shared(value=val, name=name)
+
+def mirror_images(input, image_shape, cropsize, rand, flag_rand):
+    """
+    This takes an input batch of images (normally the input to a convolutional net), and augments them by mirroring and concatenating.
+
+    :param input: the input 4D tensor of images
+    :type input: Tensor4D
+
+    :param image_shape: the shape of the 4D tensor input
+    :type image_shape: Tuple
+
+    :param cropsize: what size to crop to
+    :type cropsize: Integer
+
+    :param rand: a vector representing a random array for cropping/mirroring the data
+    :type rand: fvector
+
+    :param flag_rand: to randomize the mirror
+    :type flag_rand: Boolean
+
+    :return: tensor4D representing the mirrored/concatenated input
+    :rtype: same as input
+    """
+    # The random mirroring and cropping in this function is done for the
+    # whole batch.
+
+    # trick for random mirroring
+    mirror = input[:, :, ::-1, :]
+    input = T.concatenate([input, mirror], axis=0)
+
+    # crop images
+    center_margin = (image_shape[2] - cropsize) / 2
+
+    if flag_rand:
+        mirror_rand = T.cast(rand[2], 'int32')
+        crop_xs = T.cast(rand[0] * center_margin * 2, 'int32')
+        crop_ys = T.cast(rand[1] * center_margin * 2, 'int32')
+    else:
+        mirror_rand = 0
+        crop_xs = center_margin
+        crop_ys = center_margin
+
+    output = input[mirror_rand * 3:(mirror_rand + 1) * 3, :, :, :]
+    output = output[:, crop_xs:crop_xs + cropsize, crop_ys:crop_ys + cropsize, :]
+
+    log.debug("mirrored input data with shape_in: " + str(image_shape))
+
+    return output

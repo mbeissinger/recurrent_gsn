@@ -137,7 +137,12 @@ def get_shared_values(variables, borrow=False):
     :return: the list of values held by the shared variables
     :rtype: List
     """
-    values = [variable.get_value(borrow=borrow) for variable in variables]
+    try:
+        values = [variable.get_value(borrow=borrow) for variable in variables]
+    except AttributeError as e:
+        log.exception("Cannot get values, there was an AttributeError %s",
+                      str(e))
+        raise
     return values
 
 def set_shared_values(variables, values, borrow=False):
@@ -153,8 +158,13 @@ def set_shared_values(variables, values, borrow=False):
     :param borrow: the borrow argument for theano shared variable's set_value() method
     :type borrow: Boolean
 
-    :raises: ValueError if the list of variables and the list of values are different lengths
+    :raises: ValueError if the list of variables and the list of values are different lengths, AttributeError if no .set_value() function
     """
     # use the safe_zip wrapper to ensure the variables and values lists are of the same length
     for variable, value in safe_zip(variables, values):
-        variable.set_value(value, borrow=borrow)
+        try:
+            variable.set_value(value, borrow=borrow)
+        except AttributeError as e:
+            log.exception("Cannot set values, there was an AttributeError %s",
+                          str(e))
+            raise
