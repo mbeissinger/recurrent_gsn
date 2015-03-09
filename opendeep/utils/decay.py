@@ -181,10 +181,10 @@ def get_decay_function(name, parameter, initial, reduction_factor):
     # standardize the input to be lowercase
     name = name.lower()
     # grab the appropriate activation function from the dictionary of decay functions
-    func = _functions[name](parameter, initial, reduction_factor)
+    func = _functions.get(name)
     # if it couldn't find the function (key didn't exist), raise a NotImplementedError
     if func is None:
         log.critical("Did not recognize decay function %s! Please use one of: ", str(name), str(_functions.keys()))
         raise NotImplementedError("Did not recognize decay function {0!s}! Please use one of: {1!s}".format(name, _functions.keys()))
     # return the found function
-    return func
+    return func(parameter, initial, reduction_factor)

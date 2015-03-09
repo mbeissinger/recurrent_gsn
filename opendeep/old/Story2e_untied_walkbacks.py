@@ -216,7 +216,7 @@ def experiment(state, outdir_base='./'):
         # why is there post activation noise? Because there is already pre-activation noise, this just doubles the amount of noise between each activation of the hiddens.          
 #         if i != 0 and add_noise:
 #             print 'Adding post-activation gaussian noise for layer', i
-#             hiddens[i]  =   add_gaussian_noise(hiddens[i], state.hidden_add_noise_sigma)
+#             hiddens[i]  =   add_gaussian(hiddens[i], state.hidden_add_noise_sigma)
     
         # build the reconstruction chain if updating the visible layer X
         if i == 0:

@@ -15,7 +15,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 
 __authors__ = "Markus Beissinger"
 __copyright__ = "Copyright 2015, Vitruvian Science"
-__credits__ = ["Markus Beissinger", "Weiguang Ding", "Ruoyan Wang", "Fei Mao", "Graham Taylor"]
+__credits__ = ["Weiguang Ding", "Ruoyan Wang", "Fei Mao", "Graham Taylor", "Markus Beissinger"]
 __license__ = "Apache"
 __maintainer__ = "OpenDeep"
 __email__ = "dev@opendeep.org"
@@ -31,6 +31,14 @@ from opendeep.models.model import Model
 from opendeep.models.conv_layers import DataLayer, ConvPoolLayer, DropoutLayer, FCLayer, SoftmaxLayer
 
 log = logging.getLogger(__name__)
+
+# To use the fastest convolutions possible, need to set the Theano flag as described here:
+# http://benanne.github.io/2014/12/09/theano-metaopt.html
+# make it THEANO_FLAGS=optimizer_including=conv_meta,metaopt.verbose=1
+# OR you could set the .theanorc file with [global]optimizer_including=conv_meta [metaopt]verbose=1
+if theano.config.optimizer_including != "conv_meta":
+    log.warning("Theano flag optimizer_including is not conv_meta (found %s)! To have Theano cherry-pick the best convolution implementation, please set optimizer_including=conv_meta either in THEANO_FLAGS or in the .theanorc file!"
+                % str(theano.config.optimizer_including))
 
 _defaults = {# data stuff
              "use_data_layer": False,

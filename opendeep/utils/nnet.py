@@ -4,7 +4,6 @@
 Based on code from Li Yao (University of Montreal)
 https://github.com/yaoli/GSN
 
-As well as Pylearn2.utils (https://github.com/lisa-lab/pylearn2/tree/master/pylearn2/utils)
 and theano_alexnet (https://github.com/uoguelph-mlrg/theano_alexnet)
 """
 __authors__ = "Markus Beissinger"
@@ -30,99 +29,115 @@ numpy.random.RandomState(23455)
 # set a fixed number initializing RandomSate for 2 purpose:
 #  1. repeatable experiments; 2. for multiple-GPU, the same initial weights
 
-def get_shared_weights(n_in, n_out, interval=None, name="W"):
-    if interval is None:
-        interval = numpy.sqrt(6. / (n_in + n_out))
-    val = numpy.random.uniform(-interval, interval, size=(n_in, n_out))
-    val = cast32(val)
-    val = theano.shared(value = val, name = name)
-    return val
+# these are the possible formulas for the interval when building weights from a uniform distribution
+_uniform_interval = {
+    'sigmoid': lambda n_row, n_col: 4 * numpy.sqrt(6. / (n_row + n_col)),  # use this only when the activation function is sigmoid
+    'default': lambda n_row, n_col: 1 / numpy.sqrt(n_row),  # this is the default provided in other codebases
+    'good'   : lambda n_row, n_col: numpy.sqrt(6. / (n_row + n_col))  # this is the default for the GSN code from Li Yao
+}
+def get_weights_uniform(shape, interval='good', name="W", rng=None):
+    """
+    This initializes a shared variable with a given shape for weights drawn from a Uniform distribution with
+    low = -interval and high = interval.
 
-def get_shared_bias(n, name="b", offset=0):
-    val = numpy.zeros(n) - offset
-    val = cast32(val)
-    val = theano.shared(value = val, name = name)
-    return val
+    Interval can either be a number to use, or a string key to one of the predefined formulas in the _uniform_interval dictionary.
 
-def get_shared_hiddens(in_size, hidden_size, batch_size, i, name="H"):
-    if i==0:
-        val = numpy.zeros((batch_size,in_size))
+    :param shape: a tuple giving the shape information for this weight matrix
+    :type shape: Tuple
+
+    :param interval: either a number for your own custom interval, or a string key to one of the predefined formulas
+    :type interval: Float or String
+
+    :param name: the name to give the shared variable
+    :type name: String
+
+    :param rng: the random number generator to use with a .uniform method
+    :type rng: random
+
+    :return: the theano shared variable with given shape and name drawn from a uniform distribution
+    :rtype: shared variable
+
+    :raises: NotImplementedError
+    """
+    if rng is None:
+        rng = numpy.random
+    # If the interval parameter is a string, grab the appropriate formula from the function dictionary, and apply the appropriate
+    # shape numbers to it.
+    if isinstance(interval, basestring):
+        interval_func = _uniform_interval.get(interval)
+        if interval_func is None:
+            log.error('Could not find uniform interval formula %s, try one of %s instead.' %
+                      str(interval), str(_uniform_interval.keys()))
+            raise NotImplementedError('Could not find uniform interval formula %s, try one of %s instead.' %
+                                      str(interval), str(_uniform_interval.keys())
+            )
+        else:
+            log.debug("Creating weights with shape %s from Uniform distribution with formula name: %s", str(shape), str(interval))
+            # if this is a 2D weight matrix (normally the case), the tuple is formatted (n_rows, n_columns)
+            if len(shape) == 2:
+                interval = interval_func(shape[0], shape[1])
+            else:
+                log.error("Expected the shape to be 2D - was %s. If you are calling this from a convolutional layer (4D), please specify interval on your own. This is to make it easier to deal with bc01 vs c01b formats.", str(len(shape)))
+                raise NotImplementedError(
+                    "Expected the shape to be 2D - was %s. If you are calling this from a convolutional layer (4D), please specify interval on your own. This is to make it easier to deal with bc01 vs c01b formats."%
+                    str(len(shape))
+                )
     else:
-        val = numpy.zeros((batch_size,hidden_size))
-    return theano.shared(value=val,name=name)
+        log.debug("Creating weights with shape %s from Uniform distribution with given interval +- %s", str(shape), str(interval))
+    # build the uniform weights tensor
+    val = rng.uniform(low=-interval, high=interval, size=shape, dtype=theano.config.floatX)
+    return theano.shared(value=val, name=name)
 
-def get_shared_regression_weights(hidden_size, name="V"):
-#     val = numpy.identity(hidden_size)
-    interval = numpy.sqrt(6. / (hidden_size + hidden_size))
-    val = numpy.random.uniform(-interval, interval, size=(hidden_size, hidden_size))
-    
-    val = cast32(val)
-    val = theano.shared(value = val, name = name)
-    return val
+def get_weights_gaussian(shape, mean=0, std=0.05, name="W", rng=None):
+    """
+    This initializes a shared variable with the given shape for weights drawn from a Gaussian distribution with mean and std.
 
+    :param shape: a tuple giving the shape information for this weight matrix
+    :type shape: Tuple
 
-def dropout(IN, p = 0.5, MRG=None):
-    if MRG is None:
-        MRG = RNG_MRG.MRG_RandomStreams(1)
-    noise   =   MRG.binomial(p = p, n = 1, size = IN.shape, dtype='float32')
-    OUT     =   (IN * noise) / cast32(p)
-    return OUT
+    :param mean: the mean to use for the Gaussian distribution
+    :type mean: float
 
-def add_gaussian_noise(IN, std = 1, MRG=None):
-    if MRG is None:
-        MRG = RNG_MRG.MRG_RandomStreams(1)
-    log.debug('GAUSSIAN NOISE : %s', str(std))
-    noise   =   MRG.normal(avg  = 0, std  = std, size = IN.shape, dtype='float32')
-    OUT     =   IN + noise
-    return OUT
+    :param std: the standard deviation to use dor the Gaussian distribution
+    :type std: float
 
-def corrupt_input(IN, p = 0.5, MRG=None):
-    if MRG is None:
-        MRG = RNG_MRG.MRG_RandomStreams(1)
-    # salt and pepper? masking?
-    noise   =   MRG.binomial(p = p, n = 1, size = IN.shape, dtype='float32')
-    IN      =   IN * noise
-    return IN
+    :param name: the name to give the shared variable
+    :type name: String
 
-def salt_and_pepper(IN, p = 0.2, MRG=None):
-    if MRG is None:
-        MRG = RNG_MRG.MRG_RandomStreams(1)
-    # salt and pepper noise
-    a = MRG.binomial(size=IN.shape, n=1,
-                          p = 1 - p,
-                          dtype='float32')
-    b = MRG.binomial(size=IN.shape, n=1,
-                          p = 0.5,
-                          dtype='float32')
-    c = T.eq(a,0) * b
-    return IN * a + c
+    :param rng: a given random number generator to use with .normal method
+    :type rng: random
 
+    :return: the theano shared variable with given shape and drawn from a Gaussian distribution
+    :rtype: shared variable
+    """
+    log.debug("Creating weights with shape %s from Gaussian mean=%s, std=%s", str(shape), str(mean), str(std))
+    if rng is None:
+        rng = numpy.random
 
-def fix_input_size(xs, hiddens=None):
-    # Make the dimensions of all X's in xs be the same. (with xs being a list of 2-dimensional matrices)
-    sizes = [x.shape[0] for x in xs]
-    min_size = numpy.min(sizes)
-    xs = [x[:min_size] for x in xs]
-    if hiddens is not None:
-        hiddens = [hiddens[i][:min_size] for i in range(len(hiddens))]
-    return xs, hiddens
+    if std != 0:
+        val = numpy.asarray(rng.normal(loc=mean, scale=std, size=shape), dtype=theano.config.floatX)
+    else:
+        val = numpy.cast[theano.config.floatX](mean * numpy.ones(shape, dtype=theano.config.floatX))
 
-def copy_params(params):
-        values = [param.get_value(borrow=True) for param in params]
-        return values
+    return theano.shared(value=val, name=name)
 
-def restore_params(params, values):
-    for i in range(len(params)):
-        params[i].set_value(values[i])
+def get_bias(shape, name="b", offset=0):
+    """
+    This creates a theano shared variable for the bias parameter - normally initialized to zeros, but you can specify other values
 
-def load_from_config(config_filename):
-    log.debug('Loading local config file')
-    config_file =   open(config_filename, 'r')
-    config      =   config_file.readlines()
-    try:
-        config_vals =   config[0].split('(')[1:][0].split(')')[:-1][0].split(', ')
-    except:
-        config_vals =   config[0][3:-1].replace(': ','=').replace("'","").split(', ')
-        config_vals =   filter(lambda x:not 'jobman' in x and not '/' in x and not ':' in x and not 'experiment' in x, config_vals)
-    
-    return config_vals
+    :param shape: the shape to use for the bias vector/matrix
+    :type shape: Tuple
+
+    :param name: the name to give the shared variable
+    :type name: String
+
+    :param offset: values to add to the zeros, if you want a nonzero bias initially
+    :type offset: float/vector
+
+    :return: the theano shared variable with given shape
+    :rtype: shared variable
+    """
+    log.debug("Initializing bias variable with shape %s" % str(shape))
+    # init to zeros plus the offset
+    val = numpy.zeros(shape=shape, dtype=theano.config.floatX) + offset
+    return theano.shared(value=val, name=name)

@@ -145,7 +145,7 @@ def get_cost_function(name):
     # standardize the input to be lowercase
     name = name.lower()
     # grab the appropriate activation function from the dictionary of functions
-    func = _functions[name]
+    func = _functions.get(name)
     # if it couldn't find the function (key didn't exist), raise a NotImplementedError
     if func is None:
         log.critical("Did not recognize cost function %s! Please use one of: ", str(name), str(_functions.keys()))

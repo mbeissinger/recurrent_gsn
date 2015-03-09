@@ -141,7 +141,7 @@ def get_activation_function(name):
     # standardize the input to be lowercase
     name = name.lower()
     # grab the appropriate activation function from the dictionary of activations
-    func = _activations[name]
+    func = _activations.get(name)
     # if it couldn't find the function (key didn't exist), raise a NotImplementedError
     if func is None:
         log.critical("Did not recognize activation %s! Please use one of: ", str(name), str(_activations.keys()))

@@ -17,7 +17,7 @@ import numpy
 import theano
 import theano.tensor as T
 # internal imports
-from opendeep import trunc
+from opendeep import trunc, safe_zip
 
 log = logging.getLogger(__name__)
 
@@ -123,3 +123,38 @@ def closest_to_square_factors(n):
     if test < 1:
         test = 1
     return int(test), int(n/test)
+
+def get_shared_values(variables, borrow=False):
+    """
+    This will return the values from a list of shared variables.
+
+    :param variables: the list of shared variables to grab values
+    :type variables: List(shared_variable)
+
+    :param borrow: the borrow argument for theano shared variable's get_value() method
+    :type borrow: Boolean
+
+    :return: the list of values held by the shared variables
+    :rtype: List
+    """
+    values = [variable.get_value(borrow=borrow) for variable in variables]
+    return values
+
+def set_shared_values(variables, values, borrow=False):
+    """
+    This sets the shared variables' values from a list of variables to the values specified in a list
+
+    :param variables: the list of shared variables to set values
+    :type variables: List(shared_variable)
+
+    :param values: the list of values to set the shared variables to
+    :type values: List
+
+    :param borrow: the borrow argument for theano shared variable's set_value() method
+    :type borrow: Boolean
+
+    :raises: ValueError if the list of variables and the list of values are different lengths
+    """
+    # use the safe_zip wrapper to ensure the variables and values lists are of the same length
+    for variable, value in safe_zip(variables, values):
+        variable.set_value(value, borrow=borrow)

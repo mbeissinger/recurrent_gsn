@@ -17,12 +17,12 @@ import numpy.random as random
 from theano.compat.python2x import OrderedDict  # use this compatibility OrderedDict
 import theano.compat.six as six
 # internal references
-from opendeep import function, grad, trunc
+from opendeep import function, grad, trunc, sharedX
 from opendeep.optimization.optimizer import Optimizer
 from opendeep.utils.decay import get_decay_function
 from opendeep.data.iterators.sequential import SequentialIterator
 import opendeep.data.dataset as datasets
-from opendeep.utils.nnet import make_time_units_string, copy_params, restore_params, sharedX
+from opendeep.utils.misc import make_time_units_string, get_shared_values, set_shared_values
 
 log = logging.getLogger(__name__)
 
@@ -228,7 +228,7 @@ class SGD(Optimizer):
         #save params
         if self.best_params is not None:
             log.debug("Restoring best model parameters...")
-            restore_params(self.params, self.best_params)
+            set_shared_values(self.params, self.best_params)
         log.debug("Saving model parameters...")
         self.model.save_params('trained_epoch_'+str(self.epoch_counter)+'.pkl')
 
@@ -291,7 +291,7 @@ class SGD(Optimizer):
                 self.patience = 0
                 self.best_cost = cost
                 # save the parameters that made it the best
-                self.best_params = copy_params(self.params)
+                self.best_params = get_shared_values(self.params)
             else:
                 self.patience += 1
 
