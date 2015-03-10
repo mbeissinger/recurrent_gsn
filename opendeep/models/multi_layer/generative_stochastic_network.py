@@ -322,6 +322,8 @@ class GSN(Model):
                                                # last walkback from the non-noisy graph.
         self.hiddens    = recon_hiddens  # these should be considered the model's hidden representation - the hidden representation after
                                          # the last walkback from the non-noisy graph.
+
+        self.monitors = OrderedDict([('noisy_recon_cost', self.show_cost), ('recon_cost', self.monitor)])
         
 
         ############
@@ -389,20 +391,21 @@ class GSN(Model):
         # compile the monitoring functions for things we want to run on the valid/test sets
         if not hiddens_hook:
             log.debug("monitoring functions...")
-            log.debug("f_train_cost")
-            self.f_train_cost = function(inputs   = [self.X],
-                                         outputs = [self.cost],
-                                         name    = 'gsn_f_train_cost')
-
-            log.debug("f_recon_cost")
-            self.f_recon_cost = function(inputs=[self.X],
-                                         outputs=[self.show_cost],
-                                         name='gsn_f_recon_cost')
-
-            log.debug("f_predict_cost")
-            self.f_predict_cost = function(inputs=[self.X],
-                                           outputs=[self.monitor],
-                                           name='gsn_f_predict_cost')
+            # log.debug("f_train_cost")
+            # self.f_train_cost = function(inputs   = [self.X],
+            #                              outputs = [self.cost],
+            #                              name    = 'gsn_f_train_cost')
+            #
+            # log.debug("f_recon_cost")
+            # self.f_recon_cost = function(inputs=[self.X],
+            #                              outputs=[self.show_cost],
+            #                              name='gsn_f_recon_cost')
+            #
+            # log.debug("f_predict_cost")
+            # self.f_predict_cost = function(inputs=[self.X],
+            #                                outputs=[self.monitor],
+            #                                name='gsn_f_predict_cost')
+            self.f_monitors = function(inputs=[self.X], outputs=self.monitors.values())
 
         # # things for log likelihood
         # self.H = T.tensor3('H', dtype='float32')
@@ -516,9 +519,11 @@ class GSN(Model):
         :return: Dictionary of String: theano_function for each monitor variable we care about in the model.
         :rtype: Dictionary
         """
-        return OrderedDict([('train_cost', self.f_train_cost),
-                            ('reconstruction_cost', self.f_recon_cost),
-                            ('reconstruction_cost_no_noise', self.f_predict_cost)])
+        # return OrderedDict([('train_cost', self.f_train_cost),
+        #                     ('reconstruction_cost', self.f_recon_cost),
+        #                     ('reconstruction_cost_no_noise', self.f_predict_cost)])
+        names = ', '.join(self.monitors.keys())
+        return {names: self.f_monitors}
 
     def get_decay_params(self):
         """

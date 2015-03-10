@@ -326,7 +326,7 @@ class AlexNet(Model):
             log.error(
                 "Missing self.f_monitors - make sure you ran self.build_computation_graph()! This should have run during initialization....")
             raise NotImplementedError()
-        names = ','.join(self.monitors.keys())
+        names = ', '.join(self.monitors.keys())
         return {names: self.f_monitors}
 
     def get_params(self):
