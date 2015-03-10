@@ -65,12 +65,14 @@ class Model(object):
 
         :param inputs_hook: Routing information for the model to accept inputs from elsewhere. This is used for linking
         different models together (e.g. setting the Sigmoid model's input layer to the DAE's hidden layer gives a
-        newly supervised classification model).
+        newly supervised classification model). For now, you need to include the shape information (normally the
+        dimensionality of the input i.e. n_in).
         :type inputs_hook: Tuple of (shape, variable)
 
         :param hiddens_hook: Routing information for the model to accept its hidden representation from elsewhere.
         This is used for linking different models together (e.g. setting the GSN model's hidden layers to the RNN's
-        output layer gives the RNN-GSN model, a deep recurrent model.)
+        output layer gives the RNN-GSN model, a deep recurrent model.) For now, you need to include the shape information
+        (normally the dimensionality of the hiddens i.e. n_hidden).
         :type hiddens_hook: Tuple of (shape, variable)
 
         :param params_hook: A list of model parameters (shared theano variables) that you should use when constructing

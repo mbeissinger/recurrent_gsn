@@ -1,16 +1,14 @@
 """
 Copyright (c) 2014, Weiguang Ding, Ruoyan Wang, Fei Mao and Graham Taylor
 All rights reserved.
-
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
-
-1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
-
-2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
-
-3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
-
+    1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+    2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+    3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+TO USE CUDNN WRAPPING, YOU MUST INSTALL THE APPROPRIATE .h and .so FILES FOR THEANO LIKE SO:
+http://deeplearning.net/software/theano/library/sandbox/cuda/dnn.html
 """
 
 __authors__ = "Markus Beissinger"
@@ -50,27 +48,50 @@ if theano.config.optimizer_including != "conv_meta":
 class ConvPoolLayer(Model):
     """
     A fast convolutional and pooling layer combo for AlexNet implementation of authors above.
+
+    TO USE CUDNN WRAPPING, YOU MUST INSTALL THE APPROPRIATE .h and .so FILES FOR THEANO LIKE SO:
+    http://deeplearning.net/software/theano/library/sandbox/cuda/dnn.html
     """
-    def __init__(self, inputs_hook, filter_shape, convstride, padsize, group, poolsize, poolstride, bias_init,
-                 local_response_normalization=False, lib_conv='cudnn', params_hook=None, config=None, defaults=None):
+    defaults = {
+        'filter_shape': (3, 11, 11, 96),
+        'convstride': 4,
+        'padsize': 0,
+        'group': 1,
+        'poolsize': 3,
+        'poolstride': 2,
+        'bias_init': 0,
+        'local_response_normalization': False,
+        'lib_conv': 'cudnn'
+    }
+    def __init__(self, inputs_hook, filter_shape=None, convstride=None, padsize=None, group=None, poolsize=None, poolstride=None,
+                 bias_init=None, local_response_normalization=None, lib_conv=None, params_hook=None, config=None, defaults=defaults):
         # init Model to combine the defaults and config dictionaries.
         super(ConvPoolLayer, self).__init__(config, defaults)
         # all configuration parameters are now in self.args
 
-        # deal with the inputs coming from inputs_hook
+        # deal with the inputs coming from inputs_hook - necessary for now to give an input hook
+        assert len(inputs_hook) == 2
         self.image_shape = inputs_hook[0]
         self.input = inputs_hook[1]
 
-        # layer configuration TODO: move this to config files?
-        self.filter_size = filter_shape
-        self.convstride = convstride
-        self.padsize = padsize
-        self.poolsize = poolsize
-        self.poolstride = poolstride
+        #######################
+        # layer configuration #
+        #######################
+        self.filter_size = filter_shape or self.args.get('filter_shape')
+        self.convstride = convstride or self.args.get('convstride')
+        self.padsize = padsize or self.args.get('padsize')
+
+        self.poolsize = poolsize or self.args.get('poolsize')
+        self.poolstride = poolstride or self.args.get('poolstride')
+
         self.channel = self.image_shape[0]
-        self.lrn = local_response_normalization
-        self.lib_conv = lib_conv
-        self.group = group
+
+        self.lrn = local_response_normalization or self.args.get('local_response_normalization')
+
+        self.lib_conv = lib_conv or self.args.get('lib_conv')
+        # if lib_conv is cudnn, it works only on square images and the grad works only when channel % 16 == 0
+
+        self.group = group or self.args.get('group')
         assert self.group in [1, 2]
 
         self.filter_shape = numpy.asarray(filter_shape)
@@ -79,7 +100,9 @@ class ConvPoolLayer(Model):
         if self.lrn:
             self.lrn_func = CrossChannelNormalization()
 
-        # Params - make sure to deal with params_hook!
+        ################################################
+        # Params - make sure to deal with params_hook! #
+        ################################################
         if self.group == 1:
             if params_hook:
                 assert len(params_hook) == 2
@@ -104,9 +127,12 @@ class ConvPoolLayer(Model):
                 self.b1 = get_bias(shape=self.filter_shape[3], init_values=bias_init, name="b1")
             self.params = [self.W0, self.b0, self.W1, self.b1]
 
-        if lib_conv == 'cudaconvnet':
+        #############################################
+        # build appropriate graph for conv. version #
+        #############################################
+        if self.lib_conv == 'cudaconvnet':
             self.build_cudaconvnet_graph()
-        elif lib_conv == 'cudnn':
+        elif self.lib_conv == 'cudnn':
             self.build_cudnn_graph()
         else:
             log.error("The lib_conv %s is not supported! Please choose cudaconvnet or cudnn"%str(lib_conv))
@@ -117,26 +143,26 @@ class ConvPoolLayer(Model):
             # lrn_input = gpu_contiguous(self.output)
             self.output = self.lrn_func(self.output)
 
-        log.debug("conv (%s) layer with shape_in: %s" % lib_conv, str(self.image_shape))
+        log.debug("conv (%s) layer initialized with shape_in: %s", str(self.lib_conv), str(self.image_shape))
 
     def build_cudaconvnet_graph(self):
             self.conv_op = FilterActs(pad=self.padsize, stride=self.convstride, partial_sum=1)
 
             # Conv
             if self.group == 1:
-                contiguous_input = gpu_contiguous(input)
+                contiguous_input = gpu_contiguous(self.input)
                 contiguous_filters = gpu_contiguous(self.W)
 
                 conv_out = self.conv_op(contiguous_input, contiguous_filters)
                 conv_out = conv_out + self.b.dimshuffle(0, 'x', 'x', 'x')
             else:
-                contiguous_input0 = gpu_contiguous(input[:self.channel / 2, :, :, :])
+                contiguous_input0 = gpu_contiguous(self.input[:self.channel / 2, :, :, :])
                 contiguous_filters0 = gpu_contiguous(self.W0)
 
                 conv_out0 = self.conv_op(contiguous_input0, contiguous_filters0)
                 conv_out0 = conv_out0 + self.b0.dimshuffle(0, 'x', 'x', 'x')
 
-                contiguous_input1 = gpu_contiguous(input[self.channel / 2:, :, :, :])
+                contiguous_input1 = gpu_contiguous(self.input[self.channel / 2:, :, :, :])
                 contiguous_filters1 = gpu_contiguous(self.W1)
 
                 conv_out1 = self.conv_op(contiguous_input1, contiguous_filters1)
@@ -146,13 +172,14 @@ class ConvPoolLayer(Model):
 
             # ReLu
             self.output = rectifier(conv_out)
-            conv_out = gpu_contiguous(conv_out)
+            # conv_out = gpu_contiguous(conv_out)
 
             # Pooling!
             if self.poolsize != 1:
-                self.pool_op = MaxPool(ds=self.poolsize, stride=self.poolstride)
-
-            self.output = self.pool_op(self.output)
+                # wraps Alex's MaxPool code. Input are in order (channel, image rows, image cols, batch).
+                # Works only on square images and the grad works only when channel % 16 == 0
+                pool_op = MaxPool(ds=self.poolsize, stride=self.poolstride)
+                self.output = pool_op(self.output)
 
     def build_cudnn_graph(self):
         input_shuffled = self.input.dimshuffle(3, 0, 1, 2)  # c01b to bc01
@@ -166,7 +193,7 @@ class ConvPoolLayer(Model):
             conv_out = dnn.dnn_conv(img=input_shuffled,
                                     kerns=W_shuffled,
                                     subsample=(self.convstride, self.convstride),
-                                    border_mode=self.padsize)
+                                    border_mode=(self.padsize, self.padsize))
             conv_out = conv_out + self.b.dimshuffle('x', 0, 'x', 'x')
 
         else:
@@ -175,7 +202,7 @@ class ConvPoolLayer(Model):
             conv_out0 = dnn.dnn_conv(img=input_shuffled[:, :self.channel / 2, :, :],
                                      kerns=W0_shuffled,
                                      subsample=(self.convstride, self.convstride),
-                                     border_mode=self.padsize)
+                                     border_mode=(self.padsize, self.padsize))
             conv_out0 = conv_out0 + self.b0.dimshuffle('x', 0, 'x', 'x')
 
             W1_shuffled = self.W1.dimshuffle(3, 0, 1, 2)  # c01b to bc01
@@ -183,7 +210,7 @@ class ConvPoolLayer(Model):
             conv_out1 = dnn.dnn_conv(img=input_shuffled[:, self.channel / 2:, :, :],
                                      kerns=W1_shuffled,
                                      subsample=(self.convstride, self.convstride),
-                                     border_mode=self.padsize)
+                                     border_mode=(self.padsize, self.padsize))
             conv_out1 = conv_out1 + self.b1.dimshuffle('x', 0, 'x', 'x')
 
             conv_out = T.concatenate([conv_out0, conv_out1], axis=1)

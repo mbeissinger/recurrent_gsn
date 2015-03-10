@@ -34,7 +34,7 @@ _uniform_interval = {
     'default': lambda n_row, n_col: 1 / numpy.sqrt(n_row),  # this is the default provided in other codebases
     'good'   : lambda n_row, n_col: numpy.sqrt(6. / (n_row + n_col))  # this is the default for the GSN code from Li Yao
 }
-def get_weights_uniform(shape, interval='good', name="W", rng=None):
+def get_weights_uniform(shape, interval=None, name="W", rng=None):
     """
     This initializes a shared variable with a given shape for weights drawn from a Uniform distribution with
     low = -interval and high = interval.
@@ -58,6 +58,10 @@ def get_weights_uniform(shape, interval='good', name="W", rng=None):
 
     :raises: NotImplementedError
     """
+    default_interval = 'good'
+
+    interval = interval or default_interval
+
     if rng is None:
         rng = numpy.random
     # If the interval parameter is a string, grab the appropriate formula from the function dictionary, and apply the appropriate
@@ -87,7 +91,7 @@ def get_weights_uniform(shape, interval='good', name="W", rng=None):
     val = cast_floatX(rng.uniform(low=-interval, high=interval, size=shape))
     return theano.shared(value=val, name=name)
 
-def get_weights_gaussian(shape, mean=0, std=0.05, name="W", rng=None):
+def get_weights_gaussian(shape, mean=None, std=None, name="W", rng=None):
     """
     This initializes a shared variable with the given shape for weights drawn from a Gaussian distribution with mean and std.
 
@@ -109,6 +113,12 @@ def get_weights_gaussian(shape, mean=0, std=0.05, name="W", rng=None):
     :return: the theano shared variable with given shape and drawn from a Gaussian distribution
     :rtype: shared variable
     """
+    default_mean = 0
+    default_std  = 0.05
+
+    mean = mean or default_mean
+    std = std or default_std
+
     log.debug("Creating weights with shape %s from Gaussian mean=%s, std=%s", str(shape), str(mean), str(std))
     if rng is None:
         rng = numpy.random
@@ -120,7 +130,7 @@ def get_weights_gaussian(shape, mean=0, std=0.05, name="W", rng=None):
 
     return theano.shared(value=val, name=name)
 
-def get_bias(shape, name="b", init_values=0):
+def get_bias(shape, name="b", init_values=None):
     """
     This creates a theano shared variable for the bias parameter - normally initialized to zeros, but you can specify other values
 
@@ -136,6 +146,10 @@ def get_bias(shape, name="b", init_values=0):
     :return: the theano shared variable with given shape
     :rtype: shared variable
     """
+    default_init = 0
+
+    init_values = init_values or default_init
+
     log.debug("Initializing bias variable with shape %s" % str(shape))
     # init to zeros plus the offset
     val = cast_floatX(numpy.ones(shape=shape, dtype=theano.config.floatX) * init_values)

@@ -488,7 +488,7 @@ class GSN(Model):
             log.error(
                 "Missing self.f_predict - make sure you ran self.build_computation_graph()! This should have run during initialization....")
             raise NotImplementedError()
-        return self.f_predict(input)
+        return self.f_predict(*input)
 
 
     def get_train_cost(self):

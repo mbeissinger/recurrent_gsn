@@ -17,7 +17,6 @@ __email__ = "dev@opendeep.org"
 import unittest
 import logging
 # third party libraries
-import theano
 import theano.tensor as T
 # internal references
 import opendeep.log.logger as logger
