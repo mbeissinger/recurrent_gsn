@@ -8,7 +8,7 @@ http://www.matthewzeiler.com/pubs/googleTR2012/googleTR2012.pdf
 
 __authors__ = "Markus Beissinger"
 __copyright__ = "Copyright 2015, Vitruvian Science"
-__credits__ = ["Markus Beissinger"]
+__credits__ = ["Pylearn2","Markus Beissinger"]
 __license__ = "Apache"
 __maintainer__ = "OpenDeep"
 __email__ = "dev@opendeep.org"
@@ -47,19 +47,27 @@ class AdaDelta(SGD):
     decay : float, optional
     Decay rate :math:`\\rho` in Algorithm 1 of the aforementioned paper.
     """
-    def __init__(self, model, dataset, iterator_class=SequentialIterator, config=None, defaults=_defaults, rng=None):
-        if config:
-            decay = config.get('decay', defaults.get('decay'))
-        elif defaults:
-            decay = defaults.get('decay')
-        else:
-            log.error("AdaDelta missing 'decay' parameter in config or defaults!")
-            raise AssertionError
+    def __init__(self, model, dataset, decay=None, iterator_class=SequentialIterator, config=None, defaults=_defaults, rng=None,
+                 n_epoch=None, batch_size=None, minimum_batch_size=None, save_frequency=None,
+                 early_stop_threshold=None, early_stop_length=None, learning_rate=None, flag_para_load=None):
+        if not decay:
+            if config:
+                decay = config.get('decay', defaults.get('decay'))
+            elif defaults:
+                decay = defaults.get('decay')
+            else:
+                log.warning("AdaDelta missing 'decay' parameter in config or defaults!")
+                raise AssertionError
         assert decay >= 0.
         assert decay < 1.
         self.decay = decay
 
-        super(AdaDelta, self).__init__(model, dataset, iterator_class, config, defaults, rng)
+        # need to call the SGD constructor after parameters are extracted because the constructor calls get_updates()!
+        super(AdaDelta, self).__init__(model=model, dataset=dataset, iterator_class=iterator_class, config=config, defaults=defaults,
+                                       rng=rng, n_epoch=n_epoch, batch_size=batch_size, minimum_batch_size=minimum_batch_size,
+                                       save_frequency=save_frequency, early_stop_length=early_stop_length,
+                                       early_stop_threshold=early_stop_threshold, learning_rate=learning_rate,
+                                       flag_para_load=flag_para_load)
 
     def get_updates(self, grads):
         """

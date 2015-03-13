@@ -41,22 +41,22 @@ def make_time_units_string(time):
     else:
         return trunc(time/3600)+" hours"
     
-def raise_to_list(_input):
+def raise_to_list(input):
     """
     This will take an input and raise it to a List (if applicable)
 
-    :param _input: object to raise to a list
-    :type _input: Object
+    :param input: object to raise to a list
+    :type input: Object
 
     :return: the object as a list, or none
     :rtype: List or None
     """
-    if _input is None:
+    if input is None:
         return None
-    elif isinstance(_input, list):
-        return _input
+    elif isinstance(input, list):
+        return input
     else:
-        return [_input]
+        return [input]
     
 def stack_and_shared(_input):
     """

@@ -20,8 +20,6 @@ import cPickle
 from opendeep.utils.config import combine_config_and_defaults
 from opendeep.utils import file_ops
 from opendeep.utils.misc import set_shared_values, get_shared_values
-from opendeep.optimization.optimizer import Optimizer
-from opendeep.optimization.adadelta import AdaDelta  # Use AdaDelta by default - safer than picking momentum for SGD
 
 log = logging.getLogger(__name__)
 
@@ -39,20 +37,18 @@ class Model(object):
     this changes unused inputs from an error to a warning. Most likely, unused inputs shouldn't be a breaking error.
     """
 
-    def __init__(self, config=None, defaults=None, inputs_hook=None, hiddens_hook=None, params_hook=None, dataset=None):
+    def __init__(self, config=None, defaults=None, inputs_hook=None, hiddens_hook=None, params_hook=None):
         """
         This creates the model's combined configuration params from config and defaults into a self.args dictionary-like
         object (meaning it implements collections.Mapping and you can use self.args.get('parameter') to access something).
 
         Further, your model implementations should accept optional inputs_hook and hiddens_hook (if applicable) to set your
-        inputs and hidden representation in a modular fashion, allowing models to link together to form one large model.
+        inputs and hidden representation in a modular fashion, allowing models to link together.
         inputs_hook is a tuple of (shape, variable) that should replace the default model inputs.
         hiddens_hook is a tuple of (shape, variable) that should replace the default model hidden representation
         (which means you need to adapt creating your computation graph to not care about the inputs and to instead
         compute outputs directly from the hidden variable provided).
-
-        Finally, a reference dataset is optionally included for ease of use to the user. If a Dataset object is included,
-        please initialize input dimensions from the example input of the dataset, without regard to config in self.args.
+        You can also accept a params_hook to share model parameters rather than instantiate a new set of parameters.
         ------------------
 
         :param config: A dictionary-like object containing all the necessary user-defined parameters for the model.
@@ -76,15 +72,10 @@ class Model(object):
         :type hiddens_hook: Tuple of (shape, variable)
 
         :param params_hook: A list of model parameters (shared theano variables) that you should use when constructing
-        this model. This parameter is useful when you want to have two versions of the model that use the same parameters -
-        such as a training model with dropout applied to layers and one without for testing, where the parameters are shared
-        between the two.
+        this model (instead of initializing your own shared variables). This parameter is useful when you want to have
+        two versions of the model that use the same parameters - such as a training model with dropout applied to layers
+        and one without for testing, where the parameters are shared between the two.
         :type params_hook: List(theano shared variable)
-
-        :param dataset: An example dataset that this model is created for. Use this dataset to grab an example input
-        if you need to set the model's input size (without having to grab a parameter from self.args). This makes the
-        user's life easier.
-        :type dataset: opendeep.data.Dataset
         """
         log.info("Creating a new instance of %s", str(type(self)))
 
@@ -92,7 +83,7 @@ class Model(object):
         self.args = combine_config_and_defaults(config, defaults)
 
         # log the arguments.
-        log.debug("%s self.args: %s", str(type(self)), str(self.args))
+        log.debug("%s self.args from config parameters: %s", str(type(self)), str(self.args))
 
 
     ######################################################################
@@ -136,6 +127,9 @@ class Model(object):
 
         This will be used for creating hooks to link models together, where these outputs can be strung as the inputs or hiddens to another
         model :)
+
+        Example: gsn = GSN()
+                 softmax = SoftmaxLayer(inputs_hook=gsn.get_outputs())
         ------------------
 
         :return: theano expression of the outputs from this model's computation
@@ -171,55 +165,6 @@ class Model(object):
     ###########################################################
     # Methods to do with training the model with an Optimizer #
     ###########################################################
-    def train(self, optimizer=None):
-        """
-        This method trains the current model using the provided optimizer on the given dataset.
-        If a dataset was given during initialization and one not provided here, you should use that dataset for
-        training (makes life easier for the user).
-
-        By default, use the AdaDelta optimizer because it is less determinant on the learning rate and other parameters.
-        If you want a different default behavior, override the method. Some information from Andrej Karpathy:
-        'In my own experience, AdaGrad/AdaDelta are "safer" because they don't depend so strongly on setting of learning
-        rates (with AdaDelta being slightly better), but well-tuned SGD+Momentum almost always converges faster and at
-        better final values.' http://cs.stanford.edu/people/karpathy/convnetjs/demo/trainers.html
-
-        Again, this default behavior is probably not the best for your model, so please implement train() for your
-        particular needs. Feel free to use this as a starter.
-        ------------------
-
-        :param optimizer: an Optimizer to train the model with.
-        :type optimizer: opendeep.optimization.Optimizer object
-
-        :return: Whether or not successful
-        :rtype: Boolean
-        """
-        # initialize a default AdaDelta optimizer if one was not provided - and use the initialization Dataset if
-        # it was stored in self.dataset variable.
-        if optimizer is None:
-            if hasattr(self, 'dataset'):
-                optimizer = AdaDelta(model=self, dataset=self.dataset)
-            else:
-                log.error("Optimizer not provided to %s during train and could not find a self.dataset", str(type(self)))
-                return False
-
-        # make sure the optimizer isn't lying and that it is, in fact, an Optimizer
-        if not isinstance(optimizer, Optimizer):
-            log.critical("Optimizer provided to %s was %s, expected to be subtype of %s!",
-                         str(type(self)), str(type(optimizer)), str(type(Optimizer)))
-            return False
-
-        # now to the main event - training with the Optimizer!
-        try:
-            optimizer.train()
-        except Exception as e:
-            log.error("optimizer %s had exception during training on %s",
-                      str(type(optimizer)), str(type(self)))
-            log.exception("%s" % str(e))
-            return False
-
-        return True
-
-
     def get_train_cost(self):
         """
         This returns the expression that represents the cost given an input, which is used for the Optimizer during

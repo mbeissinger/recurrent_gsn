@@ -21,6 +21,10 @@ import theano
 import theano.tensor as T
 import theano.sandbox.rng_mrg as RNG_MRG
 
+theano_random = RNG_MRG.MRG_RandomStreams(seed=23455)
+# set a fixed number initializing RandomSate for 2 purpose:
+#  1. repeatable experiments; 2. for multiple-GPU, the same initial weights
+
 log = logging.getLogger(__name__)
 
 def dropout(IN, corruption_level=0.5, MRG=None):
@@ -40,7 +44,7 @@ def dropout(IN, corruption_level=0.5, MRG=None):
     :rtype: tensor
     """
     if MRG is None:
-        MRG = RNG_MRG.MRG_RandomStreams(1)
+        MRG = theano_random
 
     mask = MRG.binomial(p=(1 - corruption_level), n=1, size=IN.shape)
     OUT = (IN * T.cast(mask, 'float32')) #/ cast32(corruption_level)
@@ -63,7 +67,7 @@ def add_gaussian(IN, std=1, MRG=None):
     :rtype: tensor
     """
     if MRG is None:
-        MRG = RNG_MRG.MRG_RandomStreams(1)
+        MRG = theano_random
     log.debug('GAUSSIAN NOISE : %s', str(std))
     noise = MRG.normal(avg=0, std=std, size=IN.shape, dtype=theano.config.floatX)
     OUT = IN + noise
@@ -86,7 +90,7 @@ def salt_and_pepper(IN, corruption_level=0.2, MRG=None):
     :rtype: tensor
     """
     if MRG is None:
-        MRG = RNG_MRG.MRG_RandomStreams(1)
+        MRG = theano_random
     # salt and pepper noise
     a = MRG.binomial(size=IN.shape, n=1, p=(1 - corruption_level), dtype=theano.config.floatX)
     b = MRG.binomial(size=IN.shape, n=1, p=0.5, dtype=theano.config.floatX)

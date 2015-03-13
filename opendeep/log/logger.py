@@ -1,6 +1,8 @@
-'''
-Configuring the logger for our example needs.
-'''
+"""
+.. module:: logger
+
+Configuring the logger for our example needs. This will print info and up to log files. Debug goes to console.
+"""
 __authors__ = "Markus Beissinger"
 __copyright__ = "Copyright 2015, Vitruvian Science"
 __credits__ = ["Markus Beissinger"]

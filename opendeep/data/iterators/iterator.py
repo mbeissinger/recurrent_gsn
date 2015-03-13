@@ -1,6 +1,8 @@
-'''
+"""
+.. module:: iterator
+
 General interface for creating a dataset iterator object.
-'''
+"""
 __authors__ = "Markus Beissinger"
 __copyright__ = "Copyright 2015, Vitruvian Science"
 __credits__ = ["Markus Beissinger"]

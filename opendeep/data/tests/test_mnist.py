@@ -12,7 +12,7 @@ __email__ = "dev@opendeep.org"
 import unittest
 import logging
 # internal references
-from opendeep.data.image.mnist import MNIST
+from opendeep.data.standard_datasets.image.mnist import MNIST
 import opendeep.data.dataset as dataset
 import opendeep.log.logger as logger
 from opendeep.data.iterators.sequential import SequentialIterator
@@ -43,7 +43,7 @@ class TestMNIST(unittest.TestCase):
         i = 0
         for _, y in self.sequentialIterator:
             if i < 2:
-                self.log.debug(y.eval())
+                self.log.debug(y)
             i+=1
         assert i==235
 
@@ -52,7 +52,7 @@ class TestMNIST(unittest.TestCase):
         i = 0
         for x, y in self.randomIterator:
             if i < 2:
-                self.log.debug(y.eval())
+                self.log.debug(y)
             i+=1
         assert i==235
 

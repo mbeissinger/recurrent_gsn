@@ -11,13 +11,14 @@ __email__ = "dev@opendeep.org"
 # standard libraries
 import logging
 # internal imports
-from dataset import Dataset
-
+from opendeep.data.dataset import FileDataset
 log = logging.getLogger(__name__)
 
-class MuseData(Dataset):
+class MuseData(FileDataset):
     '''
     Object for the MuseData midi dataset. Pickled file of midi piano roll provided by Montreal's Nicolas Boulanger-Lewandowski into train, valid, and test sets.
     '''
-    def __init__(self, filename='MuseData.zip', source='http://www-etud.iro.umontreal.ca/~boulanni/MuseData.zip'):
-        super(self.__class__, self).__init__(filename, source)
+    def __init__(self, dataset_dir='../../datasets'):
+        filename = 'MuseData.zip'
+        source = 'http://www-etud.iro.umontreal.ca/~boulanni/MuseData.zip'
+        super(MuseData, self).__init__(filename=filename, source=source, dataset_dir=dataset_dir)

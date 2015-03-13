@@ -1,5 +1,8 @@
 '''
-A Denoising Autoencoder is a special case of Generative Stochastic Networks.
+.. module: denoising_autoencoder
+
+A Denoising Autoencoder is a special case of Generative Stochastic Networks. It is used as a basic,
+unsupervised, generative building block for feedforward networks.
 
 'Generalized Denoising Auto-Encoders as Generative Models'
 Yoshua Bengio, Li Yao, Guillaume Alain, Pascal Vincent
@@ -20,19 +23,10 @@ import theano.sandbox.rng_mrg as RNG_MRG
 import opendeep.log.logger as logger
 from opendeep.models.model import Model
 from opendeep.models.multi_layer.generative_stochastic_network import GSN
-from opendeep.data.image.mnist import MNIST
+from opendeep.data.standard_datasets.image.mnist import MNIST
+from opendeep.optimization.adadelta import AdaDelta
 
 log = logging.getLogger(__name__)
-
-# for AdaDelta
-_train_args = {"n_epoch": 1000,
-               "batch_size": 100,
-               "save_frequency": 10,
-               "early_stop_threshold": .9995,
-               "early_stop_length": 30,
-               'decay': 0.95,
-               "learning_rate": 1e-6}
-
 
 class DAE(GSN):
     '''
@@ -66,7 +60,7 @@ class DAE(GSN):
         defaults['layers'] = 1
         if config:
             config['layers'] = 1
-        super(DAE, self).__init__(config, defaults, inputs_hook, hiddens_hook, dataset)
+        super(DAE, self).__init__(config=config, defaults=defaults, inputs_hook=inputs_hook, hiddens_hook=hiddens_hook, dataset=dataset)
 
 
 class StackedDAE(Model):
@@ -74,7 +68,9 @@ class StackedDAE(Model):
     A stacked Denoising Autoencoder stacks multiple layers of DAE's
     '''
     def __init__(self):
-        raise NotImplementedError()
+        super(StackedDAE, self).__init__()
+        log.error("StackedDAE not implemented yet!")
+        raise NotImplementedError("StackedDAE not implemented yet!")
 
 
 ###############################################
@@ -95,8 +91,8 @@ def main():
     # params_to_load = 'dae_params.pkl'
     # dae.load_params(params_to_load)
 
-    dae.train()
-
+    optimizer = AdaDelta(dae, mnist)
+    optimizer.train()
 
 
 if __name__ == '__main__':

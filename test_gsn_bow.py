@@ -4,7 +4,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 
 from opendeep.log.logger import config_root_logger
 from datasets.util import FileParser
-from opendeep.data.memory_matrix import MemoryMatrix
+from opendeep.data.dataset import MemoryDataset
 from opendeep.models.multi_layer.generative_stochastic_network import GSN
 
 log = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ def main():
 
 
 
-    data = MemoryMatrix(train_X=data_x, train_Y=data_y)
+    data = MemoryDataset(train_X=data_x, train_Y=data_y)
 
     config={# gsn parameters
             "layers": 2, # number of hidden layers to use

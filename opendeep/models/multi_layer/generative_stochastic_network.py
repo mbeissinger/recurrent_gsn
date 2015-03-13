@@ -39,10 +39,9 @@ import numpy.random as rng
 import theano.tensor as T
 import theano.sandbox.rng_mrg as RNG_MRG
 from theano.compat.python2x import OrderedDict
-import PIL.Image
 # internal references
 from opendeep import cast32, function, sharedX
-from opendeep.data.image.mnist import MNIST
+from opendeep.data.standard_datasets.image.mnist import MNIST
 from opendeep.data.iterators.sequential import SequentialIterator
 import opendeep.log.logger as logger
 from opendeep.models.model import Model
@@ -51,7 +50,6 @@ from opendeep.utils import file_ops
 from opendeep.utils.decay import get_decay_function
 from opendeep.utils.activation import get_activation_function
 from opendeep.utils.cost import get_cost_function
-from opendeep.utils.image import tile_raster_images
 from opendeep.utils.misc import closest_to_square_factors, make_time_units_string
 from opendeep.utils.nnet import get_weights_uniform, get_bias
 from opendeep.utils.noise import salt_and_pepper, add_gaussian
@@ -62,6 +60,7 @@ log = logging.getLogger(__name__)
 _defaults = {# gsn parameters
             "layers": 3,  # number of hidden layers to use
             "walkbacks": 5,  # number of walkbacks (generally 2*layers) - need enough to have info from top layer propagate to visible layer
+            "input_size": None,  # number of input units - please specify for your dataset! Or provide an example dataset :)
             "hidden_size": 1500,  # number of hidden units in each layer
             "visible_activation": 'sigmoid',  # activation for visible layer - should be appropriate for input data type.
             "hidden_activation": 'tanh',  # activation for hidden layers
@@ -80,23 +79,6 @@ _defaults = {# gsn parameters
             "output_path": 'outputs/gsn/',  # base directory to output various files
             "is_image": True,  # whether the input should be treated as an image
             "vis_init": False}
-
-# Defaults to use for SGD w/momentum. These defaults are meant to produce the MNIST results given in the comments at the top of this file.
-_train_args = {"n_epoch": 1000,  # maximum number of times to run through the dataset
-               "batch_size": 100,  # number of examples to process in parallel (minibatch)
-               "minimum_batch_size": 1,  # the minimum number of examples for a batch to be considered
-               "save_frequency": 10,  # how many epochs between saving parameters
-               "early_stop_threshold": .9995,  # multiplier for how much the train cost has to improve to not stop early
-               "early_stop_length": 30,  # how many epochs to wait to see if the threshold has been reached
-               "learning_rate": .25,  # initial learning rate for SGD
-               "lr_decay": 'exponential',  # the decay function to use for the learning rate parameter
-               "lr_factor": .995,  # by how much to decay the learning rate each epoch
-               "momentum": 0.5,  # the parameter momentum amount
-               'momentum_decay': 'linear',  # how to decay the momentum each epoch (if applicable)
-               'momentum_factor': 0,  # by how much to decay the momentum (in this case not at all)
-               'nesterov_momentum': False,  # whether to use nesterov momentum update (accelerated momentum)
-               }
-
 
 class GSN(Model):
     '''
@@ -220,7 +202,7 @@ class GSN(Model):
         # initialize each layer to uniform sample from sqrt(6. / (n_in + n_out))
         self.weights_list = [get_weights_uniform(shape=(self.layer_sizes[i], self.layer_sizes[i + 1]),
                                                  name="W_{0!s}_{1!s}".format(i, i + 1),
-                                                 interval='good')
+                                                 interval='montreal')
                              for i in range(self.layers)]
         # initialize each layer bias to 0's.
         self.bias_list = [get_bias(shape=(self.layer_sizes[i],),
@@ -1088,6 +1070,22 @@ def main():
     ########################################
     # Initialization things with arguments #
     ########################################
+    # use these arguments to get results from paper referenced above
+    _train_args = {"n_epoch": 1000,  # maximum number of times to run through the dataset
+                   "batch_size": 100,  # number of examples to process in parallel (minibatch)
+                   "minimum_batch_size": 1,  # the minimum number of examples for a batch to be considered
+                   "save_frequency": 10,  # how many epochs between saving parameters
+                   "early_stop_threshold": .9995,  # multiplier for how much the train cost has to improve to not stop early
+                   "early_stop_length": 30,  # how many epochs to wait to see if the threshold has been reached
+                   "learning_rate": .25,  # initial learning rate for SGD
+                   "lr_decay": 'exponential',  # the decay function to use for the learning rate parameter
+                   "lr_factor": .995,  # by how much to decay the learning rate each epoch
+                   "momentum": 0.5,  # the parameter momentum amount
+                   'momentum_decay': 'linear',  # how to decay the momentum each epoch (if applicable)
+                   'momentum_factor': 0,  # by how much to decay the momentum (in this case not at all)
+                   'nesterov_momentum': False,  # whether to use nesterov momentum update (accelerated momentum)
+    }
+
     logger.config_root_logger()
     log.info("Creating a new GSN")
 
@@ -1100,8 +1098,7 @@ def main():
     gsn.load_params(params_to_load)
 
     optimizer = SGD(model=gsn, dataset=mnist, iterator_class=SequentialIterator, config=_train_args)
-    gsn.train(optimizer=optimizer)
-    # or, alternatively, optimizer.train()
+    optimizer.train()
 
 
 if __name__ == '__main__':

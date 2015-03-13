@@ -121,12 +121,29 @@ def isotropic_gaussian_LL(means_estimated, stds_estimated, targets):
     #     targets=self.inputs)
 
 
+def zero_one(output, target):
+    """
+    This defines the zero-one loss function, where the loss is equal to the number of incorrect estimations.
+
+    :param output: the estimated variable
+    :type output: theano tensor
+
+    :param target: the ground truth
+    :type target: theano tensor
+
+    :return: the appropriate zero-one loss
+    :rtype: theano tensor
+    """
+    return T.sum(T.neq(output, target))
+
+
 ########### keep cost functions above this line, and add them to the dictionary below ####################
 _functions = {
     'binary_crossentropy': binary_crossentropy,
     'categorical_crossentropy': categorical_crossentropy,
     'mse': mse,
-    'isotropic_gaussian': isotropic_gaussian_LL
+    'isotropic_gaussian': isotropic_gaussian_LL,
+    'zero_one': zero_one
 }
 
 def get_cost_function(name):

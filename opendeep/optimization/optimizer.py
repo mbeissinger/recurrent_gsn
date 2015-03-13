@@ -33,7 +33,7 @@ class Optimizer(object):
     '''
     Default interface for an optimizer implementation - to train a model on a dataset
     '''
-    def __init__(self, model, dataset, iterator_class, config=None, defaults=None, rng=None):
+    def __init__(self, config=None, defaults=None):
         # set self.args to be the combination of the defaults and the config dictionaries
         self.args = combine_config_and_defaults(config, defaults)
 

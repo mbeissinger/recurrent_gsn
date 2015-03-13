@@ -39,15 +39,20 @@ _defaults = {"n_epoch": 1000,
              "momentum": 0.5,
              'momentum_decay': 'linear',
              'momentum_factor': 0,
-             'nesterov_momentum': True}
+             'nesterov_momentum': True,
+             'flag_para_load': False}
 
 class SGD(Optimizer):
     '''
     Stochastic gradient descent for training a model - includes early stopping, momentum, and annealing
     '''
 
-    def __init__(self, model, dataset, iterator_class=SequentialIterator, config=None, defaults=_defaults, rng=None):
-        super(SGD, self).__init__(model, dataset, iterator_class, config, defaults, rng)
+    def __init__(self, model, dataset, iterator_class=SequentialIterator, config=None, defaults=_defaults, rng=None,
+                 n_epoch=None, batch_size=None, minimum_batch_size=None, save_frequency=None,
+                 early_stop_threshold=None, early_stop_length=None, learning_rate=None, lr_decay=None, lr_factor=None,
+                 momentum=None, momentum_decay=None, momentum_factor=None, nesterov_momentum=None, flag_para_load=None):
+        # superclass init
+        super(SGD, self).__init__(config=config, defaults=defaults)
         # config and defaults are now combined in self.args! yay!
 
         self.model = model
@@ -55,38 +60,37 @@ class SGD(Optimizer):
         self.iterator = iterator_class
 
         # Training epochs - how many times to iterate over the whole dataset
-        self.n_epoch = self.args.get('n_epoch')
+        self.n_epoch = n_epoch or self.args.get('n_epoch')
 
         # Dataset iteration batch sizes - number of examples in each calculation
-        self.batch_size         = self.args.get('batch_size')
-        self.minimum_batch_size = self.args.get('minimum_batch_size')
+        self.batch_size         = batch_size or self.args.get('batch_size')
+        self.minimum_batch_size = minimum_batch_size or self.args.get('minimum_batch_size')
 
         # Number of epochs between saving model parameters
-        self.save_frequency = self.args.get('save_frequency')
+        self.save_frequency = save_frequency or self.args.get('save_frequency')
 
         # Early stopping threshold and patience - by how much does the cost have to improve over a number of epochs
-        self.early_stop_threshold = self.args.get('early_stop_threshold')
-        self.early_stop_length    = self.args.get('early_stop_length')
+        self.early_stop_threshold = early_stop_threshold or self.args.get('early_stop_threshold')
+        self.early_stop_length    = early_stop_length or self.args.get('early_stop_length')
 
         # Learning rate - how drastic of a step do the parameters change
-        self.learning_rate       = sharedX(self.args.get('learning_rate'), 'learning_rate')
+        lr = learning_rate or self.args.get('learning_rate')
+        self.learning_rate       = sharedX(lr, 'learning_rate')
         self.lr_scalers = self.model.get_lr_scalers()
-        if self.args.get('lr_decay'):
-            self.learning_rate_decay = get_decay_function(self.args.get('lr_decay'),
+        if lr_decay or self.args.get('lr_decay'):
+            self.learning_rate_decay = get_decay_function(lr_decay or self.args.get('lr_decay'),
                                                           self.learning_rate,
                                                           self.learning_rate.get_value(),
-                                                          self.args.get('lr_factor'))
+                                                          lr_factor or self.args.get('lr_factor'))
 
         # Momentum - smoothing over the parameter changes (see Hinton)
-        self.momentum = sharedX(self.args.get('momentum'), 'momentum')
+        self.momentum = sharedX(momentum or self.args.get('momentum'), 'momentum')
         if self.args.get('momentum_decay'):
-            self.momentum_decay = get_decay_function(self.args.get('momentum_decay'),
+            self.momentum_decay = get_decay_function(momentum_decay or self.args.get('momentum_decay'),
                                                      self.momentum,
                                                      self.momentum.get_value(),
-                                                     self.args.get('momentum_factor'))
-        self.nesterov_momentum = self.args.get('nesterov_momentum')
-
-        self.params = self.model.get_params()
+                                                     momentum_factor or self.args.get('momentum_factor'))
+        self.nesterov_momentum = nesterov_momentum or self.args.get('nesterov_momentum')
 
         # RNG for working on random iterator
         if rng is None:
@@ -95,24 +99,27 @@ class SGD(Optimizer):
         else:
             self.rng = rng
 
+        self.params = self.model.get_params()
+
         # Now create the training cost function for the model to use while training - update parameters
         log.info("%s params: %s", str(type(self.model)), str(self.params))
-        # Stochastic gradient descent!
+        # gradient!
         gradient = grad(self.model.get_train_cost(), self.params)
         grads    = OrderedDict(zip(self.params, gradient))
 
         # Calculate the optimizer updates each run
         # This is where the magic happens for a lot of sub-implementations of SGD, including AdaDelta!
+        # It tells how to update the params each training epoch
         gradient_updates = self.get_updates(grads)
 
-        # Combine the updates
+        # Combine the updates from the model also if applicable
         train_updates = model.get_updates()
         if train_updates:
             train_updates.update(gradient_updates)
         else:
             train_updates = gradient_updates
 
-        # Compile the functions!
+        # Compile the training function!
         log.info('Compiling f_learn function for model %s...', str(type(self.model)))
         t = time.time()
         self.f_learn = function(inputs  = model.get_inputs(),
@@ -123,7 +130,7 @@ class SGD(Optimizer):
 
         # Determine if this function is unsupervised or not by looking at the number of inputs to the f_learn function.
         # If there is only one input, it is unsupervised, otherwise, it is supervised.
-        # This workaround was provided by Pascal Lamblin
+        # This workaround was provided by Pascal Lamblin on the theano-users google group
         num_inputs = len([i for i in self.f_learn.maker.inputs if not i.shared])
         if num_inputs == 1:
             log.debug("Model is unsupervised: 1 input to f_learn.")
@@ -139,6 +146,7 @@ class SGD(Optimizer):
                                   str(type(self.model)),
                                   str(num_inputs))
 
+        # grab the function(s) to use to monitor different model values during training
         self.monitors = self.model.get_monitors()
 
 
@@ -161,16 +169,6 @@ class SGD(Optimizer):
         Updates at each training step
         """
         log.debug('Setting up Stochastic Gradient Descent with momentum for optimizer...')
-        # params = grads.keys()
-        # gradients = grads.values()
-        #
-        # gradient_buffer = [sharedX(numpy.zeros(param.get_value().shape, dtype='float32')) for param in params]
-        # m_gradient      = [self.momentum * gb + (cast32(1) - self.momentum) * g for (gb, g) in zip(gradient_buffer, gradients)]
-        #
-        # param_updates   = [(param, param - self.learning_rate * mg) for (param, mg) in zip(params, m_gradient)]
-        # gradient_buffer_updates = zip(gradient_buffer, m_gradient)
-        #
-        # return OrderedDict(param_updates + gradient_buffer_updates)
         updates = OrderedDict()
         for (param, gradient) in six.iteritems(grads):
             vel = sharedX(param.get_value() * 0.)

@@ -24,12 +24,16 @@ from theano.compat.python2x import OrderedDict
 from opendeep import function
 from opendeep.models.model import Model
 from opendeep.models.single_layer.convolutional import ConvPoolLayer
-from opendeep.models.single_layer.generic import FullyConnectedLayer, SoftmaxLayer
+from opendeep.models.single_layer.basic import BasicLayer, SoftmaxLayer
 from opendeep.utils.nnet import mirror_images
 from opendeep.utils.noise import dropout
 from opendeep.utils.misc import make_time_units_string
 
 log = logging.getLogger(__name__)
+
+# Some convolution operations only work on the GPU, so do a check here:
+if not theano.config.device.startswith('gpu'):
+    log.warning("You should reeeeeaaaally consider using a GPU, unless this is a small toy algorithm for fun. Please enable the GPU in Theano via these instructions: http://deeplearning.net/software/theano/tutorial/using_gpu.html")
 
 # To use the fastest convolutions possible, need to set the Theano flag as described here:
 # http://benanne.github.io/2014/12/09/theano-metaopt.html
@@ -38,10 +42,6 @@ log = logging.getLogger(__name__)
 if theano.config.optimizer_including != "conv_meta":
     log.warning("Theano flag optimizer_including is not conv_meta (found %s)! To have Theano cherry-pick the best convolution implementation, please set optimizer_including=conv_meta either in THEANO_FLAGS or in the .theanorc file!"
                 % str(theano.config.optimizer_including))
-
-_train_args = {
-    'batch_size': 256  # convolutional nets are particular about the batch sizes. AlexNet, for example, needs batch_size % 16 == 0
-}
 
 class AlexNet(Model):
     """
@@ -127,7 +127,7 @@ class AlexNet(Model):
                                         bias_init=0.0,
                                         local_response_normalization=True,
                                         lib_conv=self.lib_conv)
-        # Add this layer to the model's list of layers and add its parameters!
+        # Add this layer's parameters!
         self.params += convpool_layer1.get_params()
 
         log.debug("convpool layer 2...")
@@ -141,7 +141,7 @@ class AlexNet(Model):
                                         bias_init=0.1,
                                         local_response_normalization=True,
                                         lib_conv=self.lib_conv)
-        # Add this layer to the model's list of layers and add its parameters!
+        # Add this layer's parameters!
         self.params += convpool_layer2.get_params()
 
         log.debug("convpool layer 3...")
@@ -155,7 +155,7 @@ class AlexNet(Model):
                                         bias_init=0.0,
                                         local_response_normalization=False,
                                         lib_conv=self.lib_conv)
-        # Add this layer to the model's list of layers and add its parameters!
+        # Add this layer's parameters!
         self.params += convpool_layer3.get_params()
 
         log.debug("convpool layer 4...")
@@ -169,7 +169,7 @@ class AlexNet(Model):
                                         bias_init=0.1,
                                         local_response_normalization=False,
                                         lib_conv=self.lib_conv)
-        # Add this layer to the model's list of layers and add its parameters!
+        # Add this layer's parameters!
         self.params += convpool_layer4.get_params()
 
         log.debug("convpool layer 5...")
@@ -183,7 +183,7 @@ class AlexNet(Model):
                                         bias_init=0.0,
                                         local_response_normalization=False,
                                         lib_conv=self.lib_conv)
-        # Add this layer to the model's list of layers and add its parameters!
+        # Add this layer's parameters!
         self.params += convpool_layer5.get_params()
 
         # Now onto the fully-connected layers!
@@ -197,16 +197,17 @@ class AlexNet(Model):
         log.debug("fully connected layer 1 (model layer 6)...")
         # we want to have dropout applied to the training version, but not the test version.
         fc_layer6_input = T.flatten(convpool_layer5.get_outputs().dimshuffle(3, 0, 1, 2), 2)
-        fc_layer6 = FullyConnectedLayer(inputs_hook=(9216, fc_layer6_input), n_out=4096, config=fc_config)
-        # Add this layer to the model's list of layers and add its parameters!
+        fc_layer6 = BasicLayer(inputs_hook=(9216, fc_layer6_input), n_out=4096, config=fc_config)
+        # Add this layer's parameters!
         self.params += fc_layer6.get_params()
 
         # now apply dropout to the output for training
         dropout_layer6 = dropout(fc_layer6.get_outputs(), corruption_level=0.5)
 
         log.debug("fully connected layer 2 (model layer 7)...")
-        fc_layer7       = FullyConnectedLayer(inputs_hook=(4096, fc_layer6.get_outputs()), n_out=4096, config=fc_config)
-        fc_layer7_train = FullyConnectedLayer(inputs_hook=(4096, dropout_layer6), n_out=4096, params_hook=fc_layer7.get_params(), config=fc_config)
+        fc_layer7       = BasicLayer(inputs_hook=(4096, fc_layer6.get_outputs()), n_out=4096, config=fc_config)
+        fc_layer7_train = BasicLayer(inputs_hook=(4096, dropout_layer6), n_out=4096, params_hook=fc_layer7.get_params(), config=fc_config)
+        # Add this layer's parameters!
         self.params += fc_layer7_train.get_params()
 
         # apply dropout again for training
@@ -221,9 +222,12 @@ class AlexNet(Model):
         }
         log.debug("softmax classification layer (model layer 8)...")
         softmax_layer8       = SoftmaxLayer(inputs_hook=(4096, fc_layer7.get_outputs()), n_out=1000, config=softmax_config)
-        softmax_layer8_train = SoftmaxLayer(inputs_hook=(4096, dropout_layer7), n_out=1000, params_hook=softmax_layer8.get_params(), config=softmax_config)
+        softmax_layer8_train = SoftmaxLayer(inputs_hook=(4096, dropout_layer7), n_out=1000, params_hook=softmax_layer8.get_params(),
+                                            config=softmax_config)
+        # Add this layer's parameters!
         self.params += softmax_layer8.get_params()
 
+        # finally the softmax output from the whole thing!
         self.output = softmax_layer8.get_outputs()
 
         #####################
@@ -242,7 +246,7 @@ class AlexNet(Model):
         log.debug("Compiling functions!")
         t = time.time()
         log.debug("f_predict...")
-        self.f_predict = function(inputs=[self.x], outputs=softmax_layer8.get_prediction())  # use the actual argmax from the classification
+        self.f_predict = function(inputs=[self.x], outputs=softmax_layer8.get_argmax_prediction())  # use the actual argmax from the classification
         log.debug("f_monitors")
         self.f_monitors = function(inputs=[self.x, self.y], outputs=self.monitors.values())
         log.debug("compilation took %s" % make_time_units_string(time.time() - t))
