@@ -402,12 +402,16 @@ def experiment(state, outdir_base='./'):
     gsn_costs_init     = [cost_function(rX, X) for rX in p_X_chain_init]
     show_gsn_cost_init = gsn_costs_init[-1]
     gsn_cost_init      = numpy.sum(gsn_costs_init)
+    gsn_init_mse = T.mean(T.sqr(p_X_chain_init[-1], X),axis=0)
+    gsn_init_error = T.mean(gsn_init_mse)
     
     #gsn_costs     = T.mean(T.mean(T.nnet.binary_crossentropy(p_X_chain, T.stacklists(Xs)[sequence_graph_output_index]),2),1)
     gsn_costs     = [cost_function(rX, Xs[-1]) for rX in predicted_X_chain_gsn]
     show_gsn_cost = gsn_costs[-1]
     gsn_cost      = T.sum(gsn_costs)
-    
+    gsn_mse = T.mean(T.sqr(predicted_X_chain_gsn[-1], Xs[-1]), axis=0)
+    gsn_error = T.mean(gsn_mse)
+
     gsn_params = weights_list + bias_list    
     logger.log(["gsn params:",gsn_params])
         
@@ -418,6 +422,8 @@ def experiment(state, outdir_base='./'):
     regression_costs     = [cost_function(rX, Xs[-1]) for rX in predicted_X_chain]
     show_regression_cost = regression_costs[-1]
     regression_cost      = T.sum(regression_costs) + state.regularize_weight * regression_regularization_cost
+    regression_mse   = T.mean(T.sqr(predicted_X_chain[-1], Xs[-1]), axis=0)
+    regression_error = T.mean(regression_mse)
     
     #only using the odd layers update -> even-indexed parameters in the list because it starts at v1
     # need to flatten the regression list -> couldn't immediately find the python method so here is the implementation
@@ -447,10 +453,10 @@ def experiment(state, outdir_base='./'):
     
     gsn_f_learn_init     =   theano.function(inputs  = [X], 
                                          updates = updates_init, 
-                                         outputs = show_gsn_cost_init)
+                                         outputs = [show_gsn_cost_init, gsn_init_error])
     
     gsn_f_cost_init      =   theano.function(inputs  = [X], 
-                                             outputs = show_gsn_cost_init)
+                                             outputs = [show_gsn_cost_init, gsn_init_error])
     
     
     gradient        =   T.grad(gsn_cost, gsn_params)
@@ -463,12 +469,12 @@ def experiment(state, outdir_base='./'):
         
     
     gsn_f_cost      =   theano.function(inputs  = Xs, 
-                                      outputs = show_gsn_cost)
+                                      outputs = [show_gsn_cost, gsn_error])
 
 
     gsn_f_learn     =   theano.function(inputs  = Xs, 
                                         updates = updates, 
-                                        outputs = show_gsn_cost)
+                                        outputs = [show_gsn_cost, gsn_error])
       
     
     regression_gradient        =   T.grad(regression_cost, regression_params)
@@ -480,11 +486,11 @@ def experiment(state, outdir_base='./'):
     regression_updates         =   OrderedDict(regression_param_updates + regression_gradient_buffer_updates)
     
     regression_f_cost          =   theano.function(inputs = Xs, 
-                                                   outputs = show_regression_cost)
+                                                   outputs = [show_regression_cost, regression_error])
         
     regression_f_learn         =   theano.function(inputs  = Xs, 
                                                   updates = regression_updates, 
-                                                  outputs = show_regression_cost)
+                                                  outputs = [show_regression_cost, regression_error])
     
     
     logger.log("functions done. took "+make_time_units_string(time.time() - t)+".\n")
@@ -657,21 +663,25 @@ def experiment(state, outdir_base='./'):
                 
             #train
             train_costs = []
+            train_errors= []
             if iteration == 0:
                 for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                     x = train_X.get_value(borrow=True)[i * batch_size : (i+1) * batch_size]
-                    cost = gsn_f_learn_init(x)
+                    cost, error = gsn_f_learn_init(x)
                     train_costs.append([cost])
+                    train_errors.append([error])
             else:
                 for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                     xs = [train_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                     xs, _ = fix_input_size(xs)
                     _ins = xs #+ [sequence_window_size]
-                    cost = gsn_f_learn(*_ins)
+                    cost, error = gsn_f_learn(*_ins)
                     train_costs.append(cost)
+                    train_errors.append(error)
                 
             train_costs = numpy.mean(train_costs) 
-            logger.append(['Train: ',trunc(train_costs), '\t'])
+            train_errors = numpy.mean(train_errors)
+            logger.append(['Train: ',trunc(train_costs),trunc(train_errors), '\t'])
             with open(train_convergence,'a') as f:
                 f.write("{0!s},".format(train_costs))
                 f.write("\n")
@@ -681,14 +691,14 @@ def experiment(state, outdir_base='./'):
             if iteration == 0:
                 for i in range(len(valid_X.get_value(borrow=True)) / batch_size):
                     x = valid_X.get_value(borrow=True)[i * batch_size : (i+1) * batch_size]
-                    cost = gsn_f_cost_init(x)
+                    cost,_ = gsn_f_cost_init(x)
                     valid_costs.append([cost])
             else:
                 for i in range(len(valid_X.get_value(borrow=True)) / batch_size):
                     xs = [valid_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                     xs, _ = fix_input_size(xs)
                     _ins = xs #+ [sequence_window_size]
-                    costs = gsn_f_cost(*_ins)
+                    costs,_ = gsn_f_cost(*_ins)
                     valid_costs.append(costs)
                     
             valid_costs = numpy.mean(valid_costs) 
@@ -699,21 +709,25 @@ def experiment(state, outdir_base='./'):
     
             #test
             test_costs  =   []
+            test_errors = []
             if iteration == 0:
                 for i in range(len(test_X.get_value(borrow=True)) / batch_size):
                     x = test_X.get_value(borrow=True)[i * batch_size : (i+1) * batch_size]
-                    cost = gsn_f_cost_init(x)
+                    cost, error = gsn_f_cost_init(x)
                     test_costs.append([cost])
+                    test_errors.append([error])
             else:
                 for i in range(len(test_X.get_value(borrow=True)) / batch_size):
                     xs = [test_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                     xs, _ = fix_input_size(xs)
                     _ins = xs #+ [sequence_window_size]
-                    costs = gsn_f_cost(*_ins)
+                    costs,errors = gsn_f_cost(*_ins)
                     test_costs.append(costs)
+                    test_errors.append(errors)
                 
             test_costs = numpy.mean(test_costs) 
-            logger.append(['Test: ',trunc(test_costs), '\t'])
+            test_errors = numpy.mean(test_errors)
+            logger.append(['Test: ',trunc(test_costs), trunc(test_errors), '\t'])
             with open(test_convergence,'a') as f:
                 f.write("{0!s},".format(test_costs))
                 f.write("\n")
@@ -842,17 +856,20 @@ def experiment(state, outdir_base='./'):
     
             #train
             train_costs = []
+            train_errors = []
             for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                 xs = [train_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                 xs, _ = fix_input_size(xs)
                 _ins = xs #+ [sequence_window_size]
-                cost = regression_f_learn(*_ins)
+                cost, error = regression_f_learn(*_ins)
                 #print trunc(cost)
                 #print [numpy.asarray(a) for a in f_check(*_ins)]
                 train_costs.append(cost)
+                train_errors.append(error)
                 
             train_costs = numpy.mean(train_costs) 
-            logger.append(['rTrain: ',trunc(train_costs), '\t'])
+            train_errors = numpy.mean(train_errors)
+            logger.append(['rTrain: ',trunc(train_costs), trunc(train_errors), '\t'])
             with open(regression_train_convergence,'a') as f:
                 f.write("{0!s},".format(train_costs))
                 f.write("\n")
@@ -864,7 +881,7 @@ def experiment(state, outdir_base='./'):
                 xs = [valid_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                 xs, _ = fix_input_size(xs)
                 _ins = xs #+ [sequence_window_size]
-                cost = regression_f_cost(*_ins)
+                cost,_ = regression_f_cost(*_ins)
                 valid_costs.append(cost)
                     
             valid_costs = numpy.mean(valid_costs)
@@ -876,15 +893,18 @@ def experiment(state, outdir_base='./'):
     
             #test
             test_costs  =   []
+            test_errors = []
             for i in range(len(test_X.get_value(borrow=True)) / batch_size):
                 xs = [test_X.get_value(borrow=True)[(i * batch_size) + sequence_idx : ((i+1) * batch_size) + sequence_idx] for sequence_idx in range(len(Xs))]
                 xs, _ = fix_input_size(xs)
                 _ins = xs #+ [sequence_window_size]
-                cost = regression_f_cost(*_ins)
+                cost,error = regression_f_cost(*_ins)
                 test_costs.append(cost)
+                test_errors.append(error)
                 
             test_costs = numpy.mean(test_costs)
-            logger.append(['rTest: ', trunc(test_costs), '\t'])
+            test_errors = numpy.mean(test_errors)
+            logger.append(['rTest: ', trunc(test_costs), trunc(test_errors), '\t'])
             with open(regression_test_convergence,'a') as f:
                 f.write("{0!s},".format(test_costs))
                 f.write("\n")
@@ -958,10 +978,12 @@ def experiment(state, outdir_base='./'):
     #####################
     # alternate training the gsn and training the regression
     for iteration in range(state.max_iterations):
-        if iteration is 0 and initialized_gsn is False:
-            train_regression(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
-        else:
-            train_GSN(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
-            train_regression(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+        # if iteration is 0 and initialized_gsn is False:
+        #     train_regression(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+        # else:
+        #     train_GSN(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+        #     train_regression(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+        train_GSN(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+        train_regression(iteration, train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
         
          

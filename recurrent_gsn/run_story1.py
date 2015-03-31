@@ -13,11 +13,11 @@ def main():
     parser.add_argument('--hidden_size', type=int, default=1000)
     parser.add_argument('--hidden_act', type=str, default='tanh')
     parser.add_argument('--visible_act', type=str, default='sigmoid')
-    parser.add_argument('--sequence_window_size', type=int, default=10) # how much history to consider (including the current input x)
+    parser.add_argument('--sequence_window_size', type=int, default=2) # how much history to consider (including the current input x)
     
     # training
     parser.add_argument('--cost_funct', type=str, default='binary_crossentropy') # the cost function for training
-    parser.add_argument('--n_epoch', type=int, default=100)
+    parser.add_argument('--n_epoch', type=int, default=30)
     parser.add_argument('--batch_size', type=int, default=100)
     parser.add_argument('--save_frequency', type=int, default=10) #number of epochs between parameters being saved
     parser.add_argument('--early_stop_threshold', type=float, default=0.9995) #0.9995
