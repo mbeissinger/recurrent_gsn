@@ -10,10 +10,10 @@ def main():
     # network settings
     parser.add_argument('--layers', type=int, default=3) # number of hidden layers
     parser.add_argument('--walkbacks', type=int, default=5) # number of walkbacks
-    parser.add_argument('--hidden_size', type=int, default=1500)
+    parser.add_argument('--hidden_size', type=int, default=1000)
     parser.add_argument('--hidden_act', type=str, default='tanh')
     parser.add_argument('--visible_act', type=str, default='sigmoid')
-    parser.add_argument('--sequence_window_size', type=int, default=2) # how much history to consider (including the current input x)
+    parser.add_argument('--sequence_window_size', type=int, default=10) # how much history to consider (including the current input x)
     
     # training
     parser.add_argument('--cost_funct', type=str, default='binary_crossentropy') # the cost function for training
@@ -50,10 +50,10 @@ def main():
        
     # RUN STORY 1
     Story1.experiment(args, '../outputs/model_1/')
-    args.dataset = "MNIST_2"
-    Story1.experiment(args, '../outputs/model_1/')
-    args.dataset = "MNIST_3"
-    Story1.experiment(args, '../outputs/model_1/')
+    # args.dataset = "MNIST_2"
+    # Story1.experiment(args, '../outputs/model_1/')
+    # args.dataset = "MNIST_3"
+    # Story1.experiment(args, '../outputs/model_1/')
     
 if __name__ == '__main__':
     main()
