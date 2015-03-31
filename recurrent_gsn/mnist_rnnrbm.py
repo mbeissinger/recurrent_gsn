@@ -332,7 +332,7 @@ num_epochs : integer
         try:
             for epoch in xrange(num_epochs):
                 t = time.time()
-                print 'Epoch %i/%i : ' % (epoch + 1, num_epochs),'\t',
+                print 'Epoch %i/%i : ' % (epoch + 1, num_epochs)
                 # sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
                 accuracy = []
                 costs = []
