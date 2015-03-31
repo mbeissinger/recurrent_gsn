@@ -1,6 +1,6 @@
 outputs
 datasets
-opendeep/log/logs
+recurrent_gsn/log/logs
 *.npy
 
 #################
