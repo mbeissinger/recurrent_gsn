@@ -188,9 +188,9 @@ updates_generate : dictionary of Theano variable -> Theano variable
         lambda v_t, u_tm1, *_: recurrence(v_t, u_tm1),
         sequences=v, outputs_info=[u0, None, None], non_sequences=params)
     
-    v_sample, cost, monitor, crossentropy, updates_rbm = build_rbm(v, W, bv_t, bh_t, k=25)
+    v_sample, cost, monitor, crossentropy, updates_rbm = build_rbm(v, W, bv_t, bh_t, k=15)
 
-    v_prediction, _, _, _, updates_predict = build_rbm(v[:-1], W, bv_t[1:], bh_t[1:], k=50)
+    v_prediction, _, _, _, updates_predict = build_rbm(v[:-1], W, bv_t[1:], bh_t[1:], k=15)
 
     mse = T.mean(T.sqr(v_sample[1:] - v_prediction), axis=0)
     accuracy = T.mean(mse)
@@ -316,7 +316,7 @@ num_epochs : integer
         test_X = theano.shared(test_X)
         test_Y = theano.shared(test_Y) 
        
-        data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+        data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset=4)
         
         print 'train set size:',train_X.shape.eval()
         print 'valid set size:',valid_X.shape.eval()
