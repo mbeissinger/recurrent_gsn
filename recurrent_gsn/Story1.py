@@ -85,13 +85,13 @@ def experiment(state, outdir_base='./'):
     
     if artificial: #if it my MNIST sequence, appropriately sequence it.
         logger.log('Sequencing MNIST data...')
-        logger.log('train set size:',len(train_Y.eval()))
-        logger.log('valid set size:',len(valid_Y.eval()))
-        logger.log('test set size:',len(test_Y.eval()))
+        logger.log(['train set size:',len(train_Y.eval())])
+        logger.log(['valid set size:',len(valid_Y.eval())])
+        logger.log(['test set size:',len(test_Y.eval())])
         data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset, rng)
-        logger.log('train set size:',len(train_Y.eval()))
-        logger.log('valid set size:',len(valid_Y.eval()))
-        logger.log('test set size:',len(test_Y.eval()))
+        logger.log(['train set size:',len(train_Y.eval())])
+        logger.log(['valid set size:',len(valid_Y.eval())])
+        logger.log(['test set size:',len(test_Y.eval())])
         logger.log('Sequencing done.\n')
     
     # variables from the dataset that are used for initialization and image reconstruction
