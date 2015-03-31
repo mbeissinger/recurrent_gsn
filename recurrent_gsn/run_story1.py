@@ -35,7 +35,7 @@ def main():
     parser.add_argument('--regularize_weight', type=float, default=0)
     
     # data
-    parser.add_argument('--dataset', type=str, default='MNIST_1')
+    parser.add_argument('--dataset', type=str, default='MNIST_4')
     parser.add_argument('--data_path', type=str, default='../data/')
     parser.add_argument('--classes', type=int, default=10)
    
@@ -49,7 +49,7 @@ def main():
     args = parser.parse_args()
        
     # RUN STORY 1
-    Story1.experiment(args, '../outputs/model_1/')
+    Story1.experiment(args, '../outputs/model_4/')
     # args.dataset = "MNIST_2"
     # Story1.experiment(args, '../outputs/model_1/')
     # args.dataset = "MNIST_3"
