@@ -29,7 +29,7 @@ def main():
     parser.add_argument('--n_epoch', type=int, default=500)
     parser.add_argument('--gsn_batch_size', type=int, default=100)
     parser.add_argument('--batch_size', type=int, default=100) # max length of sequence to consider
-    parser.add_argument('--save_frequency', type=int, default=1) #number of epochs between parameters being saved
+    parser.add_argument('--save_frequency', type=int, default=10) #number of epochs between parameters being saved
     parser.add_argument('--early_stop_threshold', type=float, default=0.9996) #0.9995
     parser.add_argument('--early_stop_length', type=int, default=30)
     parser.add_argument('--hessian_free', type=int, default=0) # boolean for whether or not to use Hessian-free training for RNN-GSN
@@ -46,7 +46,7 @@ def main():
     parser.add_argument('--regularize_weight', type=float, default=0)
     
     # data
-    parser.add_argument('--dataset', type=str, default='MNIST_1')
+    parser.add_argument('--dataset', type=str, default='MNIST_4')
     parser.add_argument('--data_path', type=str, default='../data/')
     parser.add_argument('--outdir_base', type=str, default='../outputs/rnn_gsn/')
    
