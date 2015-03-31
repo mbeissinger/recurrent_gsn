@@ -402,14 +402,14 @@ def experiment(state, outdir_base='./'):
     gsn_costs_init     = [cost_function(rX, X) for rX in p_X_chain_init]
     show_gsn_cost_init = gsn_costs_init[-1]
     gsn_cost_init      = numpy.sum(gsn_costs_init)
-    gsn_init_mse = T.mean(T.sqr(p_X_chain_init[-1], X),axis=0)
+    gsn_init_mse = T.mean(T.sqr(p_X_chain_init[-1] - X),axis=0)
     gsn_init_error = T.mean(gsn_init_mse)
     
     #gsn_costs     = T.mean(T.mean(T.nnet.binary_crossentropy(p_X_chain, T.stacklists(Xs)[sequence_graph_output_index]),2),1)
     gsn_costs     = [cost_function(rX, Xs[-1]) for rX in predicted_X_chain_gsn]
     show_gsn_cost = gsn_costs[-1]
     gsn_cost      = T.sum(gsn_costs)
-    gsn_mse = T.mean(T.sqr(predicted_X_chain_gsn[-1], Xs[-1]), axis=0)
+    gsn_mse = T.mean(T.sqr(predicted_X_chain_gsn[-1] - Xs[-1]), axis=0)
     gsn_error = T.mean(gsn_mse)
 
     gsn_params = weights_list + bias_list    
@@ -422,7 +422,7 @@ def experiment(state, outdir_base='./'):
     regression_costs     = [cost_function(rX, Xs[-1]) for rX in predicted_X_chain]
     show_regression_cost = regression_costs[-1]
     regression_cost      = T.sum(regression_costs) + state.regularize_weight * regression_regularization_cost
-    regression_mse   = T.mean(T.sqr(predicted_X_chain[-1], Xs[-1]), axis=0)
+    regression_mse   = T.mean(T.sqr(predicted_X_chain[-1] - Xs[-1]), axis=0)
     regression_error = T.mean(regression_mse)
     
     #only using the odd layers update -> even-indexed parameters in the list because it starts at v1
