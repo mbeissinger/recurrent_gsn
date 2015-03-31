@@ -211,7 +211,7 @@ class RnnRbm:
     '''Simple class to train an RNN-RBM from MIDI files and to generate sample
 sequences.'''
 
-    def __init__(self, n_visible=784, n_hidden=300, n_hidden_recurrent=300, lr=0.001, annealing=.99):
+    def __init__(self, n_visible=784, n_hidden=1000, n_hidden_recurrent=100, lr=0.01, annealing=.99):
         '''Constructs and compiles Theano functions for training and sequence
 generation.
 
@@ -235,43 +235,8 @@ lr : float
         updates_test = updates_train
 
         gradient = T.grad(cost, params, consider_constant=[v_sample])
-        grads = OrderedDict(zip(params, gradient))
-        adadelta_updates = OrderedDict()
-        for param in params:
-            # mean_squared_grad := E[g^2]_{t-1}
-            mean_square_grad = sharedX(param.get_value() * 0.)
-            # mean_square_dx := E[(\Delta x)^2]_{t-1}
-            mean_square_dx = sharedX(param.get_value() * 0.)
 
-            if param.name is not None:
-                mean_square_grad.name = 'mean_square_grad_' + param.name
-                mean_square_dx.name = 'mean_square_dx_' + param.name
-
-            # Accumulate gradient
-            new_mean_squared_grad = (
-                decay * mean_square_grad +
-                (1 - decay) * T.sqr(grads[param])
-            )
-
-            # Compute update
-            epsilon = lr
-            rms_dx_tm1 = T.sqrt(mean_square_dx + epsilon)
-            rms_grad_t = T.sqrt(new_mean_squared_grad + epsilon)
-            delta_x_t = - (rms_dx_tm1 / rms_grad_t) * grads[param]
-
-            # Accumulate updates
-            new_mean_square_dx = (
-                decay * mean_square_dx +
-                (1 - decay) * T.sqr(delta_x_t)
-            )
-
-            # Apply update
-            adadelta_updates[mean_square_grad] = new_mean_squared_grad
-            adadelta_updates[mean_square_dx] = new_mean_square_dx
-            adadelta_updates[param] = param + delta_x_t
-
-        # updates_train.update(((p, p - lr * g) for p, g in zip(params, gradient)))
-        updates_train.update(adadelta_updates)
+        updates_train.update(((p, p - lr * g) for p, g in zip(params, gradient)))
         
         print 'compiling functions...'
         print 'train'
@@ -365,8 +330,8 @@ num_epochs : integer
                 sys.stdout.flush()
                 
                 #new learning rate
-                # new_lr = self.lr.get_value() * self.annealing
-                # self.lr.set_value(new_lr)
+                new_lr = self.lr.get_value() * self.annealing
+                self.lr.set_value(new_lr)
 
         except KeyboardInterrupt:
             print 'Interrupted by user.'
