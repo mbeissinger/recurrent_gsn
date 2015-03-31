@@ -556,13 +556,14 @@ class RNN_GSN():
                     reconstructed = numpy.array(reconstructions)
                     if (self.is_image):
                         # Concatenate stuff
-                        stacked = numpy.vstack([numpy.vstack([xs_test[i*10 : (i+1)*10], noisy_xs_test[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10]]) for i in range(10)])
-                        number_reconstruction = PIL.Image.fromarray(tile_raster_images(stacked, (self.image_height, self.image_width), (10,30)))
+                        # stacked = numpy.vstack([numpy.vstack([xs_test[i*10 : (i+1)*10], noisy_xs_test[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10]]) for i in range(10)])
+                        # number_reconstruction = PIL.Image.fromarray(tile_raster_images(stacked, (self.image_height, self.image_width), (10,30)))
                             
-                        number_reconstruction.save(self.outdir+'rnngsn_reconstruction_epoch_'+str(counter)+'.png')
+                        # number_reconstruction.save(self.outdir+'rnngsn_reconstruction_epoch_'+str(counter)+'.png')
             
                         #sample_numbers(counter, 'seven')
 #                         plot_samples(counter, 'rnngsn')
+                        pass
             
                     #save params
                     self.save_params('all', counter, self.params)
