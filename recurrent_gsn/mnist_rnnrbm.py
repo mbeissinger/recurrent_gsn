@@ -46,39 +46,6 @@ def shared_zeros(size, name):
     '''Initialize a vector shared variable with zero elements.'''
     return theano.shared(value=numpy.zeros(size, dtype=theano.config.floatX), name=name)
 
-
-def sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y):
-    #shuffle the datasets
-    train_indices = range(len(train_Y.get_value(borrow=True)))
-    rng.shuffle(train_indices)
-    valid_indices = range(len(valid_Y.get_value(borrow=True)))
-    rng.shuffle(valid_indices)
-    test_indices = range(len(test_Y.get_value(borrow=True)))
-    rng.shuffle(test_indices)
-    
-    train_X.set_value(train_X.get_value(borrow=True)[train_indices])
-    train_Y.set_value(train_Y.get_value(borrow=True)[train_indices])
-    
-    valid_X.set_value(valid_X.get_value(borrow=True)[valid_indices])
-    valid_Y.set_value(valid_Y.get_value(borrow=True)[valid_indices])
-    
-    test_X.set_value(test_X.get_value(borrow=True)[test_indices])
-    test_Y.set_value(test_Y.get_value(borrow=True)[test_indices])
-    
-    # Find the order of MNIST data going from 0-9 repeating
-    train_ordered_indices = data.create_series(train_Y.get_value(borrow=True), 10)
-    valid_ordered_indices = data.create_series(valid_Y.get_value(borrow=True), 10)
-    test_ordered_indices = data.create_series(test_Y.get_value(borrow=True), 10)
-    
-    # Put the data sets in order
-    train_X.set_value(train_X.get_value(borrow=True)[train_ordered_indices])
-    train_Y.set_value(train_Y.get_value(borrow=True)[train_ordered_indices])
-    
-    valid_X.set_value(valid_X.get_value(borrow=True)[valid_ordered_indices])
-    valid_Y.set_value(valid_Y.get_value(borrow=True)[valid_ordered_indices])
-    
-    test_X.set_value(test_X.get_value(borrow=True)[test_ordered_indices])
-    test_Y.set_value(test_Y.get_value(borrow=True)[test_ordered_indices])
     
 def fix_input_size(xs, u0):
     sizes = [x.shape[0] for x in xs]
@@ -87,6 +54,15 @@ def fix_input_size(xs, u0):
     u0 = u0[:min_size]
     return xs, u0
 
+def sharedX(value, name=None, borrow=False, dtype=None):
+    """
+    Transform value into a theano shared variable of type floatX
+    """
+    if dtype is None:
+        dtype = theano.config.floatX
+    return theano.shared(theano._asarray(value, dtype=dtype),
+                         name=name,
+                         borrow=borrow)
 def build_rbm(v, W, bv, bh, k=50):
     '''Construct a k-step Gibbs chain starting at v for an RBM.
 
@@ -113,6 +89,7 @@ monitor: Theano scalar
   Pseudo log-likelihood (also averaged in the batch case).
 updates: dictionary of Theano variable -> Theano variable
   The `updates` object returned by scan.'''
+
 
     def gibbs_step(v):
         mean_h = T.nnet.sigmoid(T.dot(v, W) + bh)
@@ -200,7 +177,7 @@ updates_generate : dictionary of Theano variable -> Theano variable
         generate = v_t is None
         if generate:
             v_t, _, _, _, updates = build_rbm(T.zeros((n_visible,)), W, bv_t,
-                                           bh_t, k=25)
+                                           bh_t, k=50)
         u_t = T.tanh(bu + T.dot(v_t, Wvu) + T.dot(u_tm1, Wuu))
         return ([v_t, u_t], updates) if generate else [u_t, bv_t, bh_t]
 
@@ -211,16 +188,22 @@ updates_generate : dictionary of Theano variable -> Theano variable
         lambda v_t, u_tm1, *_: recurrence(v_t, u_tm1),
         sequences=v, outputs_info=[u0, None, None], non_sequences=params)
     
-    v_sample, cost, monitor, crossentropy, updates_rbm = build_rbm(v, W, bv_t[:], bh_t[:],
-                                                     k=15)
+    v_sample, cost, monitor, crossentropy, updates_rbm = build_rbm(v, W, bv_t, bh_t, k=20)
+
+    v_prediction, _, _, _, updates_predict = build_rbm(v[:-1], W, bv_t[1:], bh_t[1:], k=20)
+
+    mse = T.mean(T.sqr(v_sample[1:] - v_prediction), axis=0)
+    accuracy = T.mean(mse)
+
     updates_train.update(updates_rbm)
+    updates_train.update(updates_predict)
 
     # symbolic loop for sequence generation
     (v_t, u_t), updates_generate = theano.scan(
         lambda u_tm1, *_: recurrence(None, u_tm1),
         outputs_info=[None, u0], non_sequences=params, n_steps=400)
 
-    return (v, v_sample, cost, monitor, crossentropy, params, updates_train, v_t,
+    return (v, v_sample, cost, monitor, accuracy, crossentropy, params, updates_train, v_t,
             updates_generate)
 
 
@@ -228,7 +211,7 @@ class RnnRbm:
     '''Simple class to train an RNN-RBM from MIDI files and to generate sample
 sequences.'''
 
-    def __init__(self, n_visible=784, n_hidden=300, n_hidden_recurrent=300, lr=0.01, annealing=.99):
+    def __init__(self, n_visible=784, n_hidden=300, n_hidden_recurrent=300, lr=0.001, annealing=.99):
         '''Constructs and compiles Theano functions for training and sequence
 generation.
 
@@ -238,25 +221,65 @@ n_hidden_recurrent : integer
   Number of hidden units of the RNN.
 lr : float
   Learning rate'''
+
+        decay = 0.95
+
         
         self.lr = theano.shared(value=lr, name="lr")
         self.annealing = annealing
         self.root_N_input = 28
 
-        (v, v_sample, cost, monitor, crossentropy, params, updates_train, v_t, updates_generate) = build_rnnrbm(n_visible, n_hidden, n_hidden_recurrent)
+        (v, v_sample, cost, monitor, accuracy, crossentropy, params, updates_train, v_t, updates_generate) = \
+            build_rnnrbm(n_visible, n_hidden, n_hidden_recurrent)
         
         updates_test = updates_train
 
         gradient = T.grad(cost, params, consider_constant=[v_sample])
-        updates_train.update(((p, p - lr * g) for p, g in zip(params,
-                                                                gradient)))
+        grads = OrderedDict(zip(params, gradient))
+        adadelta_updates = OrderedDict()
+        for param in params:
+            # mean_squared_grad := E[g^2]_{t-1}
+            mean_square_grad = sharedX(param.get_value() * 0.)
+            # mean_square_dx := E[(\Delta x)^2]_{t-1}
+            mean_square_dx = sharedX(param.get_value() * 0.)
+
+            if param.name is not None:
+                mean_square_grad.name = 'mean_square_grad_' + param.name
+                mean_square_dx.name = 'mean_square_dx_' + param.name
+
+            # Accumulate gradient
+            new_mean_squared_grad = (
+                decay * mean_square_grad +
+                (1 - decay) * T.sqr(grads[param])
+            )
+
+            # Compute update
+            epsilon = lr
+            rms_dx_tm1 = T.sqrt(mean_square_dx + epsilon)
+            rms_grad_t = T.sqrt(new_mean_squared_grad + epsilon)
+            delta_x_t = - (rms_dx_tm1 / rms_grad_t) * grads[param]
+
+            # Accumulate updates
+            new_mean_square_dx = (
+                decay * mean_square_dx +
+                (1 - decay) * T.sqr(delta_x_t)
+            )
+
+            # Apply update
+            adadelta_updates[mean_square_grad] = new_mean_squared_grad
+            adadelta_updates[mean_square_dx] = new_mean_square_dx
+            adadelta_updates[param] = param + delta_x_t
+
+        # updates_train.update(((p, p - lr * g) for p, g in zip(params, gradient)))
+        updates_train.update(adadelta_updates)
         
         print 'compiling functions...'
-        self.train_function = theano.function(inputs=[v], outputs=[monitor, crossentropy],
+        print 'train'
+        self.train_function = theano.function(inputs=[v], outputs=[accuracy, monitor, crossentropy],
                                                updates=updates_train)
-        
-        self.test_function = theano.function(inputs=[v], outputs=[crossentropy], updates=updates_test)
-        
+        print 'test'
+        self.test_function = theano.function(inputs=[v], outputs=[accuracy, crossentropy], updates=updates_test)
+        print 'generate'
         self.generate_function = theano.function(inputs=[], outputs=v_t,
                                                  updates=updates_generate)
 
@@ -277,7 +300,7 @@ num_epochs : integer
   safely interrupt training with Ctrl+C at any time.'''
 
 
-        (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = data.load_mnist(".")
+        (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = data.load_mnist("../datasets/")
         train_X = numpy.concatenate((train_X, valid_X))
         train_Y = numpy.concatenate((train_Y, valid_Y))
         
@@ -293,7 +316,7 @@ num_epochs : integer
         test_X = theano.shared(test_X)
         test_Y = theano.shared(test_Y) 
        
-        sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+        data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
         
         print 'train set size:',train_X.shape.eval()
         print 'valid set size:',valid_X.shape.eval()
@@ -310,25 +333,29 @@ num_epochs : integer
             for epoch in xrange(num_epochs):
                 t = time.time()
                 print 'Epoch %i/%i : ' % (epoch + 1, num_epochs),'\t',
-                sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+                # sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
+                accuracy = []
                 costs = []
                 crossentropy = []
                 tests = []
+                test_acc = []
 
                 for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                     xs = train_X.get_value(borrow=True)[(i * batch_size) : ((i+1) * batch_size)]
-                    cost, cross = self.train_function(xs)
+                    acc, cost, cross = self.train_function(xs)
+                    accuracy.append(acc)
                     costs.append(cost)
                     crossentropy.append(cross)
                     
-                print 'Train',numpy.mean(costs), numpy.mean(crossentropy),
+                print 'Train',numpy.mean(accuracy), 'cost', numpy.mean(costs), 'cross', numpy.mean(crossentropy),
                     
                 for i in range(len(test_X.get_value(borrow=True)) / batch_size):
                     xs = train_X.get_value(borrow=True)[(i * batch_size) : ((i+1) * batch_size)]
-                    cost = self.test_function(xs)
+                    acc, cost = self.test_function(xs)
+                    test_acc.append(acc)
                     tests.append(cost)
                     
-                print '\t Test',numpy.mean(tests)
+                print '\t Test_acc',numpy.mean(test_acc), "cross", numpy.mean(tests)
 
                 
                 timing = time.time() - t
@@ -338,8 +365,8 @@ num_epochs : integer
                 sys.stdout.flush()
                 
                 #new learning rate
-                new_lr = self.lr.get_value() * self.annealing
-                self.lr.set_value(new_lr)
+                # new_lr = self.lr.get_value() * self.annealing
+                # self.lr.set_value(new_lr)
 
         except KeyboardInterrupt:
             print 'Interrupted by user.'
@@ -355,7 +382,7 @@ show : boolean
 
         gen = self.generate_function()
         
-        img_samples =   PIL.Image.fromarray(tile_raster_images(gen, (self.root_N_input,self.root_N_input), (20,20)))
+        img_samples = PIL.Image.fromarray(tile_raster_images(gen, (self.root_N_input,self.root_N_input), (20,20)))
         
         img_samples.save(filename) 
 
