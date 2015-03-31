@@ -64,7 +64,7 @@ def experiment(state, outdir_base='./'):
     # Load the data, train = train+valid, and sequence #
     ####################################################
     artificial = False
-    if state.dataset == 'MNIST_1' or state.dataset == 'MNIST_2' or state.dataset == 'MNIST_3':
+    if state.dataset == 'MNIST_1' or state.dataset == 'MNIST_2' or state.dataset == 'MNIST_3' or state.dataset == 'MNIST_4':
         (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = data.load_mnist(state.data_path)
         train_X = numpy.concatenate((train_X, valid_X))
         train_Y = numpy.concatenate((train_Y, valid_Y))

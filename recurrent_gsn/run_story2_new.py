@@ -2,7 +2,7 @@ import argparse
 
 import theano
 
-from recurrent_gsn.rnngsn import RNN_GSN
+from rnngsn import RNN_GSN
 from utils import data_tools as data
 from utils import logger as log
 from utils.utils import raise_to_list
@@ -15,20 +15,20 @@ def main():
     # GSN settings
     parser.add_argument('--layers', type=int, default=3) # number of hidden layers
     parser.add_argument('--walkbacks', type=int, default=5) # number of walkbacks
-    parser.add_argument('--hidden_size', type=int, default=1500)
+    parser.add_argument('--hidden_size', type=int, default=1000)
     parser.add_argument('--hidden_act', type=str, default='tanh')
     parser.add_argument('--visible_act', type=str, default='sigmoid')
     
     # recurrent settings
-    parser.add_argument('--recurrent_hidden_size', type=int, default=1500)
+    parser.add_argument('--recurrent_hidden_size', type=int, default=100)
     parser.add_argument('--recurrent_hidden_act', type=str, default='tanh')
     
     # training
-    parser.add_argument('--initialize_gsn', type=int, default=1) # whether or not to train a strict GSN first to initialize the weights and biases
+    parser.add_argument('--initialize_gsn', type=int, default=0) # whether or not to train a strict GSN first to initialize the weights and biases
     parser.add_argument('--cost_funct', type=str, default='binary_crossentropy') # the cost function for training
     parser.add_argument('--n_epoch', type=int, default=500)
     parser.add_argument('--gsn_batch_size', type=int, default=100)
-    parser.add_argument('--batch_size', type=int, default=200) # max length of sequence to consider
+    parser.add_argument('--batch_size', type=int, default=100) # max length of sequence to consider
     parser.add_argument('--save_frequency', type=int, default=1) #number of epochs between parameters being saved
     parser.add_argument('--early_stop_threshold', type=float, default=0.9996) #0.9995
     parser.add_argument('--early_stop_length', type=int, default=30)
@@ -46,7 +46,7 @@ def main():
     parser.add_argument('--regularize_weight', type=float, default=0)
     
     # data
-    parser.add_argument('--dataset', type=str, default='nottingham')
+    parser.add_argument('--dataset', type=str, default='MNIST_1')
     parser.add_argument('--data_path', type=str, default='../data/')
     parser.add_argument('--outdir_base', type=str, default='../outputs/rnn_gsn/')
    
@@ -77,15 +77,16 @@ def create_rnngsn(args):
     logger = log.Logger(args.output_path)
     
     rnngsn = RNN_GSN(train_X=train_X, valid_X=valid_X, test_X=test_X, args=vars(args), logger=logger)
-    rnngsn.load_params('nottingham_params.pkl')
-    rnngsn.gen_10k_samples()
+    rnngsn.train()
+    # rnngsn.load_params('nottingham_params.pkl')
+    # rnngsn.gen_10k_samples()
     
-    sample_paths = ['samples_test'+str(i)+'.npy' for i in range(len(test_X))]
+    # sample_paths = ['samples_test'+str(i)+'.npy' for i in range(len(test_X))]
         
-    # parzen
-    print 'Evaluating parzen window'
-    import utils.likelihood_estimation as ll
-    ll.main(0.20,'nottingham','../data/',sample_paths) 
+    ## parzen
+    # print 'Evaluating parzen window'
+    # import utils.likelihood_estimation as ll
+    # ll.main(0.20,'nottingham','../data/',sample_paths) 
     
     
 if __name__ == '__main__':

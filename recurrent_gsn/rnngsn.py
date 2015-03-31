@@ -22,17 +22,10 @@ import theano.tensor as T
 import theano.sandbox.rng_mrg as RNG_MRG
 
 from utils import data_tools as data
-from recurrent_gsn import generative_stochastic_network
+from generative_stochastic_network import GSN
 import utils.logger as log
 from utils.image_tiler import tile_raster_images
 from utils.utils import cast32, logit, trunc, get_shared_weights, get_shared_bias, salt_and_pepper, make_time_units_string, get_activation_function, get_cost_function, raise_to_list, closest_to_square_factors, copy_params, restore_params
-
-
-
-
-
-
-
 
 # Default values to use for some RNN-GSN parameters
 defaults = {# gsn parameters
@@ -272,7 +265,7 @@ class RNN_GSN():
         # ONE update
         _add_noise = True
         log.maybeLog(self.logger, "Performing one walkback in network state sampling.")
-        generative_stochastic_network.update_layers(self.network_state_output,
+        GSN.update_layers(self.network_state_output,
                           self.weights_list,
                           self.bias_list,
                           visible_pX_chain, 
@@ -343,9 +336,9 @@ class RNN_GSN():
                 h_list_recon.append((h_t_recon.T[(layer/2)*self.hidden_size:(layer/2+1)*self.hidden_size]).T)
         
         #with noise
-        _, cost, show_cost = generative_stochastic_network.build_gsn_given_hiddens(self.Xs, h_list, self.weights_list, self.bias_list, True, self.noiseless_h1, self.hidden_add_noise_sigma, self.input_salt_and_pepper, self.input_sampling, self.MRG, self.visible_activation, self.hidden_activation, self.walkbacks, self.cost_function, self.logger)
+        _, _, cost, show_cost, error = GSN.build_gsn_given_hiddens(self.Xs, h_list, self.weights_list, self.bias_list, True, self.noiseless_h1, self.hidden_add_noise_sigma, self.input_salt_and_pepper, self.input_sampling, self.MRG, self.visible_activation, self.hidden_activation, self.walkbacks, self.cost_function)
         #without noise for reconstruction
-        x_sample_recon, _, recon_show_cost = generative_stochastic_network.build_gsn_given_hiddens(self.Xs, h_list_recon, self.weights_list, self.bias_list, False, self.noiseless_h1, self.hidden_add_noise_sigma, self.input_salt_and_pepper, self.input_sampling, self.MRG, self.visible_activation, self.hidden_activation, self.walkbacks, self.cost_function, self.logger)
+        x_sample_recon, _, _, recon_show_cost, _ = GSN.build_gsn_given_hiddens(self.Xs, h_list_recon, self.weights_list, self.bias_list, False, self.noiseless_h1, self.hidden_add_noise_sigma, self.input_salt_and_pepper, self.input_sampling, self.MRG, self.visible_activation, self.hidden_activation, self.walkbacks, self.cost_function)
         
         updates_train = updates_recurrent
         updates_cost = updates_recurrent
@@ -371,14 +364,14 @@ class RNN_GSN():
             log.maybeLog(self.logger, "rnn-gsn learn...")
             self.f_learn = theano.function(inputs  = [self.Xs],
                                       updates = updates_train,
-                                      outputs = show_cost,
+                                      outputs = [show_cost, error],
                                       on_unused_input='warn',
                                       name='rnngsn_f_learn')
             
             log.maybeLog(self.logger, "rnn-gsn cost...")
             self.f_cost  = theano.function(inputs  = [self.Xs],
                                       updates = updates_cost,
-                                      outputs = show_cost, 
+                                      outputs = [show_cost, error],
                                       on_unused_input='warn',
                                       name='rnngsn_f_cost')
         
@@ -443,10 +436,10 @@ class RNN_GSN():
         ##########################################################
         # Train the GSN first to get good weights initialization #
         ##########################################################
-        if self.train_gsn_first:
-            log.maybeLog(self.logger, "\n\n----------Initially training the GSN---------\n\n")
-            init_gsn = generative_stochastic_network.GSN(train_X=train_X, valid_X=valid_X, test_X=test_X, args=self.gsn_args, logger=self.logger)
-            init_gsn.train()
+        # if self.train_gsn_first:
+        #     log.maybeLog(self.logger, "\n\n----------Initially training the GSN---------\n\n")
+        #     init_gsn = generative_stochastic_network.GSN(train_X=train_X, valid_X=valid_X, test_X=test_X, args=self.gsn_args, logger=self.logger)
+        #     init_gsn.train()
     
         
         #########################################
@@ -498,25 +491,32 @@ class RNN_GSN():
                      
                 #train
                 train_costs = []
+                train_errors = []
                 for train_data in train_X:
-                    train_costs.extend(data.apply_cost_function_to_dataset(self.f_learn, train_data, self.batch_size))
-                log.maybeAppend(self.logger, ['Train:',trunc(numpy.mean(train_costs)),'\t'])
+                    costs_and_errors = data.apply_cost_function_to_dataset(self.f_learn, train_data, self.batch_size)
+                    train_costs.extend([cost for (cost, error) in costs_and_errors])
+                    train_errors.extend([error for (cost, error) in costs_and_errors])
+                log.maybeAppend(self.logger, ['Train:',trunc(numpy.mean(train_costs)),trunc(numpy.mean(train_errors)),'\t'])
          
          
                 #valid
                 if valid_X is not None:
                     valid_costs = []
                     for valid_data in valid_X:
-                        valid_costs.extend(data.apply_cost_function_to_dataset(self.f_cost, valid_data, self.batch_size))
+                        cs = data.apply_cost_function_to_dataset(self.f_cost, valid_data, self.batch_size)
+                        valid_costs.extend([c for c,e in cs])
                     log.maybeAppend(self.logger, ['Valid:',trunc(numpy.mean(valid_costs)), '\t'])
          
          
                 #test
                 if test_X is not None:
                     test_costs = []
+                    test_errors = []
                     for test_data in test_X:
-                        test_costs.extend(data.apply_cost_function_to_dataset(self.f_cost, test_data, self.batch_size))
-                    log.maybeAppend(self.logger, ['Test:',trunc(numpy.mean(test_costs)), '\t'])
+                        costs_and_errors = data.apply_cost_function_to_dataset(self.f_cost, test_data, self.batch_size)
+                        test_costs.extend([cost for (cost, error) in costs_and_errors])
+                        test_errors.extend([error for (cost, error) in costs_and_errors])
+                    log.maybeAppend(self.logger, ['Test:',trunc(numpy.mean(test_costs)),trunc(numpy.mean(test_errors)), '\t'])
                 
                  
                 #check for early stopping

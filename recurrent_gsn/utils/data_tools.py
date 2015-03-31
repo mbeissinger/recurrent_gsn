@@ -19,8 +19,8 @@ def apply_cost_function_to_dataset(function, dataset, batch_size=1):
     for i in xrange(len(dataset.get_value(borrow=True)) / batch_size):
         xs = dataset.get_value(borrow=True)[i * batch_size : (i+1) * batch_size]
 #         xs = dataset[i * batch_size : (i+1) * batch_size].eval()
-        cost = function(xs)
-        costs.append([cost])
+        cost, error = function(xs)
+        costs.append([cost, error])
     return costs
 
 def apply_indexed_cost_function_to_dataset(function, dataset_length, batch_size=1):
