@@ -1,37 +1,64 @@
-from keras.datasets import mnist
+from torchvision.datasets import MNIST
+from PIL import Image
+
+
+class SequencedMNIST(MNIST):
+	def __init__(self, root="./datasets", train=True, transform=None, target_transform=None, download=True, sequence=1):
+		super().__init__(root=root, train=train, transform=transform, target_transform=target_transform, download=download)
+		if self.train:
+			self.train_data, self.train_labels = sequence_mnist(self.train_data, self.train_labels, sequence)
+		else:
+			self.test_data, self.test_labels = sequence_mnist(self.test_data, self.test_labels, sequence)
+
+	def __getitem__(self, index):
+		"""
+		Args:
+			index (int): Index
+
+		Returns:
+			tuple: (images, targets) where targets is list of index of the target class for the sequence.
+		"""
+		if self.train:
+			img, label = self.train_data[index], self.train_labels[index]
+		else:
+			img, label = self.test_data[index], self.test_labels[index]
+
+		# doing this so that it is consistent with all other datasets
+		# to return a PIL Image
+			img = Image.fromarray(img, mode='L')
+
+		if self.transform is not None:
+			img = self.transform(img)
+
+		if self.target_transform is not None:
+			label = self.target_transform(label)
+
+		return img, label
+
 
 _classes = 10
-
-
-def sequence_mnist(dataset=1):
+def sequence_mnist(images, labels, dataset=1):
 	def set_xy_indices(x, y, indices):
-		x = x[indices]
-		y = y[indices]
+		x = x.numpy()[indices]
+		y = y.numpy()[indices]
 		return x, y
 
-	(x_train, y_train), (x_test, y_test) = mnist.load_data()
-
 	# Find the order of MNIST data for the given sequence id
-	train_ordered_indices, test_ordered_indices = None, None
+	ordered_indices = None
 	if dataset == 1:
-		train_ordered_indices = dataset1_indices(y_train)
-		test_ordered_indices = dataset1_indices(y_test)
+		ordered_indices = dataset1_indices(labels)
 	elif dataset == 2:
-		train_ordered_indices = dataset2_indices(y_train)
-		test_ordered_indices = dataset2_indices(y_test)
+		ordered_indices = dataset2_indices(labels)
 	elif dataset == 3:
-		train_ordered_indices = dataset3_indices(y_train)
-		test_ordered_indices = dataset3_indices(y_test)
+		ordered_indices = dataset3_indices(labels)
 	elif dataset == 4:
-		train_ordered_indices = dataset4_indices(y_train)
-		test_ordered_indices = dataset4_indices(y_test)
+		ordered_indices = dataset4_indices(labels)
 
 	# Put the data sets in order
-	if train_ordered_indices is not None and test_ordered_indices is not None:
-		x_train, y_train = set_xy_indices(x_train, y_train, train_ordered_indices)
-		x_test, y_test = set_xy_indices(x_test, y_test, test_ordered_indices)
+	if ordered_indices is not None:
+		images, labels = set_xy_indices(images, labels, ordered_indices)
 
-	return (x_train, y_train), (x_test, y_test)
+	return images, labels
 
 
 def create_label_pool(labels):
@@ -162,18 +189,14 @@ def dataset4_indices(labels):
 
 if __name__ == '__main__':
 	print("dataset 1:")
-	(x_train, y_train), (x_test, y_test) = sequence_mnist(1)
-	print(y_train[:50])
-	print(y_test[:50])
+	mnist = SequencedMNIST(sequence=1)
+	print(mnist[:50][1])
 	print("dataset 2:")
-	(x_train, y_train), (x_test, y_test) = sequence_mnist(2)
-	print(y_train[:50])
-	print(y_test[:50])
+	mnist = SequencedMNIST(sequence=2)
+	print(mnist[:50][1])
 	print("dataset 3:")
-	(x_train, y_train), (x_test, y_test) = sequence_mnist(3)
-	print(y_train[:50])
-	print(y_test[:50])
+	mnist = SequencedMNIST(sequence=3)
+	print(mnist[:50][1])
 	print("dataset 4:")
-	(x_train, y_train), (x_test, y_test) = sequence_mnist(4)
-	print(y_train[:50])
-	print(y_test[:50])
+	mnist = SequencedMNIST(sequence=4)
+	print(mnist[:50][1])
