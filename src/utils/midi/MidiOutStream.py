@@ -1,8 +1,6 @@
 # -*- coding: ISO-8859-1 -*-
 
 class MidiOutStream:
-
-
     """
 
     MidiOutstream is Basically an eventhandler. It is the most central
@@ -20,7 +18,7 @@ class MidiOutStream:
     """
 
     def __init__(self):
-        
+
         # the time is rather global, so it needs to be stored 
         # here. Otherwise there would be no really simple way to 
         # calculate it. The alternative would be to have each event 
@@ -50,7 +48,7 @@ class MidiOutStream:
         """
         self._relative_time = 0
         self._absolute_time = 0
-        
+
     def rel_time(self):
         "Returns the relative time"
         return self._relative_time
@@ -60,7 +58,7 @@ class MidiOutStream:
         return self._absolute_time
 
     # running status methods
-    
+
     def reset_run_stat(self):
         "Invalidates the running status"
         self._running_status = None
@@ -74,16 +72,15 @@ class MidiOutStream:
         return self._running_status
 
     # track handling event handlers
-    
+
     def set_current_track(self, new_track):
         "Sets the current track number"
         self._current_track = new_track
-    
+
     def get_current_track(self):
         "Returns the current track number"
         return self._current_track
-    
-    
+
     #####################
     ## Midi events
 
@@ -91,7 +88,6 @@ class MidiOutStream:
     def channel_message(self, message_type, channel, data):
         """The default event handler for channel messages"""
         pass
-
 
     def note_on(self, channel=0, note=0x40, velocity=0x40):
 
@@ -101,7 +97,6 @@ class MidiOutStream:
         """
         pass
 
-
     def note_off(self, channel=0, note=0x40, velocity=0x40):
 
         """
@@ -109,7 +104,6 @@ class MidiOutStream:
         note, velocity: 0-127
         """
         pass
-
 
     def aftertouch(self, channel=0, note=0x40, velocity=0x40):
 
@@ -119,7 +113,6 @@ class MidiOutStream:
         """
         pass
 
-
     def continuous_controller(self, channel, controller, value):
 
         """
@@ -127,7 +120,6 @@ class MidiOutStream:
         controller, value: 0-127
         """
         pass
-
 
     def patch_change(self, channel, patch):
 
@@ -137,7 +129,6 @@ class MidiOutStream:
         """
         pass
 
-
     def channel_pressure(self, channel, pressure):
 
         """
@@ -145,7 +136,6 @@ class MidiOutStream:
         pressure: 0-127
         """
         pass
-
 
     def pitch_bend(self, channel, value):
 
@@ -155,9 +145,6 @@ class MidiOutStream:
 
         """
         pass
-
-
-
 
     #####################
     ## System Exclusive
@@ -169,7 +156,6 @@ class MidiOutStream:
         """
         pass
 
-
     #####################
     ## Common events
 
@@ -180,14 +166,12 @@ class MidiOutStream:
         """
         pass
 
-
     def song_select(self, songNumber):
 
         """
         songNumber: 0-127
         """
         pass
-
 
     def tuning_request(self):
 
@@ -196,7 +180,6 @@ class MidiOutStream:
         """
         pass
 
-            
     def midi_time_code(self, msg_type, values):
         """
         msg_type: 0-7
@@ -204,10 +187,9 @@ class MidiOutStream:
         """
         pass
 
-
     #########################
     # header does not really belong here. But anyhoo!!!
-    
+
     def header(self, format=0, nTracks=1, division=96):
 
         """
@@ -217,7 +199,6 @@ class MidiOutStream:
         """
         pass
 
-
     def eof(self):
 
         """
@@ -225,18 +206,16 @@ class MidiOutStream:
         """
         pass
 
-
     #####################
     ## meta events
 
 
     def meta_event(self, meta_type, data):
-        
+
         """
         Handles any undefined meta events
         """
         pass
-
 
     def start_of_track(self, n_track=0):
 
@@ -245,7 +224,6 @@ class MidiOutStream:
         """
         pass
 
-
     def end_of_track(self):
 
         """
@@ -253,14 +231,12 @@ class MidiOutStream:
         """
         pass
 
-
     def sequence_number(self, value):
 
         """
         value: 0-16383
         """
         pass
-
 
     def text(self, text):
 
@@ -270,7 +246,6 @@ class MidiOutStream:
         """
         pass
 
-
     def copyright(self, text):
 
         """
@@ -278,7 +253,6 @@ class MidiOutStream:
         text: string
         """
         pass
-
 
     def sequence_name(self, text):
 
@@ -288,14 +262,12 @@ class MidiOutStream:
         """
         pass
 
-
     def instrument_name(self, text):
 
         """
         text: string
         """
         pass
-
 
     def lyric(self, text):
 
@@ -304,14 +276,12 @@ class MidiOutStream:
         """
         pass
 
-
     def marker(self, text):
 
         """
         text: string
         """
         pass
-
 
     def cuepoint(self, text):
 
@@ -320,7 +290,6 @@ class MidiOutStream:
         """
         pass
 
-
     def midi_ch_prefix(self, channel):
 
         """
@@ -328,14 +297,12 @@ class MidiOutStream:
         """
         pass
 
-
     def midi_port(self, value):
 
         """
         value: Midi port (deprecated in the spec)
         """
         pass
-
 
     def tempo(self, value):
 
@@ -345,7 +312,6 @@ class MidiOutStream:
         (to calculate value from bpm: int(60,000,000.00 / BPM))
         """
         pass
-
 
     def smtp_offset(self, hour, minute, second, frame, framePart):
 
@@ -365,8 +331,6 @@ class MidiOutStream:
         """
         pass
 
-
-
     def time_signature(self, nn, dd, cc, bb):
 
         """
@@ -380,8 +344,6 @@ class MidiOutStream:
         """
         pass
 
-
-
     def key_signature(self, sf, mi):
 
         """
@@ -392,17 +354,12 @@ class MidiOutStream:
         """
         pass
 
-
-
     def sequencer_specific(self, data):
 
         """
         data: The data as byte values
         """
         pass
-
-
-
 
     #####################
     ## realtime events
@@ -414,16 +371,12 @@ class MidiOutStream:
         """
         pass
 
-
-
     def song_start(self):
 
         """
         No values passed
         """
         pass
-
-
 
     def song_stop(self):
 
@@ -432,8 +385,6 @@ class MidiOutStream:
         """
         pass
 
-
-
     def song_continue(self):
 
         """
@@ -441,16 +392,12 @@ class MidiOutStream:
         """
         pass
 
-
-
     def active_sensing(self):
 
         """
         No values passed
         """
         pass
-
-
 
     def system_reset(self):
 
@@ -460,12 +407,8 @@ class MidiOutStream:
         pass
 
 
-
 if __name__ == '__main__':
-
     midiOut = MidiOutStream()
-    midiOut.update_time(0,0)
+    midiOut.update_time(0, 0)
     midiOut.note_on(0, 63, 127)
     midiOut.note_off(0, 63, 127)
-
-    

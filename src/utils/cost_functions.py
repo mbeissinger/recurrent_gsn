@@ -10,25 +10,30 @@ __email__ = "dev@opendeep.com"
 
 # standard libraries
 import logging
+
 # third party libraries
 import theano.tensor as T
 
 log = logging.getLogger(__name__)
 
+
 def binary_crossentropy(x, y):
     cost = T.mean(T.nnet.binary_crossentropy(x, y))
     return cost
 
+
 def square(x, y):
-    #cost = T.log(T.mean(T.sqr(x-y)))
-    #cost = T.log(T.sum(T.pow((x-y),2)))
-    cost = T.mean(T.sqr(x-y))
+    # cost = T.log(T.mean(T.sqr(x-y)))
+    # cost = T.log(T.sum(T.pow((x-y),2)))
+    cost = T.mean(T.sqr(x - y))
     return cost
+
 
 def pseudo_log(x, y):
     eps = 1e-6
-    cost = T.sum(T.xlogx.xlogy0(x, y+eps) + T.xlogx.xlogy0(1-x, 1-y+eps)) / x.shape[0]
+    cost = T.sum(T.xlogx.xlogy0(x, y + eps) + T.xlogx.xlogy0(1 - x, 1 - y + eps)) / x.shape[0]
     return cost
+
 
 def get_cost_function(name):
     name = name.lower()
@@ -40,4 +45,5 @@ def get_cost_function(name):
         return lambda y, x: pseudo_log(x, y)
     else:
         log.critical("Did not recognize cost function %s, please use binary_crossentropy, square, or pseudo_log", name)
-        raise NotImplementedError("Did not recognize cost function {0!s}, please use binary_crossentropy, square, or pseudo_log".format(name))
+        raise NotImplementedError(
+            "Did not recognize cost function {0!s}, please use binary_crossentropy, square, or pseudo_log".format(name))

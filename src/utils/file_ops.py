@@ -8,23 +8,23 @@ __license__ = "Apache"
 __maintainer__ = "OpenDeep"
 __email__ = "dev@opendeep.com"
 
+import errno
+import logging
 # standard imports
 import os
-import errno
+import tarfile
 import urllib
 import zipfile
-import tarfile
-import logging
 
 log = logging.getLogger(__name__)
 
 # variables for file format types
 DIRECTORY = 0
-ZIP       = 1
-GZ        = 2
-PKL       = 3
-TAR       = 4
-UNKNOWN   = 5
+ZIP = 1
+GZ = 2
+PKL = 3
+TAR = 4
+UNKNOWN = 5
 
 
 # create a filesystem path if it doesn't exist.
@@ -37,7 +37,7 @@ def mkdir_p(path):
     log.debug('Attempting to make directory %s', path)
     try:
         os.makedirs(path)
-    except OSError as exc: # Python >2.5
+    except OSError as exc:  # Python >2.5
         if exc.errno == errno.EEXIST and os.path.isdir(path):
             log.debug('Directory %s already exists!', path)
             pass
@@ -97,7 +97,7 @@ def get_file_type(file_path):
                     return GZ
                 elif extension == 'tar':
                     return TAR
-                elif extension == 'pkl' or extension == 'p' or extension =='pickle':
+                elif extension == 'pkl' or extension == 'p' or extension == 'pickle':
                     return PKL
                 else:
                     log.debug('Didn\'t recognize file extension %s for file %s', extension, file_path)
@@ -157,4 +157,3 @@ def untar(source_filename, destination_dir='.'):
     except:
         log.exception('Error unzipping tarball data from %s to %s', source_filename, destination_dir)
         return False
-

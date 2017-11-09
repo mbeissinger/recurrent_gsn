@@ -10,10 +10,11 @@ Written by Li Yao (University of Montreal)
 https://github.com/yaoli/GSN
 """
 
-
-import numpy, os
-from PIL import Image
 import data_tools as data
+import numpy
+import os
+from PIL import Image
+
 
 def scale_to_unit_interval(ndar, eps=1e-8):
     """ Scales all values in the ndarray ndar to be between 0 and 1 """
@@ -70,7 +71,7 @@ def tile_raster_images(X, img_shape, tile_shape, tile_spacing=(0, 0),
     # out_shape[1] = (img_shape[1]+tile_spacing[1])*tile_shape[1] -
     #                tile_spacing[1]
     out_shape = [(ishp + tsp) * tshp - tsp for ishp, tshp, tsp
-                        in zip(img_shape, tile_shape, tile_spacing)]
+                 in zip(img_shape, tile_shape, tile_spacing)]
 
     if isinstance(X, tuple):
         assert len(X) == 4
@@ -82,7 +83,7 @@ def tile_raster_images(X, img_shape, tile_shape, tile_spacing=(0, 0),
             out_array = numpy.zeros((out_shape[0], out_shape[1], 4),
                                     dtype=X.dtype)
 
-        #colors default to 0, alpha defaults to 1 (opaque)
+        # colors default to 0, alpha defaults to 1 (opaque)
         if output_pixel_vals:
             channel_defaults = [0, 0, 0, 255]
         else:
@@ -96,7 +97,7 @@ def tile_raster_images(X, img_shape, tile_shape, tile_spacing=(0, 0),
                 if output_pixel_vals:
                     dt = 'uint8'
                 out_array[:, :, i] = numpy.zeros(out_shape,
-                        dtype=dt) + channel_defaults[i]
+                                                 dtype=dt) + channel_defaults[i]
             else:
                 # use a recurrent call to compute the channel and store it
                 # in the output
@@ -134,10 +135,11 @@ def tile_raster_images(X, img_shape, tile_shape, tile_spacing=(0, 0),
                     if output_pixel_vals:
                         c = 255
                     out_array[
-                        tile_row * (H + Hs): tile_row * (H + Hs) + H,
-                        tile_col * (W + Ws): tile_col * (W + Ws) + W
-                        ] = this_img * c
+                    tile_row * (H + Hs): tile_row * (H + Hs) + H,
+                    tile_col * (W + Ws): tile_col * (W + Ws) + W
+                    ] = this_img * c
         return out_array
+
 
 def visualize_mnist():
     (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = data.load_mnist('../data')
@@ -145,17 +147,15 @@ def visualize_mnist():
     images = design_matrix[0:2500, :]
     channel_length = 28 * 28
     to_visualize = images
-                    
+
     image_data = tile_raster_images(to_visualize,
-                                    img_shape=[28,28],
-                                    tile_shape=[50,50],
-                                    tile_spacing=(2,2))
+                                    img_shape=[28, 28],
+                                    tile_shape=[50, 50],
+                                    tile_spacing=(2, 2))
     im_new = Image.fromarray(numpy.uint8(image_data))
     im_new.save('samples_mnist.png')
     os.system('eog samples_mnist.png')
-    
+
+
 if __name__ == '__main__':
     visualize_mnist()
-    
-
-    

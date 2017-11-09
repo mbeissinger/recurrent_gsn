@@ -2,8 +2,8 @@
 
 from MidiOutStream import MidiOutStream
 
-class MidiInStream:
 
+class MidiInStream:
     """
     Takes midi events from the midi input and calls the apropriate
     method in the eventhandler object
@@ -23,13 +23,11 @@ class MidiInStream:
         else:
             self.midiOutStream = midiOutStream
 
-
     def close(self):
 
         """
         Stop the MidiInstream
         """
-
 
     def read(self, time=0):
 
@@ -41,7 +39,6 @@ class MidiInStream:
 
         """
 
-
     def resetTimer(self, time=0):
         """
 
@@ -49,4 +46,3 @@ class MidiInStream:
         of looping going on
 
         """
-

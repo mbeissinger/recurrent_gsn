@@ -1,11 +1,10 @@
 # -*- coding: ISO-8859-1 -*-
 
-from RawInstreamFile import RawInstreamFile
 from MidiFileParser import MidiFileParser
+from RawInstreamFile import RawInstreamFile
 
 
 class MidiInFile:
-
     """
     
     Parses a midi file, and triggers the midi events on the outStream 
@@ -40,16 +39,12 @@ class MidiInFile:
         self.raw_in = RawInstreamFile(infile)
         self.parser = MidiFileParser(self.raw_in, outStream)
 
-
     def read(self):
         "Start parsing the file"
         p = self.parser
         p.parseMThdChunk()
         p.parseMTrkChunks()
 
-
     def setData(self, data=''):
         "Sets the data from a plain string"
         self.raw_in.setData(data)
-    
-    

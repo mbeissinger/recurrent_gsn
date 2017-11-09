@@ -3,56 +3,59 @@
 # RNN-RBM deep learning tutorial
 # More information at http://deeplearning.net/tutorial/rnnrbm.html
 
-import glob
-import os, sys, cPickle
+import sys
 import time
+
+import PIL.Image
 import numpy
+import numpy.random as rng
 import theano
 import theano.tensor as T
 from theano.tensor.shared_randomstreams import RandomStreams
-import numpy.random as rng
-import PIL.Image
-from collections import OrderedDict
-from utils.image_tiler import *
 from utils import data_tools as data
-import random as R
+from utils.image_tiler import *
 
-#Don't use a python long as this don't work on 32 bits computers.
+# Don't use a python long as this don't work on 32 bits computers.
 rng.seed(1)
 rng_stream = RandomStreams(seed=numpy.random.randint(1 << 30))
 theano.config.warn.subtensor_merge_bug = False
 
-cast32      = lambda x : numpy.cast['float32'](x)
-trunc       = lambda x : str(x)[:8]
-logit       = lambda p : numpy.log(p / (1 - p) )
-binarize    = lambda x : cast32(x >= 0.5)
-sigmoid     = lambda x : cast32(1. / (1 + numpy.exp(-x)))
+cast32 = lambda x: numpy.cast['float32'](x)
+trunc = lambda x: str(x)[:8]
+logit = lambda p: numpy.log(p / (1 - p))
+binarize = lambda x: cast32(x >= 0.5)
+sigmoid = lambda x: cast32(1. / (1 + numpy.exp(-x)))
+
 
 def shared_normal(num_rows, num_cols, interval=None, name=None):
     '''Initialize a matrix shared variable with normally distributed
 elements.'''
     if interval is None:
-        interval = numpy.sqrt(6. / (num_rows + num_cols))/3
-    return theano.shared(value=numpy.random.normal(scale=interval, size=(num_rows, num_cols)).astype(theano.config.floatX), name=name)
+        interval = numpy.sqrt(6. / (num_rows + num_cols)) / 3
+    return theano.shared(
+        value=numpy.random.normal(scale=interval, size=(num_rows, num_cols)).astype(theano.config.floatX), name=name)
+
 
 def shared_uniform(num_rows, num_cols, name):
     return theano.shared(value=numpy.asarray(numpy.random.uniform(
-                   low=-numpy.sqrt(6. / (num_rows + num_cols)),
-                   high=numpy.sqrt(6. / (num_rows + num_cols)),
-                   size=(num_rows, num_cols)),
-                   dtype=theano.config.floatX), name=name)
+        low=-numpy.sqrt(6. / (num_rows + num_cols)),
+        high=numpy.sqrt(6. / (num_rows + num_cols)),
+        size=(num_rows, num_cols)),
+        dtype=theano.config.floatX), name=name)
+
 
 def shared_zeros(size, name):
     '''Initialize a vector shared variable with zero elements.'''
     return theano.shared(value=numpy.zeros(size, dtype=theano.config.floatX), name=name)
 
-    
+
 def fix_input_size(xs, u0):
     sizes = [x.shape[0] for x in xs]
     min_size = numpy.min(sizes)
     xs = [x[:min_size] for x in xs]
     u0 = u0[:min_size]
     return xs, u0
+
 
 def sharedX(value, name=None, borrow=False, dtype=None):
     """
@@ -63,6 +66,8 @@ def sharedX(value, name=None, borrow=False, dtype=None):
     return theano.shared(theano._asarray(value, dtype=dtype),
                          name=name,
                          borrow=borrow)
+
+
 def build_rbm(v, W, bv, bh, k=50):
     '''Construct a k-step Gibbs chain starting at v for an RBM.
 
@@ -90,14 +95,13 @@ monitor: Theano scalar
 updates: dictionary of Theano variable -> Theano variable
   The `updates` object returned by scan.'''
 
-
     def gibbs_step(v):
         mean_h = T.nnet.sigmoid(T.dot(v, W) + bh)
         h = rng_stream.binomial(size=mean_h.shape, n=1, p=mean_h,
-                         dtype=theano.config.floatX)
+                                dtype=theano.config.floatX)
         mean_v = T.nnet.sigmoid(T.dot(h, W.T) + bv)
         v = rng_stream.binomial(size=mean_v.shape, n=1, p=mean_v,
-                         dtype=theano.config.floatX)
+                                dtype=theano.config.floatX)
         return mean_v, v
 
     chain, updates = theano.scan(lambda v: gibbs_step(v)[1], outputs_info=[v],
@@ -111,6 +115,7 @@ updates: dictionary of Theano variable -> Theano variable
 
     def free_energy(v):
         return -(v * bv).sum() - T.log(1 + T.exp(T.dot(v, W) + bh)).sum()
+
     cost = (free_energy(v) - free_energy(v_sample)) / v.shape[0]
 
     return v_sample, cost, monitor, crossentropy, updates
@@ -160,11 +165,12 @@ updates_generate : dictionary of Theano variable -> Theano variable
     bu = shared_zeros(n_hidden_recurrent, "bu")
 
     params = W, bv, bh, Wuh, Wuv, Wvu, Wuu, bu  # learned parameters as shared
-                                                # variables
+    # variables
 
     v = T.fmatrix("v")  # a training sequence
     u0 = T.zeros((n_hidden_recurrent,))  # initial value for the RNN hidden
-                                         # units
+
+    # units
 
     # If `v_t` is given, deterministic recurrence to compute the variable
     # biases bv_t, bh_t at each time step. If `v_t` is None, same recurrence
@@ -177,7 +183,7 @@ updates_generate : dictionary of Theano variable -> Theano variable
         generate = v_t is None
         if generate:
             v_t, _, _, _, updates = build_rbm(T.zeros((n_visible,)), W, bv_t,
-                                           bh_t, k=50)
+                                              bh_t, k=50)
         u_t = T.tanh(bu + T.dot(v_t, Wvu) + T.dot(u_tm1, Wuu))
         return ([v_t, u_t], updates) if generate else [u_t, bv_t, bh_t]
 
@@ -187,7 +193,7 @@ updates_generate : dictionary of Theano variable -> Theano variable
     (u_t, bv_t, bh_t), updates_train = theano.scan(
         lambda v_t, u_tm1, *_: recurrence(v_t, u_tm1),
         sequences=v, outputs_info=[u0, None, None], non_sequences=params)
-    
+
     v_sample, cost, monitor, crossentropy, updates_rbm = build_rbm(v, W, bv_t, bh_t, k=15)
 
     v_prediction, _, _, _, updates_predict = build_rbm(v[:-1], W, bv_t[1:], bh_t[1:], k=15)
@@ -224,31 +230,35 @@ lr : float
 
         decay = 0.95
 
-        
         self.lr = theano.shared(value=lr, name="lr")
         self.annealing = annealing
         self.root_N_input = 28
 
         (v, v_sample, cost, monitor, accuracy, crossentropy, params, updates_train, v_t, updates_generate) = \
             build_rnnrbm(n_visible, n_hidden, n_hidden_recurrent)
-        
+
         updates_test = updates_train
 
         gradient = T.grad(cost, params, consider_constant=[v_sample])
 
         updates_train.update(((p, p - lr * g) for p, g in zip(params, gradient)))
-        
-        print 'compiling functions...'
-        print 'train'
+
+        print
+        'compiling functions...'
+        print
+        'train'
         self.train_function = theano.function(inputs=[v], outputs=[accuracy, monitor, crossentropy],
-                                               updates=updates_train)
-        print 'test'
+                                              updates=updates_train)
+        print
+        'test'
         self.test_function = theano.function(inputs=[v], outputs=[accuracy, crossentropy], updates=updates_test)
-        print 'generate'
+        print
+        'generate'
         self.generate_function = theano.function(inputs=[], outputs=v_t,
                                                  updates=updates_generate)
 
-        print 'functions done.'
+        print
+        'functions done.'
         print
 
     def train(self, batch_size=100, num_epochs=300):
@@ -264,40 +274,48 @@ num_epochs : integer
   Number of epochs (pass over the training set) performed. The user can
   safely interrupt training with Ctrl+C at any time.'''
 
-
         (train_X, train_Y), (valid_X, valid_Y), (test_X, test_Y) = data.load_mnist("../datasets/")
         train_X = numpy.concatenate((train_X, valid_X))
         train_Y = numpy.concatenate((train_Y, valid_Y))
-        
-        print 'Sequencing MNIST data...'
-        print 'train set size:',train_X.shape
-        print 'valid set size:',valid_X.shape
-        print 'test set size:',test_X.shape
-        
+
+        print
+        'Sequencing MNIST data...'
+        print
+        'train set size:', train_X.shape
+        print
+        'valid set size:', valid_X.shape
+        print
+        'test set size:', test_X.shape
+
         train_X = theano.shared(train_X)
         train_Y = theano.shared(train_Y)
         valid_X = theano.shared(valid_X)
-        valid_Y = theano.shared(valid_Y) 
+        valid_Y = theano.shared(valid_Y)
         test_X = theano.shared(test_X)
-        test_Y = theano.shared(test_Y) 
-       
+        test_Y = theano.shared(test_Y)
+
         data.sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y, dataset=4)
-        
-        print 'train set size:',train_X.shape.eval()
-        print 'valid set size:',valid_X.shape.eval()
-        print 'test set size:',test_X.shape.eval()
-        print 'Sequencing done.'
+
         print
-        
-        N_input =   train_X.eval().shape[1]
+        'train set size:', train_X.shape.eval()
+        print
+        'valid set size:', valid_X.shape.eval()
+        print
+        'test set size:', test_X.shape.eval()
+        print
+        'Sequencing done.'
+        print
+
+        N_input = train_X.eval().shape[1]
         self.root_N_input = numpy.sqrt(N_input)
-        
+
         times = []
 
         try:
             for epoch in xrange(num_epochs):
                 t = time.time()
-                print 'Epoch %i/%i : ' % (epoch + 1, num_epochs)
+                print
+                'Epoch %i/%i : ' % (epoch + 1, num_epochs)
                 # sequence_mnist_data(train_X, train_Y, valid_X, valid_Y, test_X, test_Y)
                 accuracy = []
                 costs = []
@@ -307,37 +325,39 @@ num_epochs : integer
 
                 for i in range(len(train_X.get_value(borrow=True)) / batch_size):
                     t0=time.time()
-                    xs = train_X.get_value(borrow=True)[(i * batch_size) : ((i+1) * batch_size)]
+                    xs = train_X.get_value(borrow=True)[(i * batch_size): ((i + 1) * batch_size)]
                     acc, cost, cross = self.train_function(xs)
                     accuracy.append(acc)
                     costs.append(cost)
                     crossentropy.append(cross)
                     print time.time()-t0
-                    
                 print 'Train',numpy.mean(accuracy), 'cost', numpy.mean(costs), 'cross', numpy.mean(crossentropy),
                     
                 for i in range(len(test_X.get_value(borrow=True)) / batch_size):
-                    xs = train_X.get_value(borrow=True)[(i * batch_size) : ((i+1) * batch_size)]
+                    xs = train_X.get_value(borrow=True)[(i * batch_size): ((i + 1) * batch_size)]
                     acc, cost = self.test_function(xs)
                     test_acc.append(acc)
                     tests.append(cost)
-                    
-                print '\t Test_acc',numpy.mean(test_acc), "cross", numpy.mean(tests)
 
-                
+                print
+                '\t Test_acc', numpy.mean(test_acc), "cross", numpy.mean(tests)
+
                 timing = time.time() - t
                 times.append(timing)
-                print 'time : ', trunc(timing),
-                print 'remaining: ', (num_epochs - (epoch+1)) * numpy.mean(times) / 60 / 60, 'hrs'
+                print
+                'time : ', trunc(timing),
+                print
+                'remaining: ', (num_epochs - (epoch + 1)) * numpy.mean(times) / 60 / 60, 'hrs'
                 sys.stdout.flush()
-                
-                #new learning rate
+
+                # new learning rate
                 new_lr = self.lr.get_value() * self.annealing
                 self.lr.set_value(new_lr)
 
         except KeyboardInterrupt:
-            print 'Interrupted by user.'
-            
+            print
+            'Interrupted by user.'
+
     def generate(self, filename):
         '''Generate a sample sequence, plot the resulting piano-roll and save
 it as a MIDI file.
@@ -348,17 +368,17 @@ show : boolean
   If True, a piano-roll of the generated sequence will be shown.'''
 
         gen = self.generate_function()
-        
-        img_samples = PIL.Image.fromarray(tile_raster_images(gen, (self.root_N_input,self.root_N_input), (20,20)))
-        
-        img_samples.save(filename) 
 
+        img_samples = PIL.Image.fromarray(tile_raster_images(gen, (self.root_N_input, self.root_N_input), (20, 20)))
+
+        img_samples.save(filename)
 
 
 def test_rnnrbm(batch_size=100, num_epochs=300):
     model = RnnRbm()
     model.train(batch_size=batch_size, num_epochs=num_epochs)
     return model
+
 
 if __name__ == '__main__':
     model = test_rnnrbm()
