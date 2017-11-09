@@ -306,11 +306,13 @@ num_epochs : integer
                 test_acc = []
 
                 for i in range(len(train_X.get_value(borrow=True)) / batch_size):
+                    t0=time.time()
                     xs = train_X.get_value(borrow=True)[(i * batch_size) : ((i+1) * batch_size)]
                     acc, cost, cross = self.train_function(xs)
                     accuracy.append(acc)
                     costs.append(cost)
                     crossentropy.append(cross)
+                    print time.time()-t0
                     
                 print 'Train',numpy.mean(accuracy), 'cost', numpy.mean(costs), 'cross', numpy.mean(crossentropy),
                     

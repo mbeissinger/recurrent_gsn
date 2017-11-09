@@ -32,16 +32,19 @@ __email__ = "dev@opendeep.org"
 # standard libraries
 import os
 import time
-import logging
+import utils.logger as Logger
 # third-party libraries
 import numpy
+import numpy.random as R
 import numpy.random as rng
+import theano
 import theano.tensor as T
 import theano.sandbox.rng_mrg as RNG_MRG
 from theano.compat.python2x import OrderedDict
 # internal references
 from utils.utils import cast32, sharedX, salt_and_pepper
 from utils.utils import add_gaussian_noise as add_gaussian
+import utils.data_tools as data
 
 # Default values to use for some GSN parameters. These defaults are used to produce the MNIST results given in the comments top of file.
 _defaults = {# gsn parameters
@@ -71,8 +74,9 @@ class GSN():
     '''
     Class for creating a new Generative Stochastic Network (GSN)
     '''
-    def __init__(self, config=None, defaults=_defaults, inputs_hook=None, hiddens_hook=None, dataset=None):
+    def __init__(self, train_X, valid_X, test_X, state, outdir_base='./', logger=None):
         pass
+
 ###############################################
 # COMPUTATIONAL GRAPH HELPER METHODS FOR GSN #
 ###############################################

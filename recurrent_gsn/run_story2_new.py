@@ -24,12 +24,12 @@ def main():
     parser.add_argument('--recurrent_hidden_act', type=str, default='tanh')
     
     # training
-    parser.add_argument('--initialize_gsn', type=int, default=0) # whether or not to train a strict GSN first to initialize the weights and biases
+    parser.add_argument('--initialize_gsn', type=int, default=1) # whether or not to train a strict GSN first to initialize the weights and biases
     parser.add_argument('--cost_funct', type=str, default='binary_crossentropy') # the cost function for training
     parser.add_argument('--n_epoch', type=int, default=500)
     parser.add_argument('--gsn_batch_size', type=int, default=100)
     parser.add_argument('--batch_size', type=int, default=100) # max length of sequence to consider
-    parser.add_argument('--save_frequency', type=int, default=10) #number of epochs between parameters being saved
+    parser.add_argument('--save_frequency', type=int, default=1) #number of epochs between parameters being saved
     parser.add_argument('--early_stop_threshold', type=float, default=0.9996) #0.9995
     parser.add_argument('--early_stop_length', type=int, default=30)
     parser.add_argument('--hessian_free', type=int, default=0) # boolean for whether or not to use Hessian-free training for RNN-GSN
@@ -77,8 +77,8 @@ def create_rnngsn(args):
     logger = log.Logger(args.output_path)
     
     rnngsn = RNN_GSN(train_X=train_X, valid_X=valid_X, test_X=test_X, args=vars(args), logger=logger)
+    # rnngsn.load_params('../outputs/rnn_gsn/MNIST_1/all_params.pkl')
     rnngsn.train()
-    # rnngsn.load_params('nottingham_params.pkl')
     # rnngsn.gen_10k_samples()
     
     # sample_paths = ['samples_test'+str(i)+'.npy' for i in range(len(test_X))]

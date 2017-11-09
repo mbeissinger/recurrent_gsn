@@ -213,7 +213,7 @@ class RNN_GSN():
         ###########################################################
         self.train_gsn_first = False
         if self.initialize_gsn:
-            params_to_load = 'gsn_params.pkl'
+            params_to_load = 'gsn_params_epoch_30.pkl'
             if not os.path.isfile(params_to_load):
                 self.train_gsn_first = True 
             else:
@@ -436,10 +436,11 @@ class RNN_GSN():
         ##########################################################
         # Train the GSN first to get good weights initialization #
         ##########################################################
-        # if self.train_gsn_first:
-        #     log.maybeLog(self.logger, "\n\n----------Initially training the GSN---------\n\n")
-        #     init_gsn = generative_stochastic_network.GSN(train_X=train_X, valid_X=valid_X, test_X=test_X, args=self.gsn_args, logger=self.logger)
-        #     init_gsn.train()
+        if self.train_gsn_first:
+            log.maybeLog(self.logger, "\n\n----------Initially training the GSN---------\n\n")
+            # init_gsn = GSN(train_X=train_X, valid_X=valid_X, test_X=test_X, state=self.gsn_args, logger=self.logger)
+            # init_gsn.train()
+            print "NOT IMPLEMENTED"
     
         
         #########################################
@@ -552,18 +553,18 @@ class RNN_GSN():
                     reconstructions = []
                     for i in xrange(0, len(noisy_xs_test)):
                         recon, recon_cost = self.f_recon(noisy_xs_test[max(0,(i+1)-self.batch_size):i+1])
-                        reconstructions.append(recon)
+                        reconstructions.append(recon[-1])
                     reconstructed = numpy.array(reconstructions)
                     if (self.is_image):
                         # Concatenate stuff
-                        # stacked = numpy.vstack([numpy.vstack([xs_test[i*10 : (i+1)*10], noisy_xs_test[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10]]) for i in range(10)])
-                        # number_reconstruction = PIL.Image.fromarray(tile_raster_images(stacked, (self.image_height, self.image_width), (10,30)))
+                        stacked = numpy.vstack([numpy.vstack([xs_test[i*10 : (i+1)*10], noisy_xs_test[i*10 : (i+1)*10], reconstructed[i*10 : (i+1)*10]]) for i in range(10)])
+                        number_reconstruction = PIL.Image.fromarray(tile_raster_images(stacked, (self.image_height, self.image_width), (10,30)))
                             
-                        # number_reconstruction.save(self.outdir+'rnngsn_reconstruction_epoch_'+str(counter)+'.png')
+                        number_reconstruction.save(self.outdir+'rnngsn_reconstruction_epoch_'+str(counter)+'.png')
             
                         #sample_numbers(counter, 'seven')
-#                         plot_samples(counter, 'rnngsn')
-                        pass
+                        # plot_samples(counter, 'rnngsn')
+
             
                     #save params
                     self.save_params('all', counter, self.params)

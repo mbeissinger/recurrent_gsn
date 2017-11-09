@@ -2,6 +2,8 @@ outputs
 datasets
 recurrent_gsn/log/logs
 *.npy
+*.pkl
+*.gz
 
 #################
 ## Eclipse
