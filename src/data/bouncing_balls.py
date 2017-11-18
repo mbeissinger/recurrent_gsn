@@ -5,10 +5,12 @@ https://github.com/zhegan27/TSBN_code_NIPS2015/blob/master/bouncing_balls/data/d
 This script comes from the RTRBM code by Ilya Sutskever from
 http://www.cs.utoronto.ca/~ilya/code/2008/RTRBM.tar
 """
-from math import (exp, sqrt)
+from math import (sqrt)
 
-from numpy import (shape, array, stack, zeros, dot, arange, meshgrid)
+from numpy import (shape, array, stack, zeros, dot, arange, meshgrid, exp, save)
 from numpy.random import (randn, rand)
+
+from PIL import Image
 
 SIZE = 10  # size of bounding box: SIZE X SIZE.
 
@@ -29,12 +31,12 @@ def sigmoid(x):
 
 def bounce_n(steps=128, n=2, r=None, m=None):
     if r is None:
-        r = array([1.2] * n)
+        r = array([1.2] * n).astype('float32')
     if m is None:
-        m = array([1] * n)
+        m = array([1] * n).astype('float32')
     # r is to be rather small.
-    x = zeros((steps, n, 2), dtype='float')
-    v = randn(n, 2)
+    x = zeros((steps, n, 2), dtype='float32')
+    v = randn(n, 2).astype('float32')
     v = v / norm(v) * .5
     good_config = False
     while not good_config:
@@ -84,27 +86,26 @@ def bounce_n(steps=128, n=2, r=None, m=None):
 
                         v[i] += w * (new_v_i - v_i)
                         v[j] += w * (new_v_j - v_j)
-    return x
+    return x.astype('float32')
 
 
 def ar(x, y, z):
-    return z / 2 + arange(x, y, z, dtype='float')
+    return z / 2 + arange(x, y, z, dtype='float32')
 
 
 def matricize(x, res, r=None):
     steps, n = shape(x)[0:2]
     if r is None:
-        r = array([1.2] * n)
+        r = array([1.2] * n).astype('float32')
 
-    a = zeros((steps, res, res), dtype='float')
+    a = zeros((steps, res, res), dtype='float32')
 
     [i, j] = meshgrid(ar(0, 1, 1. / res) * SIZE, ar(0, 1, 1. / res) * SIZE)
 
     for t in range(steps):
         for ball in range(n):
-            _delta = exp(-(((i - x[t, ball, 0]) ** 2 + (j - x[t, ball, 1]) ** 2) / (r[ball] ** 2)) ** 4)
-            print(_delta)
-            print(a[t])
+            ball_x, ball_y = x[t, ball]
+            _delta = exp(-(((i - ball_x) ** 2 + (j - ball_y) ** 2) / (r[ball] ** 2)) ** 4)
             a[t] += _delta
 
         a[t][a[t] > 1] = 1
@@ -113,7 +114,7 @@ def matricize(x, res, r=None):
 
 def bounce_mat(res, n=2, steps=128, r=None):
     if r is None:
-        r = array([1.2] * n)
+        r = array([1.2] * n).astype('float32')
     x = bounce_n(steps, n, r)
     a = matricize(x, res, r)
     return a
@@ -121,18 +122,34 @@ def bounce_mat(res, n=2, steps=128, r=None):
 
 def bounce_vec(res, n=2, steps=128, r=None, m=None):
     if r is None:
-        r = array([1.2] * n)
+        r = array([1.2] * n).astype('float32')
     x = bounce_n(steps, n, r, m)
     v = matricize(x, res, r)
-    return v.reshape(steps, res ** 2)
+    v = v.reshape(steps, res ** 2)
+    return v
 
 
 if __name__ == "__main__":
     size = 15  # height and width of frame
     timesteps = 128  # number of timesteps to simulate
     n_balls = 3  # number of balls bouncing around
-    n_train = 4000  # number of train examples
-    n_test = 200  # number of test examples
-    train_data = stack([bounce_vec(res=size, n=n_balls, steps=timesteps) for _ in range(n_train)])
-    test_data = stack([bounce_vec(res=size, n=n_balls, steps=timesteps) for _ in range(n_test)])
-    print(test_data[0])
+    # n_train = 4000  # number of train examples
+    # n_test = 200  # number of test examples
+    n_train = 1
+    n_test = 1
+
+    images = [Image.fromarray(step*255) for step in bounce_mat(res=size, n=n_balls, steps=timesteps)]
+    im = images[0]
+    rest = images[1:]
+    with open('../../datasets/test_bounce.gif', 'wb') as f:
+        im.save(f, save_all=True, append_images=rest)
+
+    # boulanger-lewandowski's data params 128x15x15
+    train_data = stack([bounce_mat(res=size, n=n_balls, steps=timesteps) for _ in range(n_train)])
+    test_data = stack([bounce_mat(res=size, n=n_balls, steps=timesteps) for _ in range(n_test)])
+
+    # Sutskever's data params 100x30x30
+    size = 30
+    timesteps = 100
+    train_data = stack([bounce_mat(res=size, n=n_balls, steps=timesteps) for _ in range(n_train)])
+    test_data = stack([bounce_mat(res=size, n=n_balls, steps=timesteps) for _ in range(n_test)])
