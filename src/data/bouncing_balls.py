@@ -9,6 +9,7 @@ from math import (sqrt)
 
 from numpy import (shape, array, stack, zeros, dot, arange, meshgrid, exp, save)
 from numpy.random import (randn, rand)
+import torch.utils.data as data
 
 from PIL import Image
 
@@ -129,27 +130,45 @@ def bounce_vec(res, n=2, steps=128, r=None, m=None):
     return v
 
 
-if __name__ == "__main__":
-    size = 15  # height and width of frame
-    timesteps = 128  # number of timesteps to simulate
-    n_balls = 3  # number of balls bouncing around
-    # n_train = 4000  # number of train examples
-    # n_test = 200  # number of test examples
-    n_train = 1
-    n_test = 1
+class BouncingBalls(data.Dataset):
+    def __init__(self, size=15, timesteps=128, n_balls=3, flatten=False, paper=None):
+        super().__init__()
+        self.size = size
+        self.timesteps = timesteps
+        self.n_balls = n_balls
+        self.flatten = flatten
+        if paper == 'sutskever':
+            self.size = 30
+            self.timesteps = 100
+            self.n_balls = 3
+        elif paper == 'boulanger-lewandowski':
+            self.size = 15
+            self.timesteps = 128
+            self.n_balls = 3
 
-    images = [Image.fromarray(step*255) for step in bounce_mat(res=size, n=n_balls, steps=timesteps)]
+    def __getitem__(self, index):
+        if self.flatten:
+            return bounce_vec(res=self.size, n=self.n_balls, steps=self.timesteps)
+        else:
+            return bounce_mat(res=self.size, n=self.n_balls, steps=self.timesteps)
+
+    def __len__(self):
+        # arbitrary since we make a new sequence each time
+        return 4000
+
+
+if __name__ == "__main__":
+    Sutskever = BouncingBalls(paper='sutskever')
+    print(Sutskever[:4].shape)
+    images = [Image.fromarray(step*255) for step in Sutskever[0]]
     im = images[0]
     rest = images[1:]
-    with open('../../datasets/test_bounce.gif', 'wb') as f:
+    with open('../../datasets/test_bounce_sutskever.gif', 'wb') as f:
         im.save(f, save_all=True, append_images=rest)
 
-    # boulanger-lewandowski's data params 128x15x15
-    train_data = stack([bounce_mat(res=size, n=n_balls, steps=timesteps) for _ in range(n_train)])
-    test_data = stack([bounce_mat(res=size, n=n_balls, steps=timesteps) for _ in range(n_test)])
-
-    # Sutskever's data params 100x30x30
-    size = 30
-    timesteps = 100
-    train_data = stack([bounce_mat(res=size, n=n_balls, steps=timesteps) for _ in range(n_train)])
-    test_data = stack([bounce_mat(res=size, n=n_balls, steps=timesteps) for _ in range(n_test)])
+    Boulanger = BouncingBalls(paper='boulanger-lewandowski')
+    images = [Image.fromarray(step * 255) for step in Boulanger[0]]
+    im = images[0]
+    rest = images[1:]
+    with open('../../datasets/test_bounce_boulanger.gif', 'wb') as f:
+        im.save(f, save_all=True, append_images=rest)

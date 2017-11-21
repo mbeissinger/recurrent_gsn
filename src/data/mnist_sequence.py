@@ -36,6 +36,12 @@ class SequencedMNIST(MNIST):
 
         return img, label
 
+    def __len__(self):
+        if self.train:
+            return self.train_labels.shape[0]
+        else:
+            return self.test_labels.shape[0]
+
 
 _classes = 10
 
