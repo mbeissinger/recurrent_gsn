@@ -7,7 +7,7 @@ http://www.cs.utoronto.ca/~ilya/code/2008/RTRBM.tar
 """
 from math import (sqrt)
 
-from numpy import (shape, array, stack, zeros, dot, arange, meshgrid, exp, save)
+from numpy import (shape, array, zeros, dot, arange, meshgrid, exp)
 from numpy.random import (randn, rand)
 import torch.utils.data as data
 
@@ -159,7 +159,6 @@ class BouncingBalls(data.Dataset):
 
 if __name__ == "__main__":
     Sutskever = BouncingBalls(paper='sutskever')
-    print(Sutskever[:4].shape)
     images = [Image.fromarray(step*255) for step in Sutskever[0]]
     im = images[0]
     rest = images[1:]
