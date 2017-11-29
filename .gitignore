@@ -2,6 +2,7 @@ outputs
 datasets
 recurrent_gsn/log/logs
 *.npy
+*.jpg
 *.pkl
 *.gz
 
