@@ -1,15 +1,30 @@
+from math import floor
 from PIL import Image
 from torchvision.datasets import MNIST
 
 
 class SequencedMNIST(MNIST):
-    def __init__(self, root="./datasets", train=True, transform=None, target_transform=None, download=True, sequence=1):
+    def __init__(self, root="./datasets", train=True, transform=None, target_transform=None, download=True, sequence=1, length=100):
         super().__init__(root=root, train=train, transform=transform, target_transform=target_transform,
                          download=download)
         if self.train:
             self.train_data, self.train_labels = sequence_mnist(self.train_data, self.train_labels, sequence)
+            # now that they are loaded, reshape into sequences!
+            # first chop off remainders so that data evenly divides
+            self.train_data = self.train_data[:(length * int(floor(len(self.train_data) / length)))]
+            self.train_labels = self.train_labels[:(length * int(floor(len(self.train_labels) / length)))]
+            # second reshape!
+            self.train_data = self.train_data.reshape(-1, length, 28, 28)
+            self.train_labels = self.train_labels.reshape(-1, length)
         else:
             self.test_data, self.test_labels = sequence_mnist(self.test_data, self.test_labels, sequence)
+            # now that they are loaded, reshape into sequences!
+            # first chop off remainders so that data evenly divides
+            self.test_data = self.test_data[:(length * int(floor(len(self.test_data) / length)))]
+            self.test_labels = self.test_labels[:(length * int(floor(len(self.test_labels) / length)))]
+            # second reshape!
+            self.test_data = self.test_data.reshape(-1, length, 28, 28)
+            self.test_labels = self.test_labels.reshape(-1, length)
 
     def __getitem__(self, index):
         """
@@ -20,27 +35,21 @@ class SequencedMNIST(MNIST):
             tuple: (images, targets) where targets is list of index of the target class for the sequence.
         """
         if self.train:
-            img, label = self.train_data[index], self.train_labels[index]
+            imgs, labels = self.train_data[index], self.train_labels[index]
         else:
-            img, label = self.test_data[index], self.test_labels[index]
+            imgs, labels = self.test_data[index], self.test_labels[index]
 
-            # doing this so that it is consistent with all other datasets
-            # to return a PIL Image
-            img = Image.fromarray(img, mode='L')
+        # doing this so that it is consistent with all other datasets
+        # to return a PIL Image
+        imgs = [Image.fromarray(img, mode='L') for img in imgs]
 
         if self.transform is not None:
-            img = self.transform(img)
+            imgs = [self.transform(img) for img in imgs]
 
         if self.target_transform is not None:
-            label = self.target_transform(label)
+            labels = [self.target_transform(label) for label in labels]
 
-        return img, label
-
-    def __len__(self):
-        if self.train:
-            return self.train_labels.shape[0]
-        else:
-            return self.test_labels.shape[0]
+        return imgs, labels
 
 
 _classes = 10
@@ -199,13 +208,13 @@ def dataset4_indices(labels):
 if __name__ == '__main__':
     print("dataset 1:")
     mnist = SequencedMNIST(sequence=1)
-    print(mnist[:50][1])
+    print(len(mnist), mnist[0][1][:50])
     print("dataset 2:")
     mnist = SequencedMNIST(sequence=2)
-    print(mnist[:50][1])
+    print(len(mnist), mnist[0][1][:50])
     print("dataset 3:")
     mnist = SequencedMNIST(sequence=3)
-    print(mnist[:50][1])
+    print(len(mnist), mnist[0][1][:50])
     print("dataset 4:")
     mnist = SequencedMNIST(sequence=4)
-    print(mnist[:50][1])
+    print(len(mnist), mnist[0][1][:50])
