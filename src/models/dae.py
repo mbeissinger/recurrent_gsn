@@ -39,7 +39,10 @@ class DAE(nn.Module):
                 i += 1
         else:
             for layer in self.encode_layers[::-1]:
-                self.decode_params.append([layer.weight.t(), nn.Parameter(torch.zeros(layer.weight.size()[0]))])
+                bias = nn.Parameter(torch.zeros(layer.weight.size()[1]))
+                self.register_parameter('layer_{!s}_bias'.format(i), bias)
+                i += 1
+                self.decode_params.append([layer, bias])
 
         if isinstance(self.visible_act, nn.Sigmoid):
             self.input_corrupt = SaltAndPepper(amount=self.noise)
@@ -59,8 +62,8 @@ class DAE(nn.Module):
             x = F.relu(x)
         # decode
         if self.tied_weights:
-            for i, (weight, bias) in enumerate(self.decode_params):
-                x = F.linear(x, weight=weight, bias=bias)
+            for i, (layer, bias) in enumerate(self.decode_params):
+                x = F.linear(x, weight=layer.weight.t(), bias=bias)
                 if i == len(self.decode_params)-1:
                     x = self.visible_act(x)
                 else:
@@ -91,7 +94,7 @@ if __name__ == '__main__':
         batch_size=32, shuffle=True
     )
 
-    model = DAE(sizes=[784, 1024], noise=0.5)
+    model = DAE(sizes=[784, 1024], noise=0.5, tied_weights=True)
     if use_cuda:
         model.cuda()
     print('Model:', model)
