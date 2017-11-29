@@ -94,7 +94,7 @@ if __name__ == '__main__':
         batch_size=32, shuffle=True
     )
 
-    model = DAE(sizes=[784, 1024], noise=0.5, tied_weights=True)
+    model = DAE(sizes=[784, 1024], noise=0.3, tied_weights=False)
     if use_cuda:
         model.cuda()
     print('Model:', model)
