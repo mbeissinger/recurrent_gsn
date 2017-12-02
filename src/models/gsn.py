@@ -96,8 +96,8 @@ class GSN(nn.Module):
         """
         Builds the GSN computation graph, either from the input `x` or generating from the starting point of `hiddens`
         """
-        xs = []  # final sampled reconstructions
-        p_x_chain = []  # our p(x|H) distributions to use for loss function
+        xs = []  # reconstructed xs
+        sampled_xs = []  # accumulate our sampled x from p(x|h) to use as the next input
         if hiddens is None and x is not None:
             # if we are starting from x, initialize the hidden activations to be 0!
             batch_size = x.size()[0]
@@ -108,21 +108,21 @@ class GSN(nn.Module):
             ]
         if x is not None:
             # run the normal computation graph from input x
-            x_recon = x
+            sampled_x = x
             for _ in range(self.walkbacks):
-                hiddens = self.encode(x_recon, hiddens)
-                x_recon, hiddens, p_x = self.decode(hiddens)
+                hiddens = self.encode(sampled_x, hiddens)
+                x_recon, hiddens, sampled_x = self.decode(hiddens)
                 xs.append(x_recon)
-                p_x_chain.append(p_x)
+                sampled_xs.append(sampled_x)
         else:
             # run the generative computation graph from hiddens H
             for _ in range(self.walkbacks):
-                x_recon, hiddens, p_x = self.decode(hiddens)
-                hiddens = self.encode(x_recon, hiddens)
+                x_recon, hiddens, sampled_x = self.decode(hiddens)
+                hiddens = self.encode(sampled_x, hiddens)
                 xs.append(x_recon)
-                p_x_chain.append(p_x)
+                sampled_xs.append(sampled_x)
 
-        return xs, hiddens, p_x_chain
+        return xs, hiddens, sampled_xs
 
     def encode(self, x, hiddens):
         """
@@ -195,23 +195,19 @@ class GSN(nn.Module):
 
         # now do the reconstructed x!
         _, (decode_w, decode_b) = self.layers[0]
-        p_x = F.linear(input=hiddens[0], weight=decode_w, bias=decode_b)
-        p_x = self.visible_act(p_x)
+        x_recon = F.linear(input=hiddens[0], weight=decode_w, bias=decode_b)
+        x_recon = self.visible_act(x_recon)
         # sample from p(X|H...) - SAMPLING NEEDS TO BE CORRECT FOR INPUT TYPES I.E. FOR BINARY MNIST SAMPLING IS BINOMIAL
         if self.input_sampling:
             if isinstance(self.visible_act, nn.Sigmoid):
-                x_recon = torch.bernoulli(p_x)
-                x_recon = Variable(x_recon.data, requires_grad=False)
-                if p_x.is_cuda:
-                    x_recon.cuda()
-                # x_recon = self.sampling_fn(p_x)
+                sampled = self.sampling_fn(x_recon)
             else:
                 print("Input sampling isn't defined for activation {!s}".format(type(self.visible_act)))
-                x_recon = p_x
+                sampled = x_recon
         else:
-            x_recon = p_x
+            sampled = x_recon
 
-        return x_recon, hiddens, p_x
+        return x_recon, hiddens, sampled
 
 
 if __name__ == '__main__':
@@ -223,27 +219,27 @@ if __name__ == '__main__':
         MNIST('../datasets', train=True, download=True,
                        transform=transforms.Compose([
                            transforms.ToTensor(),
-                           transforms.Lambda(lambda x: binarize(x))
                        ])),
-        batch_size=32, shuffle=True
+        batch_size=100, shuffle=True
     )
     test_loader = torch.utils.data.DataLoader(
         MNIST('../datasets', train=False, transform=transforms.Compose([
             transforms.ToTensor(),
-            transforms.Lambda(lambda x: binarize(x))
         ])),
-        batch_size=32, shuffle=True
+        batch_size=100, shuffle=True
     )
 
-    model = GSN(sizes=[784, 1024, 1024], tied_weights=True, walkbacks=4, visible_act=nn.Sigmoid(), hidden_act=nn.ReLU(),
+    model = GSN(sizes=[784, 1500, 1500], tied_weights=False, walkbacks=4, visible_act=nn.Sigmoid(), hidden_act=nn.Tanh(),
                  input_noise=.4, hidden_noise=2, input_sampling=True, noiseless_h1=True)
     if use_cuda:
         model.cuda()
     print('Model:', model)
+    print('Params:', [name for name, p in model.state_dict().items()])
     optimizer = optim.Adam(model.parameters(), lr=.0003)
 
     times = []
-    for epoch in range(200):
+    epochs = 300
+    for epoch in range(epochs):
         print("Epoch", epoch)
         model.train()
         train_losses = []
@@ -254,8 +250,8 @@ if __name__ == '__main__':
                 image_batch = image_batch.cuda()
             optimizer.zero_grad()
             flat_image_batch = image_batch.view(-1, int(np.prod(image_batch.size()[1:])))
-            _, _, p_x_chain = model(flat_image_batch)
-            losses = [F.binary_cross_entropy(input=p_x, target=flat_image_batch) for p_x in p_x_chain]
+            recons, _, _ = model(flat_image_batch)
+            losses = [F.binary_cross_entropy(input=recon, target=flat_image_batch) for recon in recons]
             loss = sum(losses)
             loss.backward()
             optimizer.step()
@@ -280,13 +276,14 @@ if __name__ == '__main__':
             if use_cuda:
                 image_batch = image_batch.cuda()
             flat_image_batch = image_batch.view(-1, int(np.prod(image_batch.size()[1:])))
-            _, _, p_x_chain = model(flat_image_batch)
-            test_loss = F.binary_cross_entropy(input=p_x_chain[-1], target=flat_image_batch)
+            recons, _, _ = model(flat_image_batch)
+            test_loss = F.binary_cross_entropy(input=recons[-1], target=flat_image_batch)
             test_losses.append(test_loss.data.numpy())
         print("Test Loss", np.average(test_losses))
         epoch_time = time.time() - epoch_start
         times.append(epoch_time)
         print("Epoch took {!s}, estimate {!s} remaining".format(
             make_time_units_string(epoch_time),
-            make_time_units_string(np.average(times) * (199 - epoch))
+            make_time_units_string(np.average(times) * (epochs - 1 - epoch))
         ))
+        print(np.average(times), epochs - 1 - epoch)
