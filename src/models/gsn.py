@@ -28,6 +28,7 @@ from torchvision import transforms
 from torchvision.datasets import MNIST
 
 from src.models.noise import SaltAndPepper, GaussianNoise
+from src.models.sampling import Binomial
 
 use_cuda = torch.cuda.is_available()
 
@@ -54,6 +55,7 @@ class GSN(nn.Module):
         self.hidden_act = hidden_act  # activation for hidden layers
         self.walkbacks = walkbacks  # number of walkbacks (generally 2*hidden layers) - need enough to have info from top layer propagate to visible layer
         self.input_sampling = input_sampling  # whether to sample at each walkback step - makes it like Gibbs sampling.
+        self.sampling_fn = Binomial()
         self.noiseless_h1 = noiseless_h1  # whether to keep the first hidden layer uncorrupted
         # Noise to add to the visible and hidden layers - salt/pepper for binary, gaussian for real values
         if isinstance(self.visible_act, nn.Sigmoid):
@@ -93,7 +95,8 @@ class GSN(nn.Module):
         """
         Builds the GSN computation graph, either from the input `x` or generating from the starting point of `hiddens`
         """
-        xs = []
+        xs = []  # final sampled reconstructions
+        p_x_chain = []  # our p(x|H) distributions to use for loss function
         if hiddens is None and x is not None:
             # if we are starting from x, initialize the hidden activations to be 0!
             batch_size = x.size()[0]
@@ -107,16 +110,18 @@ class GSN(nn.Module):
             x_recon = x
             for _ in range(self.walkbacks):
                 hiddens = self.encode(x_recon, hiddens)
-                x_recon, hiddens = self.decode(hiddens)
+                x_recon, hiddens, p_x = self.decode(hiddens)
                 xs.append(x_recon)
+                p_x_chain.append(p_x)
         else:
             # run the generative computation graph from hiddens H
             for _ in range(self.walkbacks):
-                x_recon, hiddens = self.decode(hiddens)
+                x_recon, hiddens, p_x = self.decode(hiddens)
                 hiddens = self.encode(x_recon, hiddens)
                 xs.append(x_recon)
+                p_x_chain.append(p_x)
 
-        return xs, hiddens
+        return xs, hiddens, p_x_chain
 
     def encode(self, x, hiddens):
         """
@@ -189,16 +194,23 @@ class GSN(nn.Module):
 
         # now do the reconstructed x!
         _, (decode_w, decode_b) = self.layers[0]
-        x_recon = F.linear(input=hiddens[0], weight=decode_w, bias=decode_b)
-        x_recon = self.visible_act(x_recon)
+        p_x = F.linear(input=hiddens[0], weight=decode_w, bias=decode_b)
+        p_x = self.visible_act(p_x)
         # sample from p(X|H...) - SAMPLING NEEDS TO BE CORRECT FOR INPUT TYPES I.E. FOR BINARY MNIST SAMPLING IS BINOMIAL
         if self.input_sampling:
             if isinstance(self.visible_act, nn.Sigmoid):
-                x_recon = torch.bernoulli(x_recon)
+                x_recon = torch.bernoulli(p_x)
+                x_recon = Variable(x_recon.data, requires_grad=False)
+                if p_x.is_cuda:
+                    x_recon.cuda()
+                # x_recon = self.sampling_fn(p_x)
             else:
                 print("Input sampling isn't defined for activation {!s}".format(type(self.visible_act)))
+                x_recon = p_x
+        else:
+            x_recon = p_x
 
-        return x_recon, hiddens
+        return x_recon, hiddens, p_x
 
 
 if __name__ == '__main__':
@@ -224,7 +236,7 @@ if __name__ == '__main__':
     )
 
     model = GSN(sizes=[784, 1024, 1024], tied_weights=True, walkbacks=4, visible_act=nn.Sigmoid(), hidden_act=nn.ReLU(),
-                 input_noise=.4, hidden_noise=2, input_sampling=False, noiseless_h1=True)
+                 input_noise=.4, hidden_noise=2, input_sampling=True, noiseless_h1=True)
     if use_cuda:
         model.cuda()
     print('Model:', model)
@@ -240,21 +252,19 @@ if __name__ == '__main__':
                 image_batch = image_batch.cuda()
             optimizer.zero_grad()
             flat_image_batch = image_batch.view(-1, int(np.prod(image_batch.size()[1:])))
-            recons, _ = model(flat_image_batch)
-            loss = 0.
-            for recon in recons:
-                loss += F.binary_cross_entropy(input=recon, target=flat_image_batch)
-            loss = loss / len(recons)
+            _, _, p_x_chain = model(flat_image_batch)
+            losses = [F.binary_cross_entropy(input=p_x, target=flat_image_batch) for p_x in p_x_chain]
+            loss = sum(losses)
             loss.backward()
             optimizer.step()
-            train_losses.extend(loss.data)
+            train_losses.append(losses[-1].data.numpy())
         print("Train Loss", np.average(train_losses))
         example, _ = train_loader.dataset[0]
         example = Variable(example, requires_grad=False)
         if use_cuda:
             example = example.cuda()
         flat_example = example.view(1, 784)
-        example_recons, _ = model(flat_example)
+        example_recons, _, _ = model(flat_example)
         example_recon = example_recons[-1]
         im = transforms.ToPILImage()(flat_example.view(1,28,28).cpu().data)
         im.save('{!s}_image.png'.format(epoch))
@@ -268,10 +278,7 @@ if __name__ == '__main__':
             if use_cuda:
                 image_batch = image_batch.cuda()
             flat_image_batch = image_batch.view(-1, int(np.prod(image_batch.size()[1:])))
-            recons, _ = model(flat_image_batch)
-            test_loss = 0.
-            for recon in recons:
-                test_loss += F.binary_cross_entropy(input=recon, target=flat_image_batch)
-            test_loss = test_loss / len(recons)
-            test_losses.extend(test_loss.data)
+            _, _, p_x_chain = model(flat_image_batch)
+            test_loss = F.binary_cross_entropy(input=p_x_chain[-1], target=flat_image_batch)
+            test_losses.append(test_loss.data.numpy())
         print("Test Loss", np.average(test_losses))
