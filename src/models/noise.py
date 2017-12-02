@@ -3,8 +3,6 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
-use_cuda = torch.cuda.is_available()
-
 
 class GaussianNoise(nn.Module):
     def __init__(self, mean=0, std=1):
@@ -20,7 +18,7 @@ class GaussianNoise(nn.Module):
                 ),
                 requires_grad=False
             )
-            if use_cuda:
+            if x.is_cuda:
                 noise = noise.cuda()
             return x + noise
         return x
@@ -45,7 +43,7 @@ class SaltAndPepper(nn.Module):
                 ),
                 requires_grad=False
             )
-            if use_cuda:
+            if x.is_cuda:
                 a = a.cuda()
                 b = b.cuda()
             c = (a == 0).float() * b

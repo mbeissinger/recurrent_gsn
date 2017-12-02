@@ -123,11 +123,11 @@ if __name__ == '__main__':
         flat_example = example.view(1, 784)
         example_recon, example_noisy = model(flat_example)
         im = transforms.ToPILImage()(flat_example.view(1,28,28).cpu().data)
-        im.save('{!s}_image.jpg'.format(epoch))
+        im.save('{!s}_image.png'.format(epoch))
         noisy = transforms.ToPILImage()(example_noisy.view(1, 28, 28).cpu().data)
-        noisy.save('{!s}_noisy.jpg'.format(epoch))
+        noisy.save('{!s}_noisy.png'.format(epoch))
         r_im = transforms.ToPILImage()(example_recon.view(1,28,28).cpu().data)
-        r_im.save('{!s}_recon.jpg'.format(epoch))
+        r_im.save('{!s}_recon.png'.format(epoch))
 
         model.eval()
         test_losses = []
