@@ -8,9 +8,6 @@ https://github.com/yaoli/GSN
 As well as Pylearn2.utils
 '''
 import numpy
-import theano
-import theano.sandbox.rng_mrg as RNG_MRG
-import theano.tensor as T
 
 cast32 = lambda x: numpy.cast['float32'](x)
 trunc = lambda x: str(x)[:8]
@@ -163,18 +160,6 @@ def load_from_config(config_filename):
 def init_empty_file(filename):
     with open(filename, 'w') as f:
         f.write("")
-
-
-def make_time_units_string(time):
-    # Show the time with appropriate easy-to-read units.
-    if time < 0:
-        return trunc(time * 1000) + " milliseconds"
-    elif time < 60:
-        return trunc(time) + " seconds"
-    elif time < 3600:
-        return trunc(time / 60) + " minutes"
-    else:
-        return trunc(time / 3600) + " hours"
 
 
 def raise_to_list(_input):

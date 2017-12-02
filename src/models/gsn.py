@@ -29,6 +29,7 @@ from torchvision.datasets import MNIST
 
 from src.models.noise import SaltAndPepper, GaussianNoise
 from src.models.sampling import Binomial
+from src.utils import make_time_units_string
 
 use_cuda = torch.cuda.is_available()
 
@@ -214,10 +215,9 @@ class GSN(nn.Module):
 
 
 if __name__ == '__main__':
+    import time
     def binarize(x, thresh=0.5):
-        x[x<=thresh] = 0
-        x[x>thresh] = 1
-        return x
+        return (x>thresh).float()
 
     train_loader = torch.utils.data.DataLoader(
         MNIST('../datasets', train=True, download=True,
@@ -242,10 +242,12 @@ if __name__ == '__main__':
     print('Model:', model)
     optimizer = optim.Adam(model.parameters(), lr=.0003)
 
+    times = []
     for epoch in range(200):
         print("Epoch", epoch)
         model.train()
         train_losses = []
+        epoch_start = time.time()
         for batch_idx, (image_batch, _) in enumerate(train_loader):
             image_batch = Variable(image_batch, requires_grad=False)
             if use_cuda:
@@ -282,3 +284,9 @@ if __name__ == '__main__':
             test_loss = F.binary_cross_entropy(input=p_x_chain[-1], target=flat_image_batch)
             test_losses.append(test_loss.data.numpy())
         print("Test Loss", np.average(test_losses))
+        epoch_time = time.time() - epoch_start
+        times.append(epoch_time)
+        print("Epoch took {!s}, estimate {!s} remaining".format(
+            make_time_units_string(epoch_time),
+            make_time_units_string(np.average(times) * (199 - epoch))
+        ))
