@@ -190,7 +190,7 @@ if __name__ == '__main__':
                 loss = sum(losses)
                 loss.backward()
                 gsn_optimizer.step()
-                gsn_train_losses.append(losses[-1].data.numpy())
+                gsn_train_losses.append(losses[-1].data.cpu().numpy())
 
         print("GSN Train Loss", np.average(gsn_train_losses), "took {!s}".format(make_time_units_string(time.time()-gsn_start_time)))
         ####
@@ -216,7 +216,7 @@ if __name__ == '__main__':
             loss = sum(losses)
             loss.backward()
             regression_optimizer.step()
-            regression_train_losses.append(losses[-1].data.numpy())
+            regression_train_losses.append(losses[-1].data.cpu().numpy())
 
         print("Regression Train Loss", np.average(regression_train_losses))
         example = train_loader.dataset[0]
@@ -229,7 +229,7 @@ if __name__ == '__main__':
         preds, _, _ = model(flat_example)
         preds = torch.stack([flat_example[0]] + [recons[-1] for recons in preds])
         preds = preds.view(sequence_len+1, 1, 15, 15)
-        save_image(preds.data, '{!s}.png'.format(epoch), nrow=10)
+        save_image(preds.data.cpu(), '{!s}.png'.format(epoch), nrow=10)
 
         epoch_time = time.time() - epoch_start
         times.append(epoch_time)
