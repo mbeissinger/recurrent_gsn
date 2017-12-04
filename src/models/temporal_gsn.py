@@ -212,18 +212,15 @@ if __name__ == '__main__':
 
             regression_optimizer.zero_grad()
             predictions, _, _ = model(sequence_batch)
-            losses = [
-                [F.binary_cross_entropy(input=recon, target=targets[step]) for recon in recons]
-                for step, recons in enumerate(predictions[:-1])
-            ]
-            loss = sum([sum(l) for l in losses])
+            losses = [F.binary_cross_entropy(input=recons[-1], target=targets[step]) for step, recons in enumerate(predictions[:-1])]
+            loss = sum(losses)
             loss.backward()
             regression_optimizer.step()
-            regression_train_losses.append(losses[-1][-1].data.numpy())
+            regression_train_losses.append(losses[-1].data.numpy())
 
         print("Regression Train Loss", np.average(regression_train_losses))
-        example, _ = train_loader.dataset[0]
-        example = Variable(example, requires_grad=False)
+        example = train_loader.dataset[0]
+        example = Variable(torch.Tensor(example), requires_grad=False)
         if use_cuda:
             example = example.cuda()
         sequence_len = example.size()[0]
