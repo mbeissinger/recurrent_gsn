@@ -151,9 +151,6 @@ class GSN(nn.Module):
                 (encode_w1, _), decode_w = self.layers[i+1]
                 if decode_w is None:
                     decode_w = encode_w1.t()
-                print(hidden)
-                print(hiddens[i+1])
-                print(decode_w)
                 hidden = hidden + F.linear(input=hiddens[i+1], weight=decode_w)
 
 
@@ -206,7 +203,9 @@ class GSN(nn.Module):
             hiddens[i] = hidden
 
         # now do the reconstructed x!
-        _, decode_w = self.layers[0]
+        (encode_w1, _), decode_w = self.layers[0]
+        if decode_w is None:
+            decode_w = encode_w1.t()
         x_recon = F.linear(input=hiddens[0], weight=decode_w, bias=self.visible_bias)
         x_recon = self.visible_act(x_recon)
         # sample from p(X|H...) - SAMPLING NEEDS TO BE CORRECT FOR INPUT TYPES I.E. FOR BINARY MNIST SAMPLING IS BINOMIAL
