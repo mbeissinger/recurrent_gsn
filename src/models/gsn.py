@@ -188,7 +188,9 @@ class GSN(nn.Module):
 
             # decode down from above (if this isn't the top layer)
             if i < len(hiddens) - 1:
-                _, decode_w = self.layers[i+1]
+                (encode_w1, _), decode_w = self.layers[i+1]
+                if decode_w is None:
+                    decode_w = encode_w1.t()
                 hidden = hidden + F.linear(input=hiddens[i+1], weight=decode_w)
 
             # pre-activation noise
