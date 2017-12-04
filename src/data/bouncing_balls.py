@@ -154,7 +154,7 @@ class BouncingBalls(data.Dataset):
 
     def __len__(self):
         # arbitrary since we make a new sequence each time
-        return 4000
+        return 500
 
 
 if __name__ == "__main__":
