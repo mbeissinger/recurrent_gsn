@@ -81,7 +81,7 @@ class GSN(nn.Module):
             self.register_parameter(name='layer_{!s}_bias'.format(i+1), param=encode_bias)
             #### decode part
             if tied_weights:
-                decode_weight = encode_weight.t()
+                decode_weight = None
             else:
                 decode_weight = nn.Parameter(torch.FloatTensor(input_size, output_size))
                 nn.init.xavier_uniform(tensor=decode_weight,
@@ -148,7 +148,9 @@ class GSN(nn.Module):
 
             # decode down from above (if this isn't the top layer)
             if i < len(hiddens)-1:
-                _, decode_w = self.layers[i+1]
+                (encode_w1, _), decode_w = self.layers[i+1]
+                if decode_w is None:
+                    decode_w = encode_w1.t()
                 print(hidden)
                 print(hiddens[i+1])
                 print(decode_w)
