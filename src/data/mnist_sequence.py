@@ -4,9 +4,12 @@ from torchvision.datasets import MNIST
 
 
 class SequencedMNIST(MNIST):
-    def __init__(self, root="./datasets", train=True, transform=None, target_transform=None, download=True, sequence=1, length=100):
+    def __init__(self, root="./datasets", train=True, transform=None, sequence_transform=None,
+                 target_transform=None, target_sequence_transform=None, download=True, sequence=1, length=100):
         super().__init__(root=root, train=train, transform=transform, target_transform=target_transform,
                          download=download)
+        self.sequence_transform = sequence_transform
+        self.target_sequence_transform = target_sequence_transform
         if self.train:
             self.train_data, self.train_labels = sequence_mnist(self.train_data, self.train_labels, sequence)
             # now that they are loaded, reshape into sequences!
@@ -46,8 +49,14 @@ class SequencedMNIST(MNIST):
         if self.transform is not None:
             imgs = [self.transform(img) for img in imgs]
 
+        if self.sequence_transform is not None:
+            imgs = self.sequence_transform(imgs)
+
         if self.target_transform is not None:
             labels = [self.target_transform(label) for label in labels]
+
+        if self.target_sequence_transform is not None:
+            labels = self.target_sequence_transform(labels)
 
         return imgs, labels
 
