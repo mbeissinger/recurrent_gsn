@@ -149,6 +149,9 @@ class GSN(nn.Module):
             # decode down from above (if this isn't the top layer)
             if i < len(hiddens)-1:
                 _, decode_w = self.layers[i+1]
+                print(hidden)
+                print(hiddens[i+1])
+                print(decode_w)
                 hidden = hidden + F.linear(input=hiddens[i+1], weight=decode_w)
 
 
