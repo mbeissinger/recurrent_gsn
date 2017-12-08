@@ -54,9 +54,46 @@ if __name__ == '__main__':
         print("Epoch", epoch)
         epoch_start = time.time()
         model.train()
-        train_losses = []
-        train_accuracies = []
-        _start = time.time()
+        #####
+        # train the gsn
+        #####
+        model.train()
+        gsn_train_losses = []
+        gsn_train_accuracies = []
+        gsn_start_time = time.time()
+        for batch_idx, sequence_batch in enumerate(train_loader):
+            sequence_batch = Variable(sequence_batch, requires_grad=False)
+            if use_cuda:
+                sequence_batch = sequence_batch.cuda()
+
+            batch_size = sequence_batch.size()[0]
+            sequence_len = sequence_batch.size()[1]
+            rest = int(np.prod(sequence_batch.size()[2:]))
+            flat_sequence_batch = sequence_batch.view(batch_size * sequence_len, rest)
+            # break up this potentially large batch into nicer small ones for gsn
+            for batch_idx in range(int(flat_sequence_batch.size()[0] / 32)):
+                x = flat_sequence_batch[batch_idx * 32:(batch_idx + 1) * 32]
+                # train the gsn!
+                gsn_optimizer.zero_grad()
+                recons, _, _ = model.gsn(x)
+                losses = [F.binary_cross_entropy(input=recon, target=x) for recon in recons]
+                loss = sum(losses)
+                loss.backward()
+                gsn_optimizer.step()
+                gsn_train_losses.append(losses[-1].data.cpu().numpy()[0])
+                accuracies = [F.mse_loss(input=recon, target=x) for recon in recons]
+                gsn_train_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
+
+        print("GSN Train Loss", np.mean(gsn_train_losses))
+        print("GSN Train Accuracy", np.mean(gsn_train_accuracies))
+        print("GSN Train time", make_time_units_string(time.time() - gsn_start_time))
+
+        ####
+        # train the regression step
+        ####
+        regression_train_losses = []
+        regression_train_accuracies = []
+        regression_start = time.time()
         for batch_idx, sequence_batch in enumerate(train_loader):
             sequence_batch = Variable(sequence_batch, requires_grad=False)
             if use_cuda:
@@ -68,26 +105,26 @@ if __name__ == '__main__':
             sequence_batch = sequence_batch.view(sequence_len, batch_size, rest)
             targets = sequence_batch[1:]
 
-            optimizer.zero_grad()
-            predictions = model(sequence_batch)
-            losses = [F.binary_cross_entropy(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
+            regression_optimizer.zero_grad()
+            predictions, _, _ = model(sequence_batch)
+            losses = [F.binary_cross_entropy(input=recons[-1], target=targets[step]) for step, recons in
+                      enumerate(predictions[:-1])]
             loss = sum(losses)
             loss.backward()
-            optimizer.step()
-            train_losses.append(np.mean([l.data.cpu().numpy() for l in losses]))
-
+            regression_optimizer.step()
+            regression_train_losses.append(np.mean([l.data.cpu().numpy() for l in losses]))
             accuracies = [F.mse_loss(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
-            train_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
+            regression_train_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
 
-        print("Train Loss", np.mean(train_losses))
-        print("Train Accuracy", np.mean(train_accuracies))
-        print("Train time", make_time_units_string(time.time()-_start))
+        print("Regression Train Loss", np.mean(regression_train_losses))
+        print("Regression Train Accuracy", np.mean(regression_train_accuracies))
+        print("Regression Train time", make_time_units_string(time.time() - regression_start))
 
         model.eval()
         test_accuracies = []
         _start = time.time()
         for batch_idx, sequence_batch in enumerate(test_loader):
-            sequence_batch = Variable(sequence_batch, requires_grad=False)
+            sequence_batch = Variable(sequence_batch, requires_grad=False, volatile=True)
             if use_cuda:
                 sequence_batch = sequence_batch.cuda()
 
@@ -97,27 +134,33 @@ if __name__ == '__main__':
             sequence_batch = sequence_batch.view(sequence_len, batch_size, rest)
             targets = sequence_batch[1:]
 
-            predictions = model(sequence_batch)
-            accuracies = [F.mse_loss(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
+            predictions, _, _ = model(sequence_batch)
+            accuracies = [F.mse_loss(input=recons[-1], target=targets[step]) for step, recons in enumerate(predictions[:-1])]
             test_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
 
         print("Test Accuracy", np.mean(test_accuracies))
         print("Test time", make_time_units_string(time.time() - _start))
 
-        preds = model(flat_example)
-        preds = torch.stack([flat_example[0]] + preds)
+        preds, _, _ = model(flat_example)
+        preds = torch.stack([flat_example[0]] + [recons[-1] for recons in preds])
         preds = preds.view(sequence_len + 1, 1, 15, 15)
         save_image(preds.data.cpu(), '_bouncing_tgsn_{!s}.png'.format(epoch), nrow=10)
         images = [ToPILImage()(pred) for pred in preds.data.cpu()]
         with open('_bouncing_tgsn_{!s}.gif'.format(epoch), 'wb') as fp:
             images[0].save(fp, save_all=True, append_images=images[1:])
 
-        with open('_bouncing_tgsn_train.csv', 'a') as f:
-            lines = ['{!s},{!s}\n'.format(loss, acc) for loss, acc in zip(train_losses, train_accuracies)]
+        with open('_bouncing_tgsn_gsn_train.csv', 'a') as f:
+            lines = ['{!s},{!s}\n'.format(loss, acc) for
+                     loss, acc in zip(gsn_train_losses, gsn_train_accuracies,)]
+            for line in lines:
+                f.write(line)
+        with open('_bouncing_tgsn_reg_train.csv', 'a') as f:
+            lines = ['{!s},{!s}\n'.format(loss, acc) for
+                     loss, acc in zip(regression_train_losses, regression_train_accuracies,)]
             for line in lines:
                 f.write(line)
         with open('_bouncing_tgsn_.csv', 'a') as f:
-            f.write('{!s},{!s},{!s}\n'.format(np.mean(train_losses), np.mean(train_accuracies), np.mean(test_accuracies)))
+            f.write('{!s},{!s},{!s}\n'.format(np.mean(regression_train_losses), np.mean(regression_train_accuracies), np.mean(test_accuracies)))
 
         epoch_time = time.time() - epoch_start
         times.append(epoch_time)

@@ -86,7 +86,7 @@ if __name__ == '__main__':
         test_accuracies = []
         _start = time.time()
         for batch_idx, sequence_batch in enumerate(test_loader):
-            sequence_batch = Variable(sequence_batch, requires_grad=False)
+            sequence_batch = Variable(sequence_batch, requires_grad=False, volatile=True)
             if use_cuda:
                 sequence_batch = sequence_batch.cuda()
 
