@@ -37,8 +37,8 @@ if __name__ == '__main__':
         images[0].save(f, save_all=True, append_images=images[1:])
 
     model = UntiedGSN(
-        sizes=[15*15, 500, 500], visible_act=nn.Sigmoid(), hidden_act=nn.ReLU(),
-        input_noise=0., hidden_noise=0., input_sampling=True, noiseless_h1=True
+        sizes=[15*15, 1500, 1500, 1500], visible_act=nn.Sigmoid(), hidden_act=nn.Tanh(),
+        input_noise=0.2, hidden_noise=1., input_sampling=True, noiseless_h1=True
     )
     if use_cuda:
         model.cuda()
