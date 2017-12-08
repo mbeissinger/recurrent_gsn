@@ -131,12 +131,13 @@ def bounce_vec(res, n=2, steps=128, r=None, m=None):
 
 
 class BouncingBalls(data.Dataset):
-    def __init__(self, size=15, timesteps=128, n_balls=3, flatten=False, paper=None):
+    def __init__(self, size=15, timesteps=128, n_balls=3, flatten=False, paper=None, mode='train'):
         super().__init__()
         self.size = size
         self.timesteps = timesteps
         self.n_balls = n_balls
         self.flatten = flatten
+        self.mode = mode
         if paper == 'sutskever':
             self.size = 30
             self.timesteps = 100
@@ -154,7 +155,7 @@ class BouncingBalls(data.Dataset):
 
     def __len__(self):
         # arbitrary since we make a new sequence each time
-        return 500
+        return 1000 if self.mode == 'train' else 200
 
 
 if __name__ == "__main__":

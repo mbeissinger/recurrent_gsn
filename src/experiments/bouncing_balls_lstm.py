@@ -9,7 +9,7 @@ from torchvision.transforms import ToPILImage
 
 from src.utils import make_time_units_string
 from src.data.bouncing_balls import BouncingBalls
-from src.models.untied_gsn import UntiedGSN
+from src.models.lstm import LSTM
 
 use_cuda = torch.cuda.is_available()
 
@@ -31,14 +31,15 @@ if __name__ == '__main__':
     sequence_len = example.size()[0]
     rest = int(np.prod(example.size()[1:]))
     flat_example = example.view(sequence_len, 1, rest)
-    save_image(flat_example.view(sequence_len, 1, 15, 15).data, '_bouncing_untied_real_example.png', nrow=10)
+    save_image(flat_example.view(sequence_len, 1, 15, 15).data, '_bouncing_balls_lstm_real_example.png', nrow=10)
     images = [ToPILImage()(img) for img in flat_example.view(sequence_len, 1, 15, 15).data]
-    with open('_bouncing_untied_real_example.gif', 'wb') as f:
+    with open('_bouncing_balls_lstm_real_example.gif', 'wb') as f:
         images[0].save(f, save_all=True, append_images=images[1:])
 
-    model = UntiedGSN(
-        sizes=[15*15, 500, 500], visible_act=nn.Sigmoid(), hidden_act=nn.ReLU(),
-        input_noise=0., hidden_noise=0., input_sampling=True, noiseless_h1=True
+    model = LSTM(
+        input_size=15*15, hidden_size=500,
+        num_layers=2, bias=True, batch_first=False,
+        dropout=0, bidirectional=False, output_size=15*15, output_activation=nn.Sigmoid()
     )
     if use_cuda:
         model.cuda()
@@ -75,7 +76,7 @@ if __name__ == '__main__':
             train_losses.append(np.mean([l.data.cpu().numpy() for l in losses]))
 
             accuracies = [F.mse_loss(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
-            train_accuracies.append(np.mean([acc.data.numpy() for acc in accuracies]))
+            train_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
 
         print("Train Loss", np.mean(train_losses))
         print("Train Accuracy", np.mean(train_accuracies))
@@ -97,7 +98,7 @@ if __name__ == '__main__':
 
             predictions = model(sequence_batch)
             accuracies = [F.mse_loss(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
-            test_accuracies.append(np.mean([acc.data.numpy() for acc in accuracies]))
+            test_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
 
         print("Test Accuracy", np.mean(test_accuracies))
         print("Test time", make_time_units_string(time.time() - _start))
@@ -105,16 +106,16 @@ if __name__ == '__main__':
         preds = model(flat_example)
         preds = torch.stack([flat_example[0]] + preds)
         preds = preds.view(sequence_len + 1, 1, 15, 15)
-        save_image(preds.data, '_bouncing_untied_{!s}.png'.format(epoch), nrow=10)
+        save_image(preds.data, '_bouncing_balls_lstm_{!s}.png'.format(epoch), nrow=10)
         images = [ToPILImage()(pred) for pred in preds.data]
-        with open('_bouncing_untied_{!s}.gif'.format(epoch), 'wb') as fp:
+        with open('_bouncing_balls_lstm_{!s}.gif'.format(epoch), 'wb') as fp:
             images[0].save(fp, save_all=True, append_images=images[1:])
 
-        with open('_bouncing_untied_train.csv', 'a') as f:
+        with open('_bouncing_balls_lstm_train.csv', 'a') as f:
             lines = ['{!s},{!s}\n'.format(loss, acc) for loss, acc in zip(train_losses, train_accuracies)]
             for line in lines:
                 f.write(line)
-        with open('_bouncing_untied_.csv', 'a') as f:
+        with open('_bouncing_balls_lstm.csv', 'a') as f:
             f.write('{!s},{!s},{!s}\n'.format(np.mean(train_losses), np.mean(train_accuracies), np.mean(test_accuracies)))
 
         epoch_time = time.time() - epoch_start

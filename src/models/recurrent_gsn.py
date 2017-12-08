@@ -23,7 +23,7 @@ from src.data.mnist_sequence import SequencedMNIST
 use_cuda = torch.cuda.is_available()
 
 
-class TGSN(nn.Module):
+class RNNGSN(nn.Module):
     def __init__(self, sizes, window_size=1, tied_weights=True, walkbacks=5, visible_act=nn.Sigmoid(), hidden_act=nn.ReLU(),
                  input_noise=.4, hidden_noise=2, input_sampling=True, noiseless_h1=True):
         super().__init__()
