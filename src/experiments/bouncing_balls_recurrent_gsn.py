@@ -31,8 +31,8 @@ if __name__ == '__main__':
     sequence_len = example.size()[0]
     rest = int(np.prod(example.size()[1:]))
     flat_example = example.view(sequence_len, 1, rest)
-    save_image(flat_example.view(sequence_len, 1, 15, 15).data, '_bouncing_untied_real_example.png', nrow=10)
-    images = [ToPILImage()(img) for img in flat_example.view(sequence_len, 1, 15, 15).data]
+    save_image(flat_example.view(sequence_len, 1, 15, 15).data.cpu(), '_bouncing_untied_real_example.png', nrow=10)
+    images = [ToPILImage()(img) for img in flat_example.view(sequence_len, 1, 15, 15).data.cpu()]
     with open('_bouncing_untied_real_example.gif', 'wb') as f:
         images[0].save(f, save_all=True, append_images=images[1:])
 
@@ -75,7 +75,7 @@ if __name__ == '__main__':
             train_losses.append(np.mean([l.data.cpu().numpy() for l in losses]))
 
             accuracies = [F.mse_loss(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
-            train_accuracies.append(np.mean([acc.data.numpy() for acc in accuracies]))
+            train_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
 
         print("Train Loss", np.mean(train_losses))
         print("Train Accuracy", np.mean(train_accuracies))
@@ -97,7 +97,7 @@ if __name__ == '__main__':
 
             predictions = model(sequence_batch)
             accuracies = [F.mse_loss(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
-            test_accuracies.append(np.mean([acc.data.numpy() for acc in accuracies]))
+            test_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
 
         print("Test Accuracy", np.mean(test_accuracies))
         print("Test time", make_time_units_string(time.time() - _start))
@@ -105,8 +105,8 @@ if __name__ == '__main__':
         preds = model(flat_example)
         preds = torch.stack([flat_example[0]] + preds)
         preds = preds.view(sequence_len + 1, 1, 15, 15)
-        save_image(preds.data, '_bouncing_untied_{!s}.png'.format(epoch), nrow=10)
-        images = [ToPILImage()(pred) for pred in preds.data]
+        save_image(preds.data.cpu(), '_bouncing_untied_{!s}.png'.format(epoch), nrow=10)
+        images = [ToPILImage()(pred) for pred in preds.data.cpu()]
         with open('_bouncing_untied_{!s}.gif'.format(epoch), 'wb') as fp:
             images[0].save(fp, save_all=True, append_images=images[1:])
 

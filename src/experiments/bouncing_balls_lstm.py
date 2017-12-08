@@ -31,8 +31,8 @@ if __name__ == '__main__':
     sequence_len = example.size()[0]
     rest = int(np.prod(example.size()[1:]))
     flat_example = example.view(sequence_len, 1, rest)
-    save_image(flat_example.view(sequence_len, 1, 15, 15).data, '_bouncing_balls_lstm_real_example.png', nrow=10)
-    images = [ToPILImage()(img) for img in flat_example.view(sequence_len, 1, 15, 15).data]
+    save_image(flat_example.view(sequence_len, 1, 15, 15).data.cpu(), '_bouncing_balls_lstm_real_example.png', nrow=10)
+    images = [ToPILImage()(img) for img in flat_example.view(sequence_len, 1, 15, 15).data.cpu()]
     with open('_bouncing_balls_lstm_real_example.gif', 'wb') as f:
         images[0].save(f, save_all=True, append_images=images[1:])
 
@@ -106,8 +106,8 @@ if __name__ == '__main__':
         preds = model(flat_example)
         preds = torch.stack([flat_example[0]] + preds)
         preds = preds.view(sequence_len + 1, 1, 15, 15)
-        save_image(preds.data, '_bouncing_balls_lstm_{!s}.png'.format(epoch), nrow=10)
-        images = [ToPILImage()(pred) for pred in preds.data]
+        save_image(preds.data.cpu(), '_bouncing_balls_lstm_{!s}.png'.format(epoch), nrow=10)
+        images = [ToPILImage()(pred) for pred in preds.data.cpu()]
         with open('_bouncing_balls_lstm_{!s}.gif'.format(epoch), 'wb') as fp:
             images[0].save(fp, save_all=True, append_images=images[1:])
 
