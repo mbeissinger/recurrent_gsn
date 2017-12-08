@@ -93,6 +93,7 @@ if __name__ == '__main__':
 
         model.eval()
         test_accuracies = []
+        test_accuracies2 = []
         _start = time.time()
         for batch_idx, sequence_batch in enumerate(test_loader):
             sequence_batch = Variable(sequence_batch, requires_grad=False, volatile=True)
@@ -109,7 +110,16 @@ if __name__ == '__main__':
             accuracies = [F.mse_loss(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
             test_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
 
+            acc = []
+            p = torch.cat(predictions[:-1]).view(batch_size, sequence_len - 1, rest)
+            t = targets.view(batch_size, sequence_len - 1, rest)
+            for i, px in enumerate(p):
+                tx = t[i]
+                acc.append(torch.sum((tx - px) ** 2) / len(px))
+            test_accuracies2.append(np.mean([a.data.cpu().numpy() for a in acc]))
+
         print("Test Accuracy", np.mean(test_accuracies))
+        print("Test Accuracy2", np.mean(test_accuracies2))
         print("Test time", make_time_units_string(time.time() - _start))
 
         preds = model(flat_example)
@@ -121,11 +131,11 @@ if __name__ == '__main__':
             images[0].save(fp, save_all=True, append_images=images[1:])
 
         with open('_bouncing_balls_lstm_train.csv', 'a') as f:
-            lines = ['{!s},{!s}\n'.format(loss, acc) for loss, acc in zip(train_losses, train_accuracies)]
+            lines = ['{!s},{!s},{!s}\n'.format(loss, acc, acc2) for loss, acc, acc2 in zip(train_losses, train_accuracies, train_accuracies2)]
             for line in lines:
                 f.write(line)
         with open('_bouncing_balls_lstm.csv', 'a') as f:
-            f.write('{!s},{!s},{!s}\n'.format(np.mean(train_losses), np.mean(train_accuracies), np.mean(test_accuracies)))
+            f.write('{!s},{!s},{!s},{!s},{!s}\n'.format(np.mean(train_losses), np.mean(train_accuracies), np.mean(test_accuracies), np.mean(train_accuracies2), np.mean(test_accuracies2)))
 
         epoch_time = time.time() - epoch_start
         times.append(epoch_time)

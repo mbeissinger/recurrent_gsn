@@ -174,7 +174,7 @@ if __name__ == '__main__':
 
         with open('_bouncing_tgsn_gsn_train.csv', 'a') as f:
             lines = ['{!s},{!s}\n'.format(loss, acc) for
-                     loss, acc in zip(gsn_train_losses, gsn_train_accuracies,)]
+                     loss, acc in zip(gsn_train_losses, gsn_train_accuracies)]
             for line in lines:
                 f.write(line)
         with open('_bouncing_tgsn_reg_train.csv', 'a') as f:
@@ -183,7 +183,7 @@ if __name__ == '__main__':
             for line in lines:
                 f.write(line)
         with open('_bouncing_tgsn_.csv', 'a') as f:
-            f.write('{!s},{!s},{!s},{!s}\n'.format(np.mean(regression_train_losses), np.mean(regression_train_accuracies), np.mean(test_accuracies), np.mean(test_accuracies2)))
+            f.write('{!s},{!s},{!s},{!s},{!s}\n'.format(np.mean(regression_train_losses), np.mean(regression_train_accuracies), np.mean(test_accuracies), np.mean(regression_train_accuracies2), np.mean(test_accuracies2)))
 
         epoch_time = time.time() - epoch_start
         times.append(epoch_time)
