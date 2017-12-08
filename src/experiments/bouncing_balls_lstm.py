@@ -55,6 +55,7 @@ if __name__ == '__main__':
         model.train()
         train_losses = []
         train_accuracies = []
+        train_accuracies2 = []
         _start = time.time()
         for batch_idx, sequence_batch in enumerate(train_loader):
             sequence_batch = Variable(sequence_batch, requires_grad=False)
@@ -77,9 +78,17 @@ if __name__ == '__main__':
 
             accuracies = [F.mse_loss(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
             train_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
+            acc = []
+            p = torch.cat(predictions[:-1]).view(batch_size, sequence_len-1, rest)
+            t = targets.view(batch_size, sequence_len-1, rest)
+            for i, px in enumerate(p):
+                tx = t[i]
+                acc.append(torch.sum((tx - px)**2)/len(px))
+            train_accuracies2.append(np.mean([a.data.cpu().numpy() for a in acc]))
 
         print("Train Loss", np.mean(train_losses))
         print("Train Accuracy", np.mean(train_accuracies))
+        print("Train Accuracy2", np.mean(train_accuracies2))
         print("Train time", make_time_units_string(time.time()-_start))
 
         model.eval()

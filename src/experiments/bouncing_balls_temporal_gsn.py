@@ -93,6 +93,7 @@ if __name__ == '__main__':
         ####
         regression_train_losses = []
         regression_train_accuracies = []
+        regression_train_accuracies2 = []
         regression_start = time.time()
         for batch_idx, sequence_batch in enumerate(train_loader):
             sequence_batch = Variable(sequence_batch, requires_grad=False)
@@ -113,15 +114,27 @@ if __name__ == '__main__':
             loss.backward()
             regression_optimizer.step()
             regression_train_losses.append(np.mean([l.data.cpu().numpy() for l in losses]))
-            accuracies = [F.mse_loss(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
+            accuracies = [F.mse_loss(input=recons[-1], target=targets[step]) for step, recons in enumerate(predictions[:-1])]
             regression_train_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
+
+            acc = []
+            p = [recons[-1] for recons in predictions[:-1]]
+            p = torch.cat(p).view(batch_size, sequence_len - 1, rest)
+            t = targets.view(batch_size, sequence_len - 1, rest)
+            for i, px in enumerate(p):
+                tx = t[i]
+                acc.append(torch.sum((tx - px) ** 2) / len(px))
+            regression_train_accuracies2.append(np.mean([a.data.cpu().numpy() for a in acc]))
+
 
         print("Regression Train Loss", np.mean(regression_train_losses))
         print("Regression Train Accuracy", np.mean(regression_train_accuracies))
+        print("Regression Train Accuracy2", np.mean(regression_train_accuracies2))
         print("Regression Train time", make_time_units_string(time.time() - regression_start))
 
         model.eval()
         test_accuracies = []
+        test_accuracies2 = []
         _start = time.time()
         for batch_idx, sequence_batch in enumerate(test_loader):
             sequence_batch = Variable(sequence_batch, requires_grad=False, volatile=True)
@@ -138,7 +151,17 @@ if __name__ == '__main__':
             accuracies = [F.mse_loss(input=recons[-1], target=targets[step]) for step, recons in enumerate(predictions[:-1])]
             test_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
 
+            acc = []
+            p = [recons[-1] for recons in predictions[:-1]]
+            p = torch.cat(p).view(batch_size, sequence_len - 1, rest)
+            t = targets.view(batch_size, sequence_len - 1, rest)
+            for i, px in enumerate(p):
+                tx = t[i]
+                acc.append(torch.sum((tx - px) ** 2) / len(px))
+            test_accuracies2.append(np.mean([a.data.cpu().numpy() for a in acc]))
+
         print("Test Accuracy", np.mean(test_accuracies))
+        print("Test Accuracy2", np.mean(test_accuracies2))
         print("Test time", make_time_units_string(time.time() - _start))
 
         preds, _, _ = model(flat_example)
@@ -155,12 +178,12 @@ if __name__ == '__main__':
             for line in lines:
                 f.write(line)
         with open('_bouncing_tgsn_reg_train.csv', 'a') as f:
-            lines = ['{!s},{!s}\n'.format(loss, acc) for
-                     loss, acc in zip(regression_train_losses, regression_train_accuracies,)]
+            lines = ['{!s},{!s},{!s}\n'.format(loss, acc, acc2) for
+                     loss, acc, acc2 in zip(regression_train_losses, regression_train_accuracies, regression_train_accuracies2)]
             for line in lines:
                 f.write(line)
         with open('_bouncing_tgsn_.csv', 'a') as f:
-            f.write('{!s},{!s},{!s}\n'.format(np.mean(regression_train_losses), np.mean(regression_train_accuracies), np.mean(test_accuracies)))
+            f.write('{!s},{!s},{!s},{!s}\n'.format(np.mean(regression_train_losses), np.mean(regression_train_accuracies), np.mean(test_accuracies), np.mean(test_accuracies2)))
 
         epoch_time = time.time() - epoch_start
         times.append(epoch_time)
