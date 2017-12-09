@@ -123,8 +123,8 @@ class GSN(nn.Module):
     def init_hiddens(self, x):
         batch_size = x.size()[0]
         return [
-            Variable(torch.zeros(batch_size, h_size)).cuda() if x.is_cuda  # puts the tensor on gpu if our input is on gpu
-            else Variable(torch.zeros(batch_size, h_size))
+            Variable(torch.zeros(batch_size, h_size), requires_grad=False).cuda() if x.is_cuda  # puts the tensor on gpu if our input is on gpu
+            else Variable(torch.zeros(batch_size, h_size), requires_grad=False)
             for h_size in self.sizes[1:]
         ]
 
@@ -258,8 +258,8 @@ if __name__ == '__main__':
         batch_size=100, shuffle=True
     )
 
-    model = GSN(sizes=[784, 1500, 1500], tied_weights=True, walkbacks=4, visible_act=nn.Sigmoid(), hidden_act=nn.Tanh(),
-                 input_noise=.4, hidden_noise=2, input_sampling=True, noiseless_h1=True)
+    model = GSN(sizes=[784, 1000, 1000], tied_weights=True, walkbacks=4, visible_act=nn.Sigmoid(), hidden_act=nn.Tanh(),
+                 input_noise=.2, hidden_noise=1, input_sampling=True, noiseless_h1=True)
     if use_cuda:
         model.cuda()
     print('Model:', model)

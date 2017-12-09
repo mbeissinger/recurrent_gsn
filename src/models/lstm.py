@@ -1,6 +1,7 @@
 """
 LSTM with inputs, hiddens, outputs
 """
+import torch
 import torch.nn as nn
 
 
@@ -18,4 +19,4 @@ class LSTM(nn.Module):
 
     def forward(self, x):
         output, _ = self.lstm(x)
-        return [self.out_act(self.linear(out_t)) for out_t in output]
+        return torch.stack([self.out_act(self.linear(out_t)) for out_t in output]).contiguous()

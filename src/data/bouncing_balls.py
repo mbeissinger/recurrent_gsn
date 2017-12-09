@@ -144,7 +144,8 @@ class BouncingBalls(data.Dataset):
             self.n_balls = 3
         elif paper == 'boulanger-lewandowski':
             self.size = 15
-            self.timesteps = 128
+            # self.timesteps = 128
+            self.timesteps = 30
             self.n_balls = 3
 
     def __getitem__(self, index):

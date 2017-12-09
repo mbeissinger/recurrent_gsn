@@ -18,11 +18,11 @@ if __name__ == '__main__':
     import time
     train_loader = torch.utils.data.DataLoader(
         BouncingBalls(paper='boulanger-lewandowski'),
-        batch_size=16, shuffle=True
+        batch_size=4, shuffle=True
     )
     test_loader = torch.utils.data.DataLoader(
         BouncingBalls(paper='boulanger-lewandowski', mode='test'),
-        batch_size=16, shuffle=True,
+        batch_size=4, shuffle=True,
     )
     example = test_loader.dataset[0]
     example = Variable(torch.Tensor(example), requires_grad=False)
@@ -37,15 +37,17 @@ if __name__ == '__main__':
         images[0].save(f, save_all=True, append_images=images[1:])
 
     model = LSTM(
-        input_size=15*15, hidden_size=500,
-        num_layers=2, bias=True, batch_first=False,
+        input_size=15*15, hidden_size=1500,
+        num_layers=1, bias=True, batch_first=False,
         dropout=0, bidirectional=False, output_size=15*15, output_activation=nn.Sigmoid()
     )
     if use_cuda:
         model.cuda()
     print('Model:', model)
     print('Params:', [name for name, p in model.state_dict().items()])
-    optimizer = optim.Adam(model.parameters(), lr=.0003)
+    # optimizer = optim.Adam(model.parameters(), lr=3e-4)
+    # optimizer = optim.Adam(model.parameters(), lr=3e-2)
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
     times = []
     epochs = 500
@@ -65,7 +67,7 @@ if __name__ == '__main__':
             batch_size = sequence_batch.size()[0]
             sequence_len = sequence_batch.size()[1]
             rest = int(np.prod(sequence_batch.size()[2:]))
-            sequence_batch = sequence_batch.view(sequence_len, batch_size, rest)
+            sequence_batch = sequence_batch.view(sequence_len, batch_size, rest).contiguous()
             targets = sequence_batch[1:]
 
             optimizer.zero_grad()
@@ -73,14 +75,15 @@ if __name__ == '__main__':
             losses = [F.binary_cross_entropy(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
             loss = sum(losses)
             loss.backward()
+            torch.nn.utils.clip_grad_norm(model.parameters(), .25)
             optimizer.step()
             train_losses.append(np.mean([l.data.cpu().numpy() for l in losses]))
 
             accuracies = [F.mse_loss(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
             train_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
             acc = []
-            p = torch.cat(predictions[:-1]).view(batch_size, sequence_len-1, rest)
-            t = targets.view(batch_size, sequence_len-1, rest)
+            p = predictions[:-1].view(batch_size, sequence_len-1, rest).contiguous()
+            t = targets.view(batch_size, sequence_len-1, rest).contiguous()
             for i, px in enumerate(p):
                 tx = t[i]
                 acc.append(torch.sum((tx - px)**2)/len(px))
@@ -103,7 +106,7 @@ if __name__ == '__main__':
             batch_size = sequence_batch.size()[0]
             sequence_len = sequence_batch.size()[1]
             rest = int(np.prod(sequence_batch.size()[2:]))
-            sequence_batch = sequence_batch.view(sequence_len, batch_size, rest)
+            sequence_batch = sequence_batch.view(sequence_len, batch_size, rest).contiguous()
             targets = sequence_batch[1:]
 
             predictions = model(sequence_batch)
@@ -111,8 +114,8 @@ if __name__ == '__main__':
             test_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
 
             acc = []
-            p = torch.cat(predictions[:-1]).view(batch_size, sequence_len - 1, rest)
-            t = targets.view(batch_size, sequence_len - 1, rest)
+            p = predictions[:-1].view(batch_size, sequence_len - 1, rest).contiguous()
+            t = targets.view(batch_size, sequence_len - 1, rest).contiguous()
             for i, px in enumerate(p):
                 tx = t[i]
                 acc.append(torch.sum((tx - px) ** 2) / len(px))
@@ -123,7 +126,7 @@ if __name__ == '__main__':
         print("Test time", make_time_units_string(time.time() - _start))
 
         preds = model(flat_example)
-        preds = torch.stack([flat_example[0]] + preds)
+        preds = torch.cat([torch.unsqueeze(flat_example[0], 0), preds])
         preds = preds.view(sequence_len + 1, 1, 15, 15)
         save_image(preds.data.cpu(), '_bouncing_balls_lstm_{!s}.png'.format(epoch), nrow=10)
         images = [ToPILImage()(pred) for pred in preds.data.cpu()]

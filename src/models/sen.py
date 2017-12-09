@@ -2,10 +2,7 @@
 @author: Markus Beissinger
 University of Pennsylvania, 2017
 
-This class produces the RNN-GSN model discussed in the paper: (thesis link)
-
-Inspired by code for the RNN-RBM:
-http://deeplearning.net/tutorial/rnnrbm.html
+This class produces the Sequence Encoder model discussed in the paper: (thesis link)
 """
 import numpy as np
 import torch
@@ -23,7 +20,7 @@ from src.data.mnist_sequence import SequencedMNIST
 use_cuda = torch.cuda.is_available()
 
 
-class RNNGSN(nn.Module):
+class SEN(nn.Module):
     def __init__(self, sizes, tied_weights=True, walkbacks=5, visible_act=nn.Sigmoid(), hidden_act=nn.ReLU(),
                  input_noise=.4, hidden_noise=2, input_sampling=True, noiseless_h1=True, rnn_hidden_size=1000):
         super().__init__()
