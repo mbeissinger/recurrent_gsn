@@ -37,7 +37,7 @@ if __name__ == '__main__':
         images[0].save(f, save_all=True, append_images=images[1:])
 
     model = LSTM(
-        input_size=15*15, hidden_size=1000,
+        input_size=15*15, hidden_size=500,
         num_layers=2, bias=True, batch_first=False,
         dropout=0, bidirectional=False, output_size=15*15, output_activation=nn.Sigmoid()
     )
@@ -69,8 +69,10 @@ if __name__ == '__main__':
                 seq = seq.view(seq_len, -1).contiguous()
                 seq = seq.unsqueeze(dim=1)
                 targets = seq[1:]
+
                 optimizer.zero_grad()
                 predictions = model(seq)
+
                 losses = [F.binary_cross_entropy(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
                 loss = sum(losses)
                 loss.backward()
@@ -109,6 +111,7 @@ if __name__ == '__main__':
             targets = sequence_batch[1:]
 
             predictions = model(sequence_batch)
+
             accuracies = [F.mse_loss(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
             test_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
 

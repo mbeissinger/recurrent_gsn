@@ -19,4 +19,4 @@ class LSTM(nn.Module):
 
     def forward(self, x):
         output, _ = self.lstm(x)
-        return torch.stack([self.out_act(self.linear(out_t)) for out_t in output]).contiguous()
+        return torch.stack([self.out_act(self.linear(out_t)) for out_t in output])

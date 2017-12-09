@@ -18,11 +18,11 @@ if __name__ == '__main__':
     import time
     train_loader = torch.utils.data.DataLoader(
         BouncingBalls(paper='boulanger-lewandowski'),
-        batch_size=16, shuffle=True
+        batch_size=1, shuffle=True
     )
     test_loader = torch.utils.data.DataLoader(
         BouncingBalls(paper='boulanger-lewandowski', mode='test'),
-        batch_size=16, shuffle=True,
+        batch_size=1, shuffle=True,
     )
     example = test_loader.dataset[0]
     example = Variable(torch.Tensor(example), requires_grad=False)
@@ -37,7 +37,7 @@ if __name__ == '__main__':
         images[0].save(f, save_all=True, append_images=images[1:])
 
     model = UntiedGSN(
-        sizes=[15*15, 500, 500], visible_act=nn.Sigmoid(), hidden_act=nn.Tanh(),
+        sizes=[15*15, 1000, 1000], visible_act=nn.Sigmoid(), hidden_act=nn.Tanh(),
         input_noise=0.2, hidden_noise=1.0, input_sampling=True, noiseless_h1=True
     )
     if use_cuda:
@@ -60,31 +60,34 @@ if __name__ == '__main__':
             sequence_batch = Variable(sequence_batch, requires_grad=False)
             if use_cuda:
                 sequence_batch = sequence_batch.cuda()
+            sequence = sequence_batch.squeeze(dim=0)
+            subsequences = torch.split(sequence, split_size=100)
+            for seq in subsequences:
+                batch_size = 1
+                seq_len = seq.size()[0]
+                seq = seq.view(seq_len, -1).contiguous()
+                seq = seq.unsqueeze(dim=1)
+                targets = seq[1:]
 
-            batch_size = sequence_batch.size()[0]
-            sequence_len = sequence_batch.size()[1]
-            rest = int(np.prod(sequence_batch.size()[2:]))
-            sequence_batch = sequence_batch.view(sequence_len, batch_size, rest)
-            targets = sequence_batch[1:]
+                optimizer.zero_grad()
+                predictions = model(sequence_batch)
+                losses = [F.binary_cross_entropy(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
+                loss = sum(losses)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm(model.parameters(), .25)
+                optimizer.step()
+                train_losses.append(np.mean([l.data.cpu().numpy() for l in losses]))
 
-            optimizer.zero_grad()
-            predictions = model(sequence_batch)
-            losses = [F.binary_cross_entropy(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
-            loss = sum(losses)
-            loss.backward()
-            optimizer.step()
-            train_losses.append(np.mean([l.data.cpu().numpy() for l in losses]))
+                accuracies = [F.mse_loss(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
+                train_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
 
-            accuracies = [F.mse_loss(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
-            train_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
-
-            acc = []
-            p = torch.cat(predictions[:-1]).view(batch_size, sequence_len - 1, rest)
-            t = targets.view(batch_size, sequence_len - 1, rest)
-            for i, px in enumerate(p):
-                tx = t[i]
-                acc.append(torch.sum((tx - px) ** 2) / len(px))
-            train_accuracies2.append(np.mean([a.data.cpu().numpy() for a in acc]))
+                acc = []
+                p = torch.cat(predictions[:-1]).view(batch_size, sequence_len - 1, rest)
+                t = targets.view(batch_size, sequence_len - 1, rest)
+                for i, px in enumerate(p):
+                    tx = t[i]
+                    acc.append(torch.sum((tx - px) ** 2) / len(px))
+                train_accuracies2.append(np.mean([a.data.cpu().numpy() for a in acc]))
 
         print("Train Loss", np.mean(train_losses))
         print("Train Accuracy", np.mean(train_accuracies))
