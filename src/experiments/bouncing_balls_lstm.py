@@ -101,26 +101,24 @@ if __name__ == '__main__':
             sequence_batch = Variable(sequence_batch, requires_grad=False, volatile=True)
             if use_cuda:
                 sequence_batch = sequence_batch.cuda()
-            sequence = sequence_batch.squeeze(dim=0)
-            subsequences = torch.split(sequence, split_size=100)
-            for seq in subsequences:
-                batch_size = 1
-                seq_len = seq.size()[0]
-                seq = seq.view(seq_len, -1).contiguous()
-                seq = seq.unsqueeze(dim=1)
-                targets = seq[1:]
 
-                predictions = model(seq)
-                accuracies = [F.mse_loss(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
-                test_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
+            batch_size = sequence_batch.size()[0]
+            sequence_len = sequence_batch.size()[1]
+            rest = int(np.prod(sequence_batch.size()[2:]))
+            sequence_batch = sequence_batch.view(sequence_len, batch_size, rest).contiguous()
+            targets = sequence_batch[1:]
 
-                acc = []
-                p = predictions[:-1].view(batch_size, seq_len - 1, rest).contiguous()
-                t = targets.view(batch_size, seq_len - 1, rest).contiguous()
-                for i, px in enumerate(p):
-                    tx = t[i]
-                    acc.append(torch.sum((tx - px) ** 2) / len(px))
-                test_accuracies2.append(np.mean([a.data.cpu().numpy() for a in acc]))
+            predictions = model(sequence_batch)
+            accuracies = [F.mse_loss(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
+            test_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
+
+            acc = []
+            p = predictions[:-1].view(batch_size, sequence_len - 1, rest).contiguous()
+            t = targets.view(batch_size, sequence_len - 1, rest).contiguous()
+            for i, px in enumerate(p):
+                tx = t[i]
+                acc.append(torch.sum((tx - px) ** 2) / len(px))
+            test_accuracies2.append(np.mean([a.data.cpu().numpy() for a in acc]))
 
         print("Test Accuracy", np.mean(test_accuracies))
         print("Test Accuracy2", np.mean(test_accuracies2))
