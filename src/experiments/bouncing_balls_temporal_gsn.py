@@ -18,11 +18,11 @@ if __name__ == '__main__':
     import time
     train_loader = torch.utils.data.DataLoader(
         BouncingBalls(paper='boulanger-lewandowski'),
-        batch_size=16, shuffle=True
+        batch_size=1, shuffle=True
     )
     test_loader = torch.utils.data.DataLoader(
         BouncingBalls(paper='boulanger-lewandowski', mode='test'),
-        batch_size=16, shuffle=True,
+        batch_size=1, shuffle=True,
     )
     example = test_loader.dataset[0]
     example = Variable(torch.Tensor(example), requires_grad=False)
@@ -37,7 +37,7 @@ if __name__ == '__main__':
         images[0].save(f, save_all=True, append_images=images[1:])
 
     model = TGSN(
-        sizes=[15*15, 500, 500], window_size=3, tied_weights=True, walkbacks=4, visible_act=nn.Sigmoid(),
+        sizes=[15*15, 500, 500], window_size=4, tied_weights=True, walkbacks=4, visible_act=nn.Sigmoid(),
         hidden_act=nn.Tanh(),
         input_noise=.2, hidden_noise=1, input_sampling=True, noiseless_h1=True
     )
@@ -45,8 +45,8 @@ if __name__ == '__main__':
         model.cuda()
     print('Model:', model)
     print('Params:', [name for name, p in model.state_dict().items()])
-    gsn_optimizer = optim.Adam(model.gsn.parameters(), lr=.0003)
-    regression_optimizer = optim.Adam(model.regression_parameters, lr=.0003)
+    gsn_optimizer = optim.Adam(model.gsn.parameters(), lr=1e-3)
+    regression_optimizer = optim.Adam(model.regression_parameters, lr=1e-3)
 
     times = []
     epochs = 500
@@ -75,10 +75,12 @@ if __name__ == '__main__':
                 x = flat_sequence_batch[batch_idx * 32:(batch_idx + 1) * 32]
                 # train the gsn!
                 gsn_optimizer.zero_grad()
+                regression_optimizer.zero_grad()
                 recons, _, _ = model.gsn(x)
                 losses = [F.binary_cross_entropy(input=recon, target=x) for recon in recons]
                 loss = sum(losses)
                 loss.backward()
+                torch.nn.utils.clip_grad_norm(model.parameters(), .25)
                 gsn_optimizer.step()
                 gsn_train_losses.append(losses[-1].data.cpu().numpy()[0])
                 accuracies = [F.mse_loss(input=recon, target=x) for recon in recons]
@@ -100,31 +102,36 @@ if __name__ == '__main__':
             if use_cuda:
                 sequence_batch = sequence_batch.cuda()
 
-            batch_size = sequence_batch.size()[0]
-            sequence_len = sequence_batch.size()[1]
-            rest = int(np.prod(sequence_batch.size()[2:]))
-            sequence_batch = sequence_batch.view(sequence_len, batch_size, rest)
-            targets = sequence_batch[1:]
+            sequence = sequence_batch.squeeze(dim=0)
+            subsequences = torch.split(sequence, split_size=100)
+            for seq in subsequences:
+                batch_size = 1
+                seq_len = seq.size()[0]
+                seq = seq.view(seq_len, -1).contiguous()
+                seq = seq.unsqueeze(dim=1)
+                targets = seq[1:]
 
-            regression_optimizer.zero_grad()
-            predictions, _, _ = model(sequence_batch)
-            losses = [F.binary_cross_entropy(input=recons[-1], target=targets[step]) for step, recons in
-                      enumerate(predictions[:-1])]
-            loss = sum(losses)
-            loss.backward()
-            regression_optimizer.step()
-            regression_train_losses.append(np.mean([l.data.cpu().numpy() for l in losses]))
-            accuracies = [F.mse_loss(input=recons[-1], target=targets[step]) for step, recons in enumerate(predictions[:-1])]
-            regression_train_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
+                regression_optimizer.zero_grad()
+                gsn_optimizer.zero_grad()
+                predictions, _, _ = model(seq)
+                losses = [F.binary_cross_entropy(input=recons[-1], target=targets[step]) for step, recons in
+                          enumerate(predictions[:-1])]
+                loss = sum(losses)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm(model.parameters(), .25)
+                regression_optimizer.step()
+                regression_train_losses.append(np.mean([l.data.cpu().numpy() for l in losses]))
+                accuracies = [F.mse_loss(input=recons[-1], target=targets[step]) for step, recons in enumerate(predictions[:-1])]
+                regression_train_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
 
-            acc = []
-            p = [recons[-1] for recons in predictions[:-1]]
-            p = torch.cat(p).view(batch_size, sequence_len - 1, rest)
-            t = targets.view(batch_size, sequence_len - 1, rest)
-            for i, px in enumerate(p):
-                tx = t[i]
-                acc.append(torch.sum((tx - px) ** 2) / len(px))
-            regression_train_accuracies2.append(np.mean([a.data.cpu().numpy() for a in acc]))
+                acc = []
+                p = [recons[-1] for recons in predictions[:-1]]
+                p = torch.cat(p).view(batch_size, seq_len - 1, rest)
+                t = targets.view(batch_size, seq_len - 1, rest)
+                for i, px in enumerate(p):
+                    tx = t[i]
+                    acc.append(torch.sum((tx - px) ** 2) / len(px))
+                regression_train_accuracies2.append(np.mean([a.data.cpu().numpy() for a in acc]))
 
 
         print("Regression Train Loss", np.mean(regression_train_losses))
