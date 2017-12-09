@@ -37,14 +37,14 @@ if __name__ == '__main__':
         images[0].save(f, save_all=True, append_images=images[1:])
 
     model = UntiedGSN(
-        sizes=[15*15, 1000, 1000], visible_act=nn.Sigmoid(), hidden_act=nn.Tanh(),
-        input_noise=0.2, hidden_noise=1.0, input_sampling=True, noiseless_h1=True
+        sizes=[15*15, 500, 500], visible_act=nn.Sigmoid(), hidden_act=nn.Tanh(),
+        input_noise=0, hidden_noise=0, input_sampling=False, noiseless_h1=True
     )
     if use_cuda:
         model.cuda()
     print('Model:', model)
     print('Params:', [name for name, p in model.state_dict().items()])
-    optimizer = optim.Adam(model.parameters(), lr=.0003)
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
     times = []
     epochs = 500
@@ -70,7 +70,7 @@ if __name__ == '__main__':
                 targets = seq[1:]
 
                 optimizer.zero_grad()
-                predictions = model(sequence_batch)
+                predictions = model(seq)
                 losses = [F.binary_cross_entropy(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
                 loss = sum(losses)
                 loss.backward()
@@ -82,8 +82,8 @@ if __name__ == '__main__':
                 train_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
 
                 acc = []
-                p = torch.cat(predictions[:-1]).view(batch_size, sequence_len - 1, rest)
-                t = targets.view(batch_size, sequence_len - 1, rest)
+                p = torch.cat(predictions[:-1]).view(batch_size, seq_len - 1, rest).contiguous()
+                t = targets.view(batch_size, seq_len - 1, rest).contiguous()
                 for i, px in enumerate(p):
                     tx = t[i]
                     acc.append(torch.sum((tx - px) ** 2) / len(px))
@@ -106,16 +106,17 @@ if __name__ == '__main__':
             batch_size = sequence_batch.size()[0]
             sequence_len = sequence_batch.size()[1]
             rest = int(np.prod(sequence_batch.size()[2:]))
-            sequence_batch = sequence_batch.view(sequence_len, batch_size, rest)
+            sequence_batch = sequence_batch.view(sequence_len, batch_size, rest).contiguous()
             targets = sequence_batch[1:]
 
             predictions = model(sequence_batch)
+
             accuracies = [F.mse_loss(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
             test_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
 
             acc = []
-            p = torch.cat(predictions[:-1]).view(batch_size, sequence_len - 1, rest)
-            t = targets.view(batch_size, sequence_len - 1, rest)
+            p = torch.cat(predictions[:-1]).view(batch_size, sequence_len - 1, rest).contiguous()
+            t = targets.view(batch_size, sequence_len - 1, rest).contiguous()
             for i, px in enumerate(p):
                 tx = t[i]
                 acc.append(torch.sum((tx - px) ** 2) / len(px))

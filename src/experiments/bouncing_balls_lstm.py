@@ -82,6 +82,7 @@ if __name__ == '__main__':
 
                 accuracies = [F.mse_loss(input=pred, target=targets[step]) for step, pred in enumerate(predictions[:-1])]
                 train_accuracies.append(np.mean([acc.data.cpu().numpy() for acc in accuracies]))
+
                 acc = []
                 p = predictions[:-1].view(batch_size, seq_len-1, rest).contiguous()
                 t = targets.view(batch_size, seq_len-1, rest).contiguous()
