@@ -22,44 +22,120 @@ use_cuda = torch.cuda.is_available()
 
 class SEN(nn.Module):
     def __init__(self, sizes, tied_weights=True, walkbacks=5, visible_act=nn.Sigmoid(), hidden_act=nn.ReLU(),
-                 input_noise=.4, hidden_noise=2, input_sampling=True, noiseless_h1=True, rnn_hidden_size=1000):
+                 input_noise=.4, hidden_noise=2, input_sampling=True, noiseless_h1=True, rnn_hidden_size=500):
         super().__init__()
+        """
+        For now, simple 4-layer SEN, stacking GSN->LSTM->GSN->LSTM
+        There could be many other architectures, such as deconv autoencoder -> rnn -> denoising autoencoder -> rnn...
+        etc.
+        """
         self.sizes = sizes
         self.hidden_act = hidden_act
-        # make our GSN
-        self.gsn = GSN(
+        # GSN1
+        self.gsn_0 = GSN(
             sizes=sizes, tied_weights=tied_weights, walkbacks=walkbacks, visible_act=visible_act, hidden_act=hidden_act,
             input_noise=input_noise, hidden_noise=hidden_noise, input_sampling=input_sampling, noiseless_h1=noiseless_h1
         )
-        # lstm operates on the even sizes
-        combined_hiddens_sizes = sum([size for i, size in enumerate(sizes) if i % 2 == 1])
-        self.lstm_cell = nn.LSTMCell(input_size=combined_hiddens_sizes, hidden_size=rnn_hidden_size)
-        nn.init.xavier_uniform(
-            tensor=self.lstm_cell.weight_ih, gain=nn.init.calculate_gain('tanh')
-        )
-        nn.init.xavier_uniform(
-            tensor=self.lstm_cell.weight_hh, gain=nn.init.calculate_gain('tanh')
-        )
-        if self.lstm_cell.bias:
-            nn.init.constant(tensor=self.lstm_cell.bias_ih, val=0.0)
-            nn.init.constant(tensor=self.lstm_cell.bias_hh, val=0.0)
-        self.lstm_out = nn.Linear(in_features=rnn_hidden_size, out_features=combined_hiddens_sizes, bias=True)
-        nn.init.xavier_uniform(
-            tensor=self.lstm_out.weight, gain=nn.init.calculate_gain(act_to_string(self.hidden_act))
-        )
-        nn.init.constant(tensor=self.lstm_out.bias, val=0.0)
+        # lstm1
+        self.lstms_1 = [
+            (
+                nn.LSTMCell(input_size=size, hidden_size=rnn_hidden_size),
+                nn.Linear(in_features=rnn_hidden_size, out_features=size, bias=True)
+            ) for i, size in enumerate(sizes) if i % 2 == 1
+        ]
+        for i, (lstm, linear) in enumerate(self.lstms_1):
+            self.add_module(name='lstm_cell_1_{!s}'.format(i), module=lstm)
+            self.add_module(name='lstm_out_1_{!s}'.format(i), module=linear)
+            nn.init.xavier_uniform(
+                tensor=lstm.weight_ih, gain=nn.init.calculate_gain('tanh')
+            )
+            nn.init.xavier_uniform(
+                tensor=lstm.weight_hh, gain=nn.init.calculate_gain('tanh')
+            )
+            if lstm.bias:
+                nn.init.constant(tensor=lstm.bias_ih, val=0.0)
+                nn.init.constant(tensor=lstm.bias_hh, val=0.0)
 
-    def forward(self, xs=None):
+            nn.init.xavier_uniform(
+                tensor=linear.weight, gain=nn.init.calculate_gain(act_to_string(self.hidden_act))
+            )
+            nn.init.constant(tensor=linear.bias, val=0.0)
+        # gsn 2
+        gsn_2_sizes = [rnn_hidden_size*2, int(rnn_hidden_size*2*1.5), int(rnn_hidden_size*2*1.5)]
+        self.gsn_2 = GSN(
+            sizes=gsn_2_sizes, tied_weights=tied_weights, walkbacks=4, visible_act=nn.Tanh(), hidden_act=hidden_act,
+            input_noise=hidden_noise, hidden_noise=hidden_noise, input_sampling=False, noiseless_h1=noiseless_h1
+        )
+        # lstm 3
+        self.lstms_3 = [
+            (
+                nn.LSTMCell(input_size=size, hidden_size=rnn_hidden_size),
+                nn.Linear(in_features=rnn_hidden_size, out_features=size, bias=True)
+            ) for i, size in enumerate(gsn_2_sizes) if i % 2 == 1
+        ]
+        for i, (lstm, linear) in enumerate(self.lstms_3):
+            self.add_module(name='lstm_cell_3_{!s}'.format(i), module=lstm)
+            self.add_module(name='lstm_out_3_{!s}'.format(i), module=linear)
+            nn.init.xavier_uniform(
+                tensor=lstm.weight_ih, gain=nn.init.calculate_gain('tanh')
+            )
+            nn.init.xavier_uniform(
+                tensor=lstm.weight_hh, gain=nn.init.calculate_gain('tanh')
+            )
+            if lstm.bias:
+                nn.init.constant(tensor=lstm.bias_ih, val=0.0)
+                nn.init.constant(tensor=lstm.bias_hh, val=0.0)
+
+            nn.init.xavier_uniform(
+                tensor=linear.weight, gain=nn.init.calculate_gain(act_to_string(self.hidden_act))
+            )
+            nn.init.constant(tensor=linear.bias, val=0.0)
+
+    def forward(self, xs):
         """
-        Builds the RNN GSN computation graph, either from the input batch sequence `xs`
+        Builds the SEN computation graph, from the input batch sequence `xs`
         """
         # first go through the GSN to get the current hiddens, then regression to next hiddens
-        # then generate new x from gsn
-        sequence_hiddens = []
         sequence_xs = []
-        sequence_x_samples = []
+
+        encode_cost = []
+        regression_cost = []
 
         if xs is not None:
+            lstm_hiddens = [[(None, None) for _ in self.lstms_1], [(None, None) for _ in self.lstms_3]]
+            for x in xs:
+                # encode X->H_0
+                x_recons, h_0, _ = self.gsn_0.forward(x=x)
+
+                # regression H_0->H_0
+                lstm_1_hiddens = lstm_hiddens[0]
+                for i, (lstm, linear) in enumerate(self.lstms_1):
+                    h = h_0[i*2]  # grab the gsn hidden layer
+                    lstm_ht, lstm_ct = lstm_1_hiddens[i]  # grab the lstm hiddens
+                    # init if they aren't there
+                    if lstm_ht is None or lstm_ct is None:
+                        lstm_ht, lstm_ct = self.init_rnn_hiddens(x=h, lstm_cell=lstm)
+                    # do the lstm
+                    lstm_ht, lstm_ct = lstm(h, (lstm_ht, lstm_ct))
+                    lstm_hiddens[0][i] = (lstm_ht, lstm_ct)  # store these lstm vars for next iteration
+
+                # encode H_0->H_1
+                for lstm_1_hiddens in lstm_hiddens[0]:
+                    for h, c in lstm_1_hiddens:
+                        pass
+
+                # regression H_1->H_1
+
+                # decode H_1->H_0
+
+                # decode H_0->X
+
+
+
+
+
+
+
             h_t, c_t = None, None
             batch_size = 0
             for x in xs:
@@ -83,12 +159,12 @@ class SEN(nn.Module):
 
         return sequence_xs, sequence_hiddens, sequence_x_samples
 
-    def init_rnn_hiddens(self, x):
+    def init_rnn_hiddens(self, x, lstm_cell):
         batch_size = x.size()[0]
         return [
             Variable(
-                torch.zeros(batch_size, self.lstm_cell.hidden_size), requires_grad=False).cuda() if x.is_cuda  # puts the tensor on gpu if our input is on gpu
-            else Variable(torch.zeros(batch_size, self.lstm_cell.hidden_size), requires_grad=False)
+                torch.zeros(batch_size, lstm_cell.hidden_size), requires_grad=False).cuda() if x.is_cuda  # puts the tensor on gpu if our input is on gpu
+            else Variable(torch.zeros(batch_size, lstm_cell.hidden_size), requires_grad=False)
             for _ in range(2)
         ]
 
@@ -216,3 +292,19 @@ if __name__ == '__main__':
             make_time_units_string(epoch_time),
             make_time_units_string(np.average(times) * (epochs - 1 - epoch))
         ))
+
+
+class AutoEncoderSEN(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, xs):
+        pass
+
+
+class DeconvSEN(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, xs):
+        pass
