@@ -71,7 +71,7 @@ class RNNGSN(nn.Module):
                     batch_size = x.size()[0]
                 _, hiddens, _ = self.gsn.forward(x=x)
                 sequence_hiddens.append(hiddens)
-                rnn_in = torch.cat([h for i, h in enumerate(hiddens) if i % 2 == 0])
+                rnn_in = torch.cat([h for i, h in enumerate(hiddens) if i % 2 == 0], dim=0)
                 h_t, c_t = self.lstm_cell(rnn_in, (h_t, c_t))
                 next_hiddens = self.lstm_out(h_t)
                 processed_hiddens = []

@@ -93,7 +93,7 @@ class GSN(nn.Module):
 
             self.layers.append(((encode_weight, encode_bias), decode_weight))
 
-    def forward(self, x=None, hiddens=None):
+    def forward(self, x=None, hiddens=None, requires_hidden_grad=False):
         """
         Builds the GSN computation graph, either from the input `x` or generating from the starting point of `hiddens`
         """
@@ -101,7 +101,7 @@ class GSN(nn.Module):
         sampled_xs = []  # accumulate our sampled x from p(x|h) to use as the next input
         if hiddens is None and x is not None:
             # if we are starting from x, initialize the hidden activations to be 0!
-            hiddens = self.init_hiddens(x)
+            hiddens = self.init_hiddens(x, requires_grad=requires_hidden_grad)
         if x is not None:
             # run the normal computation graph from input x
             sampled_x = x
@@ -120,11 +120,11 @@ class GSN(nn.Module):
 
         return xs, hiddens, sampled_xs
 
-    def init_hiddens(self, x):
+    def init_hiddens(self, x, requires_grad=False):
         batch_size = x.size()[0]
         return [
-            Variable(torch.zeros(batch_size, h_size), requires_grad=False).cuda() if x.is_cuda  # puts the tensor on gpu if our input is on gpu
-            else Variable(torch.zeros(batch_size, h_size), requires_grad=False)
+            Variable(torch.zeros(batch_size, h_size), requires_grad=requires_grad).cuda() if x.is_cuda  # puts the tensor on gpu if our input is on gpu
+            else Variable(torch.zeros(batch_size, h_size), requires_grad=requires_grad)
             for h_size in self.sizes[1:]
         ]
 
