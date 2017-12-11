@@ -96,7 +96,6 @@ if __name__ == '__main__':
                     tx = t[i]
                     acc.append(torch.sum((tx - px) ** 2) / len(px))
                 regression_train_accuracies2.append(np.mean([a.data.cpu().numpy() for a in acc]))
-            break
 
 
         print("Regression Train Loss", np.mean(regression_train_losses))
@@ -131,7 +130,6 @@ if __name__ == '__main__':
                 tx = t[i]
                 acc.append(torch.sum((tx - px) ** 2) / len(px))
             test_accuracies2.append(np.mean([a.data.cpu().numpy() for a in acc]))
-            break
 
         print("Test Accuracy", np.mean(test_accuracies))
         print("Test Accuracy2", np.mean(test_accuracies2))
